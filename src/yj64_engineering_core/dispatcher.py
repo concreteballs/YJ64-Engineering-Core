@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .contracts import EngineeringRequest, EngineeringResponse, SolverProvenance
+from .contracts import ArtifactReference, EngineeringRequest, EngineeringResponse, SolverProvenance
 from .interfaces import CADBackend, PhysicsSolver
 from .models import AnalysisRequest, MaterialProperties
 from .physics.statics import calculate_axial_member
@@ -108,6 +108,16 @@ class EngineeringDispatcher:
         artifact = backend.generate(specification)
         if not isinstance(artifact, dict):
             raise TypeError("CAD backend must return an artifact metadata object")
+        artifact_references = ()
+        if artifact.get("location") and artifact.get("format"):
+            artifact_references = (
+                ArtifactReference(
+                    artifact_id=f"{request.request_id}-cad",
+                    media_type=artifact["format"],
+                    uri=artifact["location"],
+                    sha256=artifact.get("sha256"),
+                ),
+            )
         response = EngineeringResponse(
             request_id=request.request_id,
             status="completed",
@@ -116,11 +126,12 @@ class EngineeringDispatcher:
                 solver_version=getattr(backend, "version", "unspecified"),
                 method="cad_backend_generation",
             ),
-            values={"artifact_count": 1},
+            values={"artifact_count": len(artifact_references)},
             units={"artifact_count": "count"},
             assumptions=request.assumptions,
             warnings=tuple(artifact.get("warnings", ())),
             limitations=tuple(artifact.get("limitations", ())),
+            artifacts=artifact_references,
         )
         return DispatchResult(operation="cad.generate", response=response)
 
