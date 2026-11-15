@@ -80,23 +80,24 @@ class EngineeringPipeline:
     def run(
         self,
         request: EngineeringRequest,
-        physics_operation: str,
+        physics_operation: str | None = None,
         cad_operation: str = "cad.generate",
     ) -> PipelineResult:
         if not isinstance(request, EngineeringRequest):
             raise TypeError("request must be an EngineeringRequest")
-        if not isinstance(physics_operation, str) or not physics_operation.startswith(
-            "physics."
+        if physics_operation is not None and (
+            not isinstance(physics_operation, str)
+            or not physics_operation.startswith("physics.")
         ):
-            raise ValueError("physics_operation must start with 'physics.'")
+            raise ValueError("physics_operation must be None or start with 'physics.'")
         if cad_operation != "cad.generate":
             raise ValueError("cad_operation must be 'cad.generate'")
 
         # Deliberately execute both branches even if the first one raises.
-        branches = {
-            "physics": self._execute(request, physics_operation),
-            "cad": self._execute(request, cad_operation),
-        }
+        branches = {}
+        if physics_operation is not None:
+            branches["physics"] = self._execute(request, physics_operation)
+        branches["cad"] = self._execute(request, cad_operation)
         successful = sum(
             branch.execution_status == "completed" for branch in branches.values()
         )
