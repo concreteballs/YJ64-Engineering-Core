@@ -59,6 +59,12 @@ For changing sea motion, use a configurable rolling local data window (initial c
 
 Raw high-rate observations stay only in volatile/local working memory for the configured window and are overwritten/deleted automatically. No persistent onboard archive of raw motion history. Optional remote research storage requires explicit owner opt-in and should receive only minimized derived statistics or selected records, protected by encryption, access controls and retention limits. Remote connectivity must never be required for real-time balance or safe control; loss of cellular/internet service must not disable the local system.
 
+### Hull pressure loads and structural response
+
+Hydrostatic pressure is a structural load case, not only a displacement calculation. Calculate the depth-dependent external pressure field and the differential pressure relative to the actual internal pressure/reference condition, mapped over wetted hull geometry. Use it to load bottom/side shell panels, stiffeners, frames, floors, bulkheads, cross-structure and joints. Combine it with global hull-girder bending/torsion, tank and payload loads, wave loads, slamming, impact and grounding cases as applicable. Evaluate deflection, stress/strain, buckling, fatigue and relevant sandwich-laminate failure modes with material/process-specific data and appropriate analytical or FEM methods.
+
+Keep static hydrostatic pressure in displacement mode distinct from dynamic pressure, slamming and impact. The vessel's weight is not a single force acting on the bottom: buoyancy comes from the distributed pressure field, while structural loads depend on hull geometry and the complete load paths. A pressure-field estimate is only a load-generation/screening step, not scantling approval or class certification.
+
 ## 4. Robotics, mechanisms and autonomous vehicles
 
 Use a task-derived skeleton/chassis-first architecture. Define coordinate frames, links, joints, degrees of freedom, ranges, stiffness, load paths, mass, centre of gravity and inertia before selecting actuator muscles. Support humanoid and non-humanoid morphologies: wheeled, tracked, legged, manipulator, deckhand, rescue, inspection, galley and general-purpose robots.
@@ -72,6 +78,14 @@ The same mechanism solvers should support robot joints and grippers, gears, link
 Support marine propellers and aerial rotors, keeping hydrodynamic and aerodynamic operating models distinct. Calculate thrust, torque, power, efficiency and operating envelope, with cavitation/ventilation for water and tip-speed, wind/gust and acoustic considerations for air. Match rotors/propellers to motors, engines, gearboxes, controllers and energy storage.
 
 Support multirotor, fixed-wing, hybrid VTOL and larger cargo/rescue UAVs. Model mass, CG, inertia, aerodynamics, propulsion, energy, endurance, range, payload, control authority, wind response and failure modes. Include maritime delivery of distress beacons or communications payloads as a use case, subject to applicable aviation, maritime and radio requirements.
+
+### Compact underwater inspection ROVs
+
+Support small tethered remotely operated underwater vehicles, with an initial target operating depth of 15–20 m for yacht service: anchor/chain and seabed inspection, hull-bottom and appendage inspection, propeller/rudder/foil checks, entanglement location and limited service tasks. Do not assume a compact ROV can lift or release a loaded anchor or chain; intervention requires a separately analysed tool, force envelope and vehicle/tether reaction limits.
+
+Model pressure housings and end closures, seals, penetrators/connectors, tether, frame, buoyancy/ballast, trim, thrusters, guards, cameras, lights, optional sonar/manipulator, power, thermal management, leak detection, depth/heading sensing and emergency recovery. Calculate depth-dependent ambient and differential pressure for every sealed volume, including external-pressure collapse/buckling, end-cap loads, penetrator stress concentrations, imperfections, material/process limits, fatigue, sealing and proof/leak tests. Qualify buoyancy materials for depth and water absorption; include tether and current drag, vehicle stability, thrust/control authority, endurance and recovery after power or communications loss.
+
+The initial capability is an inspection ROV with camera, lighting, controlled thrusters and depth/heading feedback. Manipulation and anchor/chain intervention are later stages. A 15–20 m target is a design requirement only until independently verified by analysis and testing; component marketing ratings alone are not evidence of system depth capability.
 
 ## 5. Verification for marine electronics, robots and vehicles
 
