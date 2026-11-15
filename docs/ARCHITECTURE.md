@@ -30,6 +30,14 @@ Visual collaboration uses image hashes, normalized markup and structured observa
 
 EngineeringDispatcher requires explicit operation names. CAD backends may return multiple ArtifactReference values. EngineeringPipeline supports CAD-only exploration and CAD plus an explicit physics operation. A branch failure must not suppress the other branch. Completed CAD generation does not imply physical validity.
 
+## Catamaran displacement and mass budget
+
+The hydrostatics screening solver integrates each of two station-defined hull envelopes at explicit design and maximum waterlines. It reports geometric displaced volume, mass and reserve volume. This is not a stability or load-line solver; the chosen maximum waterline is not a certified safe loading limit. A future naval-architecture layer must calculate trim, heel, waterplane properties, righting arms, downflooding and damaged conditions.
+
+The vessel mass ledger records component masses by subsystem and coordinates, computes tank fluid mass from volume, fill fraction and density, and returns category totals and first-moment centre of gravity. It is a bookkeeping baseline, not a stability solution. Tank free-surface effects, sloshing and changing liquid centroid remain future work.
+
+The mass-budget hierarchy should be: (1) hull/crossbeam/foil structure; (2) rig and sails; (3) anchors and deck equipment; (4) propulsion and steering; (5) batteries, fuel and energy systems; (6) accommodation and appliances; (7) plumbing and tanks; (8) provisions, refrigeration, safety equipment and payload. Every mass item must have a reference position and a declared loading state. Empty, design-load and maximum-load cases should be tracked separately.
+
 ## Preliminary flow analysis
 
 Independent aerodynamic and hydrodynamic plugins use the existing PhysicsSolver interface. Their first implementation calculates dynamic pressure, lift, drag, side force and Reynolds number from caller-supplied coefficients.
