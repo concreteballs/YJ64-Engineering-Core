@@ -34,8 +34,9 @@ class VesselMassBudgetSolver:
         if not self.supports(request.analysis_type):
             raise ValueError(f"Unsupported analysis type: {request.analysis_type}")
         p = request.parameters
-        items = p.get("items", [])
-        tanks = p.get("tanks", [])
+        conditions = p.get("operating_conditions") or {}
+        items = conditions.get("items", [])
+        tanks = conditions.get("tanks", [])
         if not isinstance(items, list) or not isinstance(tanks, list):
             raise TypeError("items and tanks must be arrays")
         totals = {"structure": 0.0, "rig_sails": 0.0, "propulsion": 0.0,
@@ -112,7 +113,7 @@ class VesselMassBudgetSolver:
             "Tank liquid CG is approximated at the tank reference point; free-surface effects and changing CG with fill level are not modelled.",
             "The ledger is only as complete as its component list and supplied masses/coordinates.",
         ]
-        capacity = p.get("design_displacement_limit_kg")
+        capacity = conditions.get("design_displacement_limit_kg")
         if capacity is not None:
             limit = _finite(capacity, "design_displacement_limit_kg")
             if limit <= 0:
