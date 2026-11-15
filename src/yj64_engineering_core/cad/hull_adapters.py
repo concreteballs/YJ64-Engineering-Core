@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 from typing import Any
 
 from .hull import YachtHull, yacht_hull_openscad, yacht_hull_technical_svg, hull_vertices_mm
@@ -123,7 +123,7 @@ class YachtHullCADBackend:
             warnings.append("STL mesh not rendered; provide an OpenSCAD executable to enable it.")
 
         for item in outputs:
-            artifact_path = Path(item["location"].removeprefix("file://"))
+            artifact_path = Path(unquote(urlparse(item["location"]).path))
             item["sha256"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
 
         return {
