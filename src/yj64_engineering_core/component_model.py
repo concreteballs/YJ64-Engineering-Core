@@ -348,11 +348,16 @@ class EngineeringProjectGraph:
                 raise ValueError(
                     f"Calculation dependency is missing or stale: {dependency.component_id}"
                 )
-        if self.stale_component_ids():
-            stale_ids = ", ".join(sorted(self.stale_component_ids()))
+        stale_components = self.stale_component_ids()
+        affected = sorted(
+            dependency.component_id
+            for dependency in calculation.component_dependencies
+            if dependency.component_id in stale_components
+        )
+        if affected:
             raise ValueError(
-                "Cannot register a calculation while project components are stale: "
-                + stale_ids
+                "Cannot register a calculation against stale components: "
+                + ", ".join(affected)
             )
         self._calculations[calculation.calculation_id] = calculation
 
