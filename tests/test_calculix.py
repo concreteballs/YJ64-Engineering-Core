@@ -60,7 +60,7 @@ class CalculiXTrussSolverTests(unittest.TestCase):
         deck = (self.workspace / "ccx-test-001.inp").read_text(encoding="utf-8")
         self.assertIn("*ELEMENT, TYPE=T3D2, ELSET=BAR", deck)
         self.assertIn("*NODE PRINT, NSET=TIP", deck)
-        self.assertIn("2, 3, 1000", deck)
+        self.assertIn("2, 1, 2", deck)\n        self.assertIn("2, 3, 1000", deck)
 
     def test_rejects_invalid_poisson_ratio_before_running(self):
         parameters = dict(self.request.parameters)
