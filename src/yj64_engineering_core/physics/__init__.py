@@ -9,11 +9,12 @@ from .apparent_wind import ApparentWindSolver
 from .hydrostatics import CatamaranHydrostaticsSolver
 from .mass_budget import VesselMassBudgetSolver
 from .rov_pressure_housing import ROVPressureHousingSolver
+from .hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .hull_material import HullMaterialScreeningSolver
 
 __all__ = [
     "AerodynamicsSolver", "CalculiXTrussSolver", "HydrodynamicsSolver",
     "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
     "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver",
-    "HullMaterialScreeningSolver", "ROVPressureHousingSolver",
+    "HullMaterialScreeningSolver", "ROVPressureHousingSolver", "HydrostaticPanelLoadSolver",
 ]
