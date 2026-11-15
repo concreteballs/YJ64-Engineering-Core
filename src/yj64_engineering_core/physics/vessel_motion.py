@@ -111,7 +111,7 @@ class VesselMotionKinematicsSolver:
             },
             method="rigid_body_6dof_point_kinematics",
             assumptions=[
-                "Body axes are x-forward, y-starboard, z-down? No: x-forward, y-starboard, z-up; right-handed earth axes use the same orientation.",
+                "Body and earth axes are right-handed: x-forward, y-starboard, z-up.",
                 "Orientation uses roll about x, pitch about y, yaw about z with R = Rz(yaw) Ry(pitch) Rx(roll).",
                 "Linear velocity and acceleration are expressed in earth axes; angular velocity and acceleration are expressed in body axes.",
                 "The vessel is treated as a rigid body and the queried point is fixed in its body frame.",
