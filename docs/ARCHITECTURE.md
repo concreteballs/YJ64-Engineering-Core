@@ -75,3 +75,7 @@ A hull-specific structural milestone requires structural thickness/material defi
 Hull material is modelled as a build-up rather than a single material label. The screening interface accepts marine aluminium, glass-fibre composite, carbon-fibre composite, sandwich/honeycomb layers and reinforced concrete. Wood is excluded. Each layer's mass comes from cured laminate areal mass or explicit thickness and density. Secondary installation mass and supplier/project cost and maintenance inputs remain explicit; no hidden default values are used.
 
 The result is a mass/cost/maintenance comparison only. It does not prove structural equivalence or calculate scantlings. Each alternative must be sized for the same load cases and separately reviewed for stiffness, strength, buckling, fatigue, impact, joints, local reinforcement, corrosion, galvanic isolation, fire and repairability. Concrete also requires cracking, reinforcement, shrinkage, creep and corrosion assessment.
+
+## Universal engineering, manufacturing and invention support
+
+The long-term architecture is defined in [UNIVERSAL_ENGINEERING_ROADMAP.md](UNIVERSAL_ENGINEERING_ROADMAP.md). It extends the core beyond yacht-specific calculations to general components and assemblies, materials and material condition, polymer and metal additive manufacturing, CNC machining, heat treatment, reverse engineering and TRIZ-based candidate generation. These are capability targets to be implemented incrementally through versioned contracts and isolated specialist workers, not claims about current solver coverage.
