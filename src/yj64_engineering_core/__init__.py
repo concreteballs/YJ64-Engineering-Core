@@ -10,6 +10,7 @@ from .contracts import (
     SolverProvenance,
 )
 from .dispatcher import AxialMemberSolver, DispatchResult, EngineeringDispatcher
+from .cad.adapters import FreeCADMacroBackend, OpenSCADSourceBackend, SVGDrawingBackend
 from .models import (
     AnalysisRequest,
     AnalysisResult,
@@ -27,10 +28,13 @@ __all__ = [
     "EngineeringDispatcher",
     "EngineeringRequest",
     "EngineeringResponse",
+    "FreeCADMacroBackend",
     "GeometrySpec",
     "LoadCase",
     "MaterialProperties",
+    "OpenSCADSourceBackend",
     "Point3D",
+    "SVGDrawingBackend",
     "SolverProvenance",
 ]
 
