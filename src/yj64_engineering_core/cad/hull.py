@@ -131,7 +131,7 @@ def yacht_hull_openscad(hull: YachtHull) -> str:
     face_text = ",\n".join(
         f"    [{a}, {b}, {c}]" for a, b, c in faces
     )
-    safe_name = hull.name.replace("\\r", " ").replace("\\n", " ")
+    safe_name = hull.name.replace("\r", " ").replace("\n", " ")
     return (
         "// YJ64 Engineering Core — parametric station-based yacht hull\n"
         "// Outer envelope only; not a structural laminate/scantling model.\n"
