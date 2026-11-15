@@ -65,6 +65,18 @@ Hydrostatic pressure is a structural load case, not only a displacement calculat
 
 Keep static hydrostatic pressure in displacement mode distinct from dynamic pressure, slamming and impact. The vessel's weight is not a single force acting on the bottom: buoyancy comes from the distributed pressure field, while structural loads depend on hull geometry and the complete load paths. A pressure-field estimate is only a load-generation/screening step, not scantling approval or class certification.
 
+### Smartphone-first remote yacht control and autonomous operation
+
+Provide a low-cost smartphone interface for monitoring and issuing bounded commands, but do not make the phone the safety-critical controller. Local onboard control units must retain steering, propulsion, sail handling, navigation safety and emergency fallback if the phone, app, internet or shore link fails. The architecture must also support upgrades to dedicated marine displays, helm stations, redundant navigation sensors, professional autopilot systems and satellite communications.
+
+Implement explicit operating modes and authority boundaries: monitor-only; supervised remote commands; limited autonomous navigation; and a separately validated autonomous passage mode. Commands require authentication, acknowledgement and feedback. Include geofences, route and depth constraints, traffic/obstacle detection, collision-risk handling, weather/sea-state envelopes, watchdogs, emergency override, audit of safety-relevant events and deterministic loss-link behaviour.
+
+First support remote motor passage. Sailing mode is conditional on a suitable automated rig: a self-tacking headsail track/carriage, automatic headsail furling and a compatible mainsail reefing/furling system. Evaluate in-boom furling as a design option, including drive, boom strength, sail geometry, jam detection and manual recovery. Retain in-mast furling as an optional alternative, with its own mast/sail-shape/alignment risks. Automated sail handling does not by itself establish storm safety.
+
+A future mission may reposition the yacht from an insecure anchorage to a pre-authorized offshore waypoint (approximately 200 km from shore was suggested as an example), wait safely, then accept a new authorized route to meet its owner elsewhere. Model this as a constrained mission with explicit waiting modes: controlled drift inside a verified safe area, heave-to under a validated sail plan, or station-keeping if energy and propulsion permit. Include forecast uncertainty, drift envelope, traffic separation, exclusion zones, depth/hazard checks, energy reserve, diversion options and periodic system health. Offshore distance alone does not make a waiting position safe.
+
+Check applicable COLREGs, flag/coastal-state rules, radio/satellite licensing, insurance and classification constraints before enabling each remote/autonomous mode. Onboard safety functions must remain local; communications loss must not disable collision avoidance or emergency fallback.
+
 ## 4. Robotics, mechanisms and autonomous vehicles
 
 Use a task-derived skeleton/chassis-first architecture. Define coordinate frames, links, joints, degrees of freedom, ranges, stiffness, load paths, mass, centre of gravity and inertia before selecting actuator muscles. Support humanoid and non-humanoid morphologies: wheeled, tracked, legged, manipulator, deckhand, rescue, inspection, galley and general-purpose robots.
@@ -78,6 +90,10 @@ The same mechanism solvers should support robot joints and grippers, gears, link
 Support marine propellers and aerial rotors, keeping hydrodynamic and aerodynamic operating models distinct. Calculate thrust, torque, power, efficiency and operating envelope, with cavitation/ventilation for water and tip-speed, wind/gust and acoustic considerations for air. Match rotors/propellers to motors, engines, gearboxes, controllers and energy storage.
 
 Support multirotor, fixed-wing, hybrid VTOL and larger cargo/rescue UAVs. Model mass, CG, inertia, aerodynamics, propulsion, energy, endurance, range, payload, control authority, wind response and failure modes. Include maritime delivery of distress beacons or communications payloads as a use case, subject to applicable aviation, maritime and radio requirements.
+
+### UAV return-to-home and emergency recovery
+
+All aerial drone concepts must include locally executable return-to-home (RTH) and failure recovery. Trigger conditions include low battery with reserve calculation, command-link loss, navigation uncertainty, geofence breach, adverse wind, sensor/propulsion fault and operator request. Decide among return, alternate-site diversion, hold, immediate controlled landing or other aircraft-appropriate safe action based on actual remaining energy, control authority, wind, route and recovery-site safety. Include obstacle/airspace clearance, GNSS loss or spoofing response, lost-link logic, emergency landing options and staged simulation/flight validation. RTH must not depend on cloud connectivity and must not blindly return to an unsafe or unreachable home point.
 
 ### Compact underwater inspection ROVs
 
