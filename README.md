@@ -16,6 +16,7 @@ A modular engineering service for the YJ64 multi-agent system. The current pract
 - Apparent-wind vector calculation from true wind and vessel velocity.
 - Twin-hull displacement and reserve-buoyancy screening from station-based hull geometry.
 - Vessel mass ledger for structure, rig, propulsion, systems, interior, stores and tank loads, including first-moment centre of gravity.
+- Canonical revisioned component records shared by CAD, physics, material and manufacturing modules, with mass properties, interfaces, pinned dependencies, evidence and deterministic fingerprints.
 
 ## Sail aerodynamic model
 
@@ -75,3 +76,7 @@ This is not a structural equivalence comparison: equal surface area does not mea
 ## Universal engineering roadmap
 
 The long-term capability plan for general engineering, materials, metal additive manufacturing, CNC machining, heat treatment, repair of unavailable components, solver integration and TRIZ-based invention support is maintained in [docs/UNIVERSAL_ENGINEERING_ROADMAP.md](docs/UNIVERSAL_ENGINEERING_ROADMAP.md). This is a roadmap and interface target; it does not imply that these capabilities are already implemented.
+
+## Canonical engineering component model
+
+The shared component data contract is documented in [docs/COMPONENT_MODEL.md](docs/COMPONENT_MODEL.md). It gives each part or subsystem a stable ID and revision, stores geometry/material/mass properties and interfaces, pins dependencies to exact revisions, and fingerprints the serialized inputs. `stale_component_dependencies()` detects direct dependencies whose referenced revision changed or disappeared. Transitive invalidation and artifact regeneration remain responsibilities of the future project-graph manager; this data model does not certify component safety or manufacturability.
