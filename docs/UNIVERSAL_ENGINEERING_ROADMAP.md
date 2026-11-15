@@ -40,6 +40,10 @@ The architecture should support independently installable and replaceable solver
 
 Use explicit operation names, typed SI-unit inputs and outputs, solver/version metadata, bounded execution and structured warnings. A solver result is not automatically validated merely because a solver completed successfully.
 
+## 3. Marine electronics, automation and moving-vessel environment
+
+Marine electronics is a vessel-wide subsystem shared by navigation, propulsion, safety, communications and onboard robotics. It is not limited to robot electronics.
+
 ### Unified radio, optical and underwater communications
 
 Treat communications as an end-to-end engineering system linking shore, yacht, surface gateways, underwater ROV/AUVs and aerial UAVs. Define common authenticated message and command semantics, device identity, encryption, replay protection, timestamps, acknowledgements, priority, latency limits, health monitoring and deterministic loss-link behaviour. The common protocol layer must preserve the different physical limits of each communications medium.
@@ -56,10 +60,6 @@ Underwater communications require separate physical models. Ordinary Wi-Fi, cell
 A green laser is only a candidate optical carrier, not a ready-made communications system. Specify modulation, acquisition/tracking, beam divergence, receiver field of view, link margin and fail-safe behaviour. A UAV may send commands optically to a submerged vehicle only if the ROV/AUV has a compatible optical receiver and a sufficiently clear, stable underwater line of sight can be maintained. Treat this as a specialised short-range link; compare it with a surface buoy gateway or tether/fibre, and never rely on an unvalidated laser channel for safety-critical control.
 
 Define the full gateway path (underwater vehicle → acoustic/optical/tether link → surface gateway/buoy → RF/satellite/UAV relay → yacht/shore). Keep navigation, collision avoidance, depth control and emergency behaviour local to each vehicle. Define vehicle-specific safe states for link loss; do not prescribe one universal response. Separate low-bandwidth safety commands/telemetry from video and bulk sensor data, prioritise emergency messages, and test acquisition, handover, latency, packet loss, interference, spoofing/jamming resilience, cybersecurity, power loss and recovery in representative conditions.
-
-## 3. Marine electronics, automation and moving-vessel environment
-
-Marine electronics is a vessel-wide subsystem shared by navigation, propulsion, safety, communications and onboard robotics. It is not limited to robot electronics.
 
 Cover radar, AIS, GNSS, chartplotters, sonar/echosounders, autopilot, heading and motion sensors, wind and speed instruments, communications, distress signalling, cameras, machinery sensors, embedded controllers, displays, data networks and power electronics. Integrate these with the electrical architecture, cable schedules, antennas/transducers, grounding, bonding, shielding, EMC and equipment-specific installation requirements.
 
