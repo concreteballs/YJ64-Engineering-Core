@@ -1,63 +1,29 @@
-# YJ64 preliminary aerodynamic and hydrodynamic analysis
+# YJ64 flow analysis
 
-## Purpose
+## Sail polar solver
 
-This package introduces a common, explicit contract for steady-flow force
-screening. It is the first layer of the future coupled sail–hull–foil model.
-It does not yet provide CFD, predict force coefficients, or certify a design.
+`SailAerodynamicsSolver` is registered for `physics.aerodynamics.sail_polar`. It interpolates a caller-supplied table of angle of attack, lift coefficient (CL), profile drag coefficient (CD), and pitching-moment coefficient (CM). Alpha rows must be strictly increasing; the solver rejects requests outside the polar range rather than extrapolating.
 
-## Current calculation
+Geometry inputs: `sail_area_m2`, `span_m`, `mean_chord_m`, `polar_points` (rows with `alpha_deg`, `cl`, `cd`, `cm`) and optional `polar_source` provenance label.
 
-For a supplied reference area and force coefficients:
+Operating inputs: `apparent_wind_speed_m_s`, `air_density_kg_m3`, `dynamic_viscosity_pa_s`, `angle_of_attack_deg`, `apparent_wind_from_angle_deg` (from the bow, positive starboard), and `oswald_efficiency` (0 < e <= 1).
 
-- dynamic pressure: q = 0.5 × density × speed²
-- lift: L = q × area × CL
-- drag: D = q × area × CD
-- side force: Y = q × area × CY
-- Reynolds number: Re = density × speed × characteristic length / dynamic viscosity
+Finite-span induced drag uses `CDi = CL^2 / (pi * e * AR)` with `AR = span^2 / sail_area`. The result includes lift, profile drag, induced drag, total drag, quarter-chord pitching moment, Reynolds number and force components in vessel axes (X forward, Y starboard). Positive CM means nose-up. Positive CL is resolved 90 degrees counter-clockwise from the airflow direction.
 
-All input quantities use SI units. The caller must provide appropriate
-coefficients from validated polars, test data, or a separately justified
-engineering source. A solver result is marked screening_only.
+Run `python examples/sail_polar_screen.py`. The example polar is illustrative only and is not validated design data. Use a polar representative of the actual sail/rig configuration and Reynolds-number range before engineering decisions.
 
-## Solver operations
+## Model limits
 
-Register both solvers with EngineeringDispatcher:
+This is a steady, low-order screening solver. It does not generate a polar from sail geometry, calculate flexible sail shape, aeroelastic deformation, mast/rig interference, wind gradient, gust response, dynamic stall, sail interaction, or automatic trim. It does not solve apparent-wind equilibrium with vessel velocity. It is not CFD and cannot establish that a vessel can foil.
 
-    from yj64_engineering_core import (
-        AerodynamicsSolver, EngineeringDispatcher, HydrodynamicsSolver,
-    )
+## Wider flow-analysis roadmap
 
-    dispatcher = EngineeringDispatcher()
-    dispatcher.register_physics_solver(AerodynamicsSolver())
-    dispatcher.register_physics_solver(HydrodynamicsSolver())
+1. Import validated sail and foil polars with source, Reynolds-number and configuration metadata.
+2. Calculate apparent wind from true wind and vessel velocity; solve sail trim and force/moment equilibrium.
+3. Add hull resistance, hydrostatics and free-surface effects.
+4. Add foil lift/drag, cavitation and ventilation screening with validated models.
+5. Couple aerodynamic and hydrodynamic loads in a six-degree-of-freedom transient displacement-to-foil transition model.
+6. Transfer loads into hull shell, crossbeams, mast and foil-attachment structural models.
+7. Optimise for cruising accommodation, payload, range, stability, structural margins and operating envelope.
 
-Use the explicit operations:
-
-- physics.aerodynamics.coefficient_forces
-- physics.hydrodynamics.coefficient_forces
-
-The common EngineeringRequest carries reference_area_m2 and
-characteristic_length_m in geometry.parameters; flow speed, density,
-dynamic viscosity and force coefficients are carried in
-operating_conditions.
-
-## What this does not calculate
-
-The current implementation does not calculate sail polars, apparent-wind
-equilibrium, hull resistance, free-surface waves, foil polars, ventilation,
-cavitation, unsteady manoeuvres, aeroelasticity, or CFD fields. It must not be
-used to claim that a yacht can foil.
-
-## Next development layers
-
-1. Validated coefficient sources and polar import for sails, foils and hull appendages.
-2. Apparent-wind and sail-trim equilibrium, including force and moment balance.
-3. Hull resistance and hydrostatics, followed by free-surface CFD.
-4. Foil lift/drag, cavitation and ventilation screening with validated models.
-5. Coupled six-degree-of-freedom transition simulation from displacement mode to foil-borne mode.
-6. Structural load transfer into hull shell, crossbeams, mast and foil attachments.
-7. Optimisation under cruise accommodation, payload, range, stability and safety constraints.
-
-Each new fidelity level must retain its own provenance, validation evidence and
-limitations. A low-order estimate must never be silently presented as CFD.
+Each fidelity level must retain its own provenance, validation evidence and limitations. A low-order estimate must never be presented as CFD.
