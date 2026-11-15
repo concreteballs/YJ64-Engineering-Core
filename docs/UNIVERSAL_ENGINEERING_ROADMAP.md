@@ -50,6 +50,15 @@ Represent marine environmental qualification explicitly: ingress and immersion e
 
 Create a shared six-degree-of-freedom vessel-motion model (surge, sway, heave, roll, pitch, yaw), angular rates and accelerations, tied to sea-state scenarios and uncertainty. This model feeds instrument correction, autopilot/stabilization, equipment mounting, robotic balance and manipulation, and UAV launch/recovery. Define operational and degraded envelopes by sea state. A robot must be designed for a moving deck, not just static equilibrium.
 
+Keep two distinct but connected capabilities:
+
+- **Hull design/seakeeping:** predict how candidate hull forms respond to waves, speed, heading and loading. Include hydrostatics, resistance, six-degree-of-freedom wave response, encounter conditions, RAOs where supported, added mass, damping, restoring forces, slamming and structural loads. Use this to compare hull geometry and operating envelopes. Empirical onboard records from a short voyage cannot substitute for hull-design calculations or cover unobserved conditions.
+- **Robot onboard adaptive estimation:** a smartphone may serve as a removable compute, communications and sensor package, including calls where cellular coverage exists. Use its available accelerometer, gyroscope, magnetometer, GNSS and other sensors only after verifying availability, calibration, sample rate, mounting orientation, latency and drift. Mount it rigidly in a known coordinate frame; supplement it with dedicated robot IMU, joint and foot-contact sensors where control safety requires them.
+
+For changing sea motion, use a configurable rolling local data window (initial candidates: 5 or 15 minutes). Continuously update recent motion statistics and short-horizon estimates, measure prediction error/confidence, detect regime changes and fall back safely when estimates are unreliable. This is adaptive estimation, not a promise to predict every wave; feedback from current measurements remains essential.
+
+Raw high-rate observations stay only in volatile/local working memory for the configured window and are overwritten/deleted automatically. No persistent onboard archive of raw motion history. Optional remote research storage requires explicit owner opt-in and should receive only minimized derived statistics or selected records, protected by encryption, access controls and retention limits. Remote connectivity must never be required for real-time balance or safe control; loss of cellular/internet service must not disable the local system.
+
 ## 4. Robotics, mechanisms and autonomous vehicles
 
 Use a task-derived skeleton/chassis-first architecture. Define coordinate frames, links, joints, degrees of freedom, ranges, stiffness, load paths, mass, centre of gravity and inertia before selecting actuator muscles. Support humanoid and non-humanoid morphologies: wheeled, tracked, legged, manipulator, deckhand, rescue, inspection, galley and general-purpose robots.
