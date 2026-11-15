@@ -120,6 +120,12 @@ Model pressure housings and end closures, seals, penetrators/connectors, tether,
 
 The initial capability is an inspection ROV with camera, lighting, controlled thrusters and depth/heading feedback. Manipulation and anchor/chain intervention are later stages. A 15–20 m target is a design requirement only until independently verified by analysis and testing; component marketing ratings alone are not evidence of system depth capability.
 
+#### Implemented first-pass pressure-housing calculation
+
+The first executable ROV structural operation is `rov.pressure_housing_cylinder_screen`. Inputs include cylindrical shell outer diameter/thickness, operating depth, water density, internal gauge pressure, isotropic Young's modulus and Poisson ratio, allowable von Mises stress, a justified buckling-imperfection factor and design factor of safety. Outputs include hydrostatic and differential pressure, thin-wall hoop/axial membrane stress, von Mises stress, ideal long-cylinder elastic buckling pressure with the supplied knockdown, utilization ratios and end-cap pressure resultant.
+
+The solver is explicitly a preliminary screen: thin-wall isotropic cylinder only. It does not calculate end-cap/flange/bolt/seal/viewport/penetrator/weld strength, finite-length shell behaviour, composite housings, corrosion, fatigue or proof testing. The imperfection factor is mandatory and must be evidence-based; no hidden default is allowed. A result within the screen is not a certified depth rating. Extend next with finite-length/boundary effects, imperfections and cut-outs, end closures and joints, process-specific material data, and controlled proof/leak-test requirements.
+
 ## 5. Verification for marine electronics, robots and vehicles
 
 All new domains use common versioned components, solver contracts, material records, mass/power/thermal budgets, provenance and evidence states. Distinguish analytical screening, simulation, review, prototype, bench/field testing and qualification. Human-interacting robots, lifting systems, propellers and aircraft require appropriate hazard analysis, safeguards and independent verification; successful simulation is not certification.
