@@ -9,6 +9,7 @@ from .contracts import (
     LoadCase,
     SolverProvenance,
 )
+from .dispatcher import AxialMemberSolver, DispatchResult, EngineeringDispatcher
 from .models import (
     AnalysisRequest,
     AnalysisResult,
@@ -21,6 +22,9 @@ __all__ = [
     "AnalysisRequest",
     "AnalysisResult",
     "ArtifactReference",
+    "AxialMemberSolver",
+    "DispatchResult",
+    "EngineeringDispatcher",
     "EngineeringRequest",
     "EngineeringResponse",
     "GeometrySpec",
