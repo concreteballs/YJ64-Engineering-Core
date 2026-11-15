@@ -81,3 +81,10 @@ This solver does not:
 The next structural stages are mesh/geometry validation, pressure interpolation or integration over panels, shell/plate and stiffener load mapping, global hull-girder bending/torsion cases, and a validated FEM or analytical structural solver. The existing simplified catamaran displacement solver remains a separate operation; displacement estimation and pressure-load generation are complementary, not interchangeable.
 
 A successful load-generation result is not evidence that the hull structure is strong enough, nor a class or regulatory approval.
+
+
+## Polygon integration mode (solver v0.2.0)
+
+A panel may additionally provide `vertices_m`, an ordered list of at least three 3D vertices. In this mode the solver triangulates a convex planar polygon and integrates the linearly varying hydrostatic differential pressure over the triangles. It calculates the pressure resultant and its true pressure-weighted centroid, then reports the corresponding force and moment. The supplied `area_m2` must match the polygon area, and the vertices must lie in a plane perpendicular to the supplied unit normal.
+
+This mode captures the pressure gradient across a panel instead of treating the centroid pressure as uniform. Panels that cross the waterline are rejected and must first be split along the waterline; non-convex or curved panels must be subdivided into suitable convex planar panels. Panels without `vertices_m` retain the original centroid approximation for backward compatibility. The integration remains a load-generation step and does not calculate structural stress.
