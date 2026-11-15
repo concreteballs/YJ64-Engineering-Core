@@ -165,5 +165,53 @@ class HydrostaticPanelLoadTests(unittest.TestCase):
         self.assertEqual(len(response.provenance.input_digest_sha256), 64)
 
 
+    def test_polygon_integration_captures_pressure_gradient_and_resultant_centroid(self):
+        panel = [{
+            "panel_id": "vertical-side",
+            "area_m2": 4.0,
+            "centroid_m": [0.0, 1.0, -2.0],
+            "outward_normal": [1.0, 0.0, 0.0],
+            "vertices_m": [
+                [0.0, 0.0, -1.0], [0.0, 2.0, -1.0],
+                [0.0, 2.0, -3.0], [0.0, 0.0, -3.0],
+            ],
+        }]
+        result = self.solver.solve(make_request(panel))
+        rho_g = 1025.0 * 9.80665
+        item = result.values["panels"][0]
+        self.assertAlmostEqual(item["differential_pressure_pa"], 2.0 * rho_g)
+        self.assertAlmostEqual(item["force_xyz_n"][0], -8.0 * rho_g)
+        self.assertAlmostEqual(item["pressure_resultant_centroid_m"][2], -13.0 / 6.0)
+        self.assertAlmostEqual(
+            item["moment_about_origin_xyz_nm"][1], (13.0 / 6.0) * 8.0 * rho_g
+        )
+        self.assertEqual(item["integration_method"], "polygon_integrated_linear_pressure")
+
+    def test_polygon_rejects_waterline_crossing_and_area_mismatch(self):
+        crossing = [{
+            "panel_id": "crossing", "area_m2": 2.0,
+            "centroid_m": [0.0, 0.0, 0.0], "outward_normal": [1.0, 0.0, 0.0],
+            "vertices_m": [[0, 0, -1], [0, 1, -1], [0, 1, 1], [0, 0, 1]],
+        }]
+        with self.assertRaisesRegex(ValueError, "crosses the waterline"):
+            self.solver.solve(make_request(crossing))
+        mismatch = [{
+            "panel_id": "mismatch", "area_m2": 3.0,
+            "centroid_m": [0.0, 0.5, -1.0], "outward_normal": [1.0, 0.0, 0.0],
+            "vertices_m": [[0, 0, -1], [0, 1, -1], [0, 1, -2], [0, 0, -2]],
+        }]
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.solver.solve(make_request(mismatch))
+
+    def test_polygon_rejects_non_planar_geometry(self):
+        panel = [{
+            "panel_id": "nonplanar", "area_m2": 1.0,
+            "centroid_m": [0.0, 0.5, -1.0], "outward_normal": [1.0, 0.0, 0.0],
+            "vertices_m": [[0, 0, -1], [0, 1, -1], [0.1, 1, -2], [0, 0, -2]],
+        }]
+        with self.assertRaisesRegex(ValueError, "must be planar"):
+            self.solver.solve(make_request(panel))
+
+
 if __name__ == "__main__":
     unittest.main()
