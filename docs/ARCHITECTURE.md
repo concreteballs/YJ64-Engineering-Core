@@ -69,3 +69,9 @@ A hull-specific structural milestone requires structural thickness/material defi
 - Run CAD and FEM tools in isolated workers with time and resource limits.
 - Never treat a rendered model or low-order force screen as engineering validation.
 - Require independent engineering review and physical testing for safety-critical use.
+
+## Hull material as a design variable
+
+Hull material is modelled as a build-up rather than a single material label. The screening interface accepts marine aluminium, glass-fibre composite, carbon-fibre composite, sandwich/honeycomb layers and reinforced concrete. Wood is excluded. Each layer's mass comes from cured laminate areal mass or explicit thickness and density. Secondary installation mass and supplier/project cost and maintenance inputs remain explicit; no hidden default values are used.
+
+The result is a mass/cost/maintenance comparison only. It does not prove structural equivalence or calculate scantlings. Each alternative must be sized for the same load cases and separately reviewed for stiffness, strength, buckling, fatigue, impact, joints, local reinforcement, corrosion, galvanic isolation, fire and repairability. Concrete also requires cracking, reinforcement, shrinkage, creep and corrosion assessment.
