@@ -19,6 +19,7 @@ from .physics.hydrostatics import CatamaranHydrostaticsSolver
 from .physics.mass_budget import VesselMassBudgetSolver
 from .physics.hull_material import HullMaterialScreeningSolver
 from .physics.rov_pressure_housing import ROVPressureHousingSolver
+from .physics.hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 
 __all__ = [
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
@@ -28,7 +29,7 @@ __all__ = [
     "EngineeringDispatcher", "EngineeringPipeline", "EngineeringRequest", "EngineeringResponse",
     "FreeCADMacroBackend", "GeometrySpec", "HullStation", "YachtHull", "YachtHullCADBackend",
     "HydrodynamicsSolver", "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
-    "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver", "HullMaterialScreeningSolver", "ROVPressureHousingSolver",
+    "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver", "HullMaterialScreeningSolver", "ROVPressureHousingSolver", "HydrostaticPanelLoadSolver",
     "ImageAnnotation", "VisualObservation", "VisualReference", "apply_hull_changes",
     "ingest_reference_image", "visual_changes", "LoadCase", "MaterialProperties",
     "OpenSCADSourceBackend", "PipelineBranch", "PipelineResult", "Point3D",
