@@ -17,6 +17,7 @@ from .models import (
     MaterialProperties,
     Point3D,
 )
+from .pipeline import EngineeringPipeline, PipelineBranch, PipelineResult
 
 __all__ = [
     "CONTRACT_VERSION",
@@ -26,6 +27,7 @@ __all__ = [
     "AxialMemberSolver",
     "DispatchResult",
     "EngineeringDispatcher",
+    "EngineeringPipeline",
     "EngineeringRequest",
     "EngineeringResponse",
     "FreeCADMacroBackend",
@@ -33,6 +35,8 @@ __all__ = [
     "LoadCase",
     "MaterialProperties",
     "OpenSCADSourceBackend",
+    "PipelineBranch",
+    "PipelineResult",
     "Point3D",
     "SVGDrawingBackend",
     "SolverProvenance",
