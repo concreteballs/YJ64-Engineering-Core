@@ -18,7 +18,8 @@ JSON serialization rejects non-finite numbers. Request and response deserializat
 ## Dispatcher
 
 EngineeringDispatcher requires an explicit operation:
-- physics.axial_member routes to a registered solver supporting axial_member.
+- physics.axial_member routes to the analytical axial screening solver.
+- physics.axial_truss_fem routes a Z-axis axial load case to the registered CalculiX T3D2 solver.
 - cad.generate routes to a registered CAD backend named in operating_conditions.cad_backend.
 
 AxialMemberSolver adapts the existing linear-elastic axial screening calculation. It accepts one load case, Z-axis force only, and no applied moment. Geometry must provide area_m2 and length_m; material must provide name, youngs_modulus_pa, and allowable_stress_pa. Unsupported loads are rejected rather than silently ignored.
@@ -37,6 +38,18 @@ Each branch is attempted independently. Exceptions are captured with their type 
 A branch execution completing does not mean that the design passed engineering screening. For example, a physics response with status fail_screening is still a successfully executed calculation whose result indicates a failed criterion.
 
 **Current data boundary:** both branches receive the same original request, but run independently. Physics does not read the CAD artifact, derive a mesh from it, or verify geometric equivalence. Geometry values required by each branch must be provided explicitly and kept consistent by the caller. The pipeline makes no claim of FEM accuracy or CAD-to-analysis traceability.
+
+## CalculiX FEM adapter
+
+CalculiXTrussSolver is a bounded external-process adapter for one explicitly limited analysis:
+- A single straight T3D2 truss element aligned with global Z.
+- One axial force component in global Z; transverse forces and applied moments are rejected.
+- Explicit area, length, Young's modulus, and Poisson ratio in SI units.
+- Node 1 fixed in all translations; node 2 restrained in X/Y and loaded in Z.
+- The solver writes its own input deck in a configured workspace, starts `ccx -i <job>` with `shell=False`, and enforces a timeout.
+- It reads the tip displacement from the CalculiX text result. Axial strain and stress are then derived from that displacement and the supplied material modulus.
+
+The adapter does not accept arbitrary LLM-provided .inp files. The current one-element truss has no bending stiffness and does not resolve 3D solid stress concentrations, buckling, fatigue, contact, or nonlinear behavior. It is a narrow FEM integration and verification milestone, not a general structural solver.
 
 ## CAD adapters
 
@@ -61,7 +74,8 @@ Each adapter receives a workspace path at construction. The request cannot choos
 
 - Axial linear-elastic screening: implemented.
 - CAD source/macro/SVG generation for cylinders: implemented; external CAD executables are not run.
-- FEM, CFD, electromagnetic, thermal, multibody dynamics, fatigue, and optimization: not yet implemented.
+- General 3D solid FEM, mesh generation/quality validation, CAD-to-mesh transfer, CFD, electromagnetic, thermal, multibody dynamics, fatigue, and optimization: not yet implemented.
+- The current CalculiX integration is limited to one axial T3D2 truss element.
 - Screening calculations and generated CAD artifacts are not certification or substitutes for physical testing.
 
 ## Security and reliability
