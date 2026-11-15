@@ -28,7 +28,7 @@ Visual collaboration uses image hashes, normalized markup and structured observa
 
 ## Dispatcher and pipeline
 
-EngineeringDispatcher requires explicit operation names. CAD backends may return multiple ArtifactReference values. EngineeringPipeline supports CAD-only exploration and CAD plus an explicit physics operation. A branch failure must not suppress the other branch. Completed CAD generation does not imply physical validity.
+EngineeringDispatcher requires explicit operation names. CAD backends may return multiple ArtifactReference values. EngineeringPipeline supports CAD-only exploration and CAD plus an explicit physics operation. A branch failure must not suppress the other branch. Completed CAD generation does not imply physical validity. Each dispatched result records a SHA-256 input digest over the canonical request and selected operation. ComponentCalculationRecord can pin that result to exact component revisions; stale_calculations identifies records whose dependencies changed or disappeared. This is a traceability primitive; persistent project storage, transitive invalidation and automatic reruns remain future work.
 
 ## Catamaran displacement and mass budget
 
