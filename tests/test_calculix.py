@@ -1,9 +1,9 @@
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-import subprocess
 
 from yj64_engineering_core.models import AnalysisRequest
 from yj64_engineering_core.physics.calculix import CalculiXTrussSolver
@@ -36,17 +36,20 @@ class CalculiXTrussSolverTests(unittest.TestCase):
         def fake_run(args, **kwargs):
             if args[-1] == "-v":
                 return subprocess.CompletedProcess(
-                    args, 0, stdout="CalculiX Version 2.21\n", stderr=""
+                    args, 0, stdout="CalculiX Version 2.21\\n", stderr=""
                 )
             job_name = args[-1]
             Path(kwargs["cwd"], f"{job_name}.dat").write_text(
-                "displacements (vx,vy,vz) for set TIP and time 0.1000000E+01\n"
-                " 2 1.000000E-05 0.000000E+00 0.000000E+00\n",
+                "displacements (vx,vy,vz) for set TIP and time 0.1000000E+01\\n"
+                " 2 0.000000E+00 0.000000E+00 1.000000E-05\\n",
                 encoding="utf-8",
             )
             return subprocess.CompletedProcess(args, 0, stdout="completed", stderr="")
 
-        with patch("yj64_engineering_core.physics.calculix.subprocess.run", side_effect=fake_run) as run:
+        with patch(
+            "yj64_engineering_core.physics.calculix.subprocess.run",
+            side_effect=fake_run,
+        ) as run:
             result = self.solver.solve(self.request)
 
         self.assertEqual(result.status, "completed")
@@ -56,7 +59,8 @@ class CalculiXTrussSolverTests(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
         deck = (self.workspace / "ccx-test-001.inp").read_text(encoding="utf-8")
         self.assertIn("*ELEMENT, TYPE=T3D2, ELSET=BAR", deck)
-        self.assertIn("*NODE PRINT, NSET=TIP", deck)\n        self.assertIn("2, 3, 1000", deck)
+        self.assertIn("*NODE PRINT, NSET=TIP", deck)
+        self.assertIn("2, 3, 1000", deck)
 
     def test_rejects_invalid_poisson_ratio_before_running(self):
         parameters = dict(self.request.parameters)
@@ -79,7 +83,10 @@ class CalculiXTrussSolverTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, stdout="CalculiX 2.21", stderr="")
             return subprocess.CompletedProcess(args, 2, stdout="", stderr="solver failure")
 
-        with patch("yj64_engineering_core.physics.calculix.subprocess.run", side_effect=fake_run):
+        with patch(
+            "yj64_engineering_core.physics.calculix.subprocess.run",
+            side_effect=fake_run,
+        ):
             with self.assertRaisesRegex(RuntimeError, "solver failure"):
                 self.solver.solve(self.request)
 
@@ -88,11 +95,14 @@ class CalculiXTrussSolverTests(unittest.TestCase):
             if args[-1] == "-v":
                 return subprocess.CompletedProcess(args, 0, stdout="CalculiX 2.21", stderr="")
             Path(kwargs["cwd"], f"{args[-1]}.dat").write_text(
-                "no displacement table\n", encoding="utf-8"
+                "no displacement table\\n", encoding="utf-8"
             )
             return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
-        with patch("yj64_engineering_core.physics.calculix.subprocess.run", side_effect=fake_run):
+        with patch(
+            "yj64_engineering_core.physics.calculix.subprocess.run",
+            side_effect=fake_run,
+        ):
             with self.assertRaisesRegex(RuntimeError, "Could not parse"):
                 self.solver.solve(self.request)
 
@@ -119,7 +129,7 @@ class CalculiXIntegrationTests(unittest.TestCase):
             result = solver.solve(request)
             expected = 1000.0 * 2.0 / (0.001 * 200e9)
             self.assertAlmostEqual(
-                result.values["tip_displacement_x_m"], expected, delta=expected * 1e-5
+                result.values["tip_displacement_z_m"], expected, delta=expected * 1e-5
             )
             self.assertEqual(result.status, "completed")
 
