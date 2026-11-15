@@ -161,10 +161,20 @@ class EngineeringRequest:
         geometry = payload.get("geometry")
         if geometry is not None and not isinstance(geometry, GeometrySpec):
             payload["geometry"] = GeometrySpec(**geometry)
-        payload["load_cases"] = tuple(
-            item if isinstance(item, LoadCase) else LoadCase(**item)
-            for item in payload.get("load_cases", ())
-        )
+        load_cases = []
+        for item in payload.get("load_cases", ()):
+            if isinstance(item, LoadCase):
+                load_cases.append(item)
+            else:
+                load_case_data = dict(item)
+                for vector_name in ("force_n", "moment_nm"):
+                    if vector_name in load_case_data:
+                        load_case_data[vector_name] = tuple(load_case_data[vector_name])
+                load_cases.append(LoadCase(**load_case_data))
+        payload["load_cases"] = tuple(load_cases)
+        for name in ("requirements", "assumptions"):
+            if name in payload:
+                payload[name] = tuple(payload[name])
         return cls(**payload)
 
     @classmethod
