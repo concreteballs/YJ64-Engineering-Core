@@ -9,7 +9,7 @@ Its purpose is to let language models, autonomous agents, and commercial agents 
 - **Versioned contracts** — canonical JSON requests and responses shared by agents and engineering services.
 - **Dispatcher** — explicit routing to registered CAD and physics backends; operations are never guessed.
 - **Physics adapters** — a common interface for analytical solvers and external simulation engines.
-- **CAD adapters** — a common interface for 2D drawings and parametric 3D geometry.
+- **CAD adapters** — workspace-bound OpenSCAD, FreeCAD macro, and SVG generators.
 - **Validation and provenance** — SI units, finite numeric values, explicit assumptions, solver identity, warnings, limitations, and artifact references.
 
 ## Engineering rule
@@ -22,14 +22,14 @@ A generated drawing or 3D model is not proof that a design is physically safe. A
 2. Validation and JSON serialization for geometry, load cases, provenance, and artifact references.
 3. Explicit engineering dispatcher (dispatcher.py).
 4. Built-in dispatcher adapter for axial linear-elastic screening.
-5. OpenSCAD source generation for a simple cylinder.
-6. FreeCAD macro generation for a parametric cylinder and export instructions.
-7. Basic orthographic SVG generation for a cylinder.
+5. Workspace-bound OpenSCAD source generation.
+6. Workspace-bound FreeCAD macro generation.
+7. Workspace-bound schematic SVG drawing generation.
 8. Automated unit tests and GitHub Actions.
 
-The dispatcher supports explicit operations such as physics.axial_member and cad.generate. CAD backends must be registered by the application and selected explicitly in operating_conditions.cad_backend. The current CAD dispatcher test uses a dummy backend; the real CAD generators have not yet been wrapped as production backend plugins.
+The dispatcher supports explicit operations such as physics.axial_member and cad.generate. CAD backends are registered by the application and selected explicitly in operating_conditions.cad_backend. The built-in CAD adapters currently support cylinder geometry only.
 
-The FreeCAD adapter currently generates a macro; actual CAD execution requires FreeCAD to be installed and explicitly invoked. FEM, CFD, thermal, electromagnetic, and hardware-control integrations are not yet implemented.
+The FreeCAD adapter generates a macro but never runs it automatically. OpenSCAD source generation also does not invoke the OpenSCAD executable. FEM, CFD, thermal, electromagnetic, and hardware-control integrations are not yet implemented.
 
 ## Dispatcher example
 
@@ -78,10 +78,9 @@ Python 3.11 or newer.
 
 ## Planned integrations
 
-- Wrap the existing FreeCAD and OpenSCAD generators as registered CAD backend plugins.
+- Broader parametric CAD geometry, assemblies, tolerances, and production drawings.
 - CalculiX or another solver for finite-element analysis.
 - Additional physics engines for CFD, thermal, electromagnetic, multibody dynamics, fatigue, and optimization.
-- More complete CAD feature trees, assemblies, tolerances, and production drawings.
 - Isolated workers and a service API for CAD and physics backends.
 
 ## Data exchange
