@@ -206,7 +206,7 @@ YJ64 generated axial truss verification model
 {area_m2:.16g}
 *BOUNDARY
 1, 1, 3
-2, 2, 3
+2, 1, 2
 *STEP
 *STATIC
 *CLOAD
