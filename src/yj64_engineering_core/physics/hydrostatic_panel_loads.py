@@ -114,7 +114,7 @@ class HydrostaticPanelLoadSolver:
 
         return AnalysisResult(
             analysis_type=request.analysis_type,
-            status="load_generation_only",
+            status="screening_only",
             values={
                 "panel_count": len(panel_results),
                 "total_panel_area_m2": total_area,
