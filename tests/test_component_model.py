@@ -6,6 +6,7 @@ from yj64_engineering_core.component_model import (
     ComponentInterface,
     ComponentMassProperties,
     EngineeringComponent,
+    EngineeringProjectGraph,
     EvidenceRecord,
     ManufacturingConstraint,
     stale_calculations,
@@ -140,6 +141,79 @@ class EngineeringComponentTests(unittest.TestCase):
                 input_digest_sha256="not-a-digest",
                 component_dependencies=(),
             )
+
+
+    def test_project_graph_propagates_staleness_transitively(self):
+        graph = EngineeringProjectGraph()
+        hull = self.make_component(component_id="hull.shell")
+        beam = self.make_component(
+            component_id="beam.main",
+            dependencies=(ComponentDependency("hull.shell", 1, "bond interface"),),
+        )
+        foil = self.make_component(
+            component_id="foil.root",
+            dependencies=(ComponentDependency("beam.main", 1, "root attachment"),),
+        )
+        graph.add_component(hull)
+        graph.add_component(beam)
+        graph.add_component(foil)
+        calculation = ComponentCalculationRecord(
+            calculation_id="calc.foil.root",
+            operation="physics.axial_member",
+            input_digest_sha256="e" * 64,
+            component_dependencies=(
+                ComponentDependency("foil.root", 1, "foil root load path"),
+            ),
+        )
+        graph.add_calculation(calculation)
+        self.assertEqual(graph.stale_component_ids(), set())
+        self.assertEqual(graph.stale_calculation_ids(), set())
+
+        graph.replace_component(self.make_component(
+            component_id="hull.shell", revision=2
+        ))
+        self.assertEqual(graph.stale_component_ids(), {"beam.main", "foil.root"})
+        self.assertEqual(graph.stale_calculation_ids(), {"calc.foil.root"})
+
+    def test_project_graph_rejects_unresolved_dependency(self):
+        graph = EngineeringProjectGraph()
+        dependent = self.make_component(
+            component_id="beam.main",
+            dependencies=(ComponentDependency("missing.hull", 1, "attachment"),),
+        )
+        with self.assertRaisesRegex(ValueError, "Unknown dependency"):
+            graph.add_component(dependent)
+
+    def test_project_graph_rejects_dependency_revision_mismatch(self):
+        graph = EngineeringProjectGraph()
+        graph.add_component(self.make_component(component_id="hull.shell"))
+        dependent = self.make_component(
+            component_id="beam.main",
+            dependencies=(ComponentDependency("hull.shell", 2, "attachment"),),
+        )
+        with self.assertRaisesRegex(ValueError, "revision mismatch"):
+            graph.add_component(dependent)
+
+    def test_project_graph_rejects_calculation_using_transitively_stale_component(self):
+        graph = EngineeringProjectGraph()
+        graph.add_component(self.make_component(component_id="hull.shell"))
+        graph.add_component(self.make_component(
+            component_id="beam.main",
+            dependencies=(ComponentDependency("hull.shell", 1, "attachment"),),
+        ))
+        graph.replace_component(self.make_component(
+            component_id="hull.shell", revision=2
+        ))
+        calculation = ComponentCalculationRecord(
+            calculation_id="calc.beam",
+            operation="physics.axial_member",
+            input_digest_sha256="f" * 64,
+            component_dependencies=(
+                ComponentDependency("beam.main", 1, "beam load"),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "stale components"):
+            graph.add_calculation(calculation)
 
     def test_rejects_non_finite_material_data(self):
         with self.assertRaisesRegex(ValueError, "finite"):
