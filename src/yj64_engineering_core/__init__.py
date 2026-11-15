@@ -11,6 +11,10 @@ from .contracts import (
 )
 from .dispatcher import AxialMemberSolver, DispatchResult, EngineeringDispatcher
 from .cad.adapters import FreeCADMacroBackend, OpenSCADSourceBackend, SVGDrawingBackend
+from .cad.hull import HullStation, YachtHull
+from .cad.hull_adapters import YachtHullCADBackend
+from .cad.hull_edits import apply_hull_changes
+from .cad.visual_reference import ImageAnnotation, VisualReference, ingest_reference_image, visual_changes
 from .models import (
     AnalysisRequest,
     AnalysisResult,
@@ -34,6 +38,14 @@ __all__ = [
     "EngineeringResponse",
     "FreeCADMacroBackend",
     "GeometrySpec",
+    "HullStation",
+    "YachtHull",
+    "YachtHullCADBackend",
+    "ImageAnnotation",
+    "VisualReference",
+    "apply_hull_changes",
+    "ingest_reference_image",
+    "visual_changes",
     "LoadCase",
     "MaterialProperties",
     "OpenSCADSourceBackend",
