@@ -128,7 +128,6 @@ class CalculiXIntegrationTests(unittest.TestCase):
                 },
             )
             result = solver.solve(request)
-            print((Path(tempdir) / "real-ccx-check.dat").read_text(encoding="utf-8"))
             expected = 1000.0 * 2.0 / (0.001 * 200e9)
             self.assertAlmostEqual(
                 result.values["tip_displacement_z_m"], expected, delta=expected * 1e-5
