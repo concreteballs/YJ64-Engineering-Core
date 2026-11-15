@@ -180,6 +180,7 @@ class HydrostaticPanelLoadTests(unittest.TestCase):
         rho_g = 1025.0 * 9.80665
         item = result.values["panels"][0]
         self.assertAlmostEqual(item["differential_pressure_pa"], 2.0 * rho_g)
+        self.assertAlmostEqual(item["maximum_external_hydrostatic_pressure_pa"], 3.0 * rho_g)
         self.assertAlmostEqual(item["force_xyz_n"][0], -8.0 * rho_g)
         self.assertAlmostEqual(item["pressure_resultant_centroid_m"][2], -13.0 / 6.0)
         self.assertAlmostEqual(
