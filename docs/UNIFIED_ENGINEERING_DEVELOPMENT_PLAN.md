@@ -141,7 +141,85 @@ Typical seawater density is around 1025 kg/m³, while freshwater is around 1000 
 
 Maintain subsystem mass, centre of gravity, power, cooling, volume, access and maintenance budgets. Avoid double counting and evaluate empty, design-load and maximum-load scenarios. The design must account for the complete yacht, not merely the hull and rig.
 
-## Package 6 — Invention methods and engineering knowledge base
+## Package 6 — Marine electronics, instrumentation and vessel automation
+
+**Treat electronics as a vessel-wide engineering discipline shared by the yacht, robots and autonomous craft—not as a subfeature of robotics.**
+
+Cover the complete marine electronic architecture and its interfaces to the electrical power package:
+
+- navigation sensors and systems: GNSS, heading sensors, magnetic and satellite compasses, inertial measurement units, speed/log, wind instruments, depth sounders and sonar;
+- radar, AIS, chartplotters, multifunction displays, autopilot, communications, distress and emergency signalling;
+- cameras, thermal/low-light imaging, microphones, environmental and machinery sensors;
+- onboard networks, data buses, gateways, time synchronization, signal integrity, antenna placement and electromagnetic compatibility;
+- embedded controllers, compute units, software interfaces, alarms, logging, redundancy, cybersecurity boundaries and degraded operating modes;
+- transducers, connectors, cable routing, shielding, grounding, bonding, isolation and power conditioning;
+- equipment selection and integration using actual manufacturer specifications, interface protocols, operating limits and installation requirements.
+
+### Marine environmental qualification
+
+Every electronic device and installation must be evaluated for its actual location and duty: water ingress and immersion exposure, salt mist/corrosion, condensation, humidity, temperature range, vibration, mechanical shock, continuous vessel motion, UV exposure where relevant, electrical transients, conducted/radiated interference and power interruptions. Represent ingress-protection and environmental ratings as sourced equipment data; do not infer them from product category.
+
+### Vessel motion and operation at sea
+
+The system must model six-degree-of-freedom vessel motion (surge, sway, heave, roll, pitch and yaw), angular rates and accelerations, with operating sea-state scenarios and uncertainty. Use this common motion/environment model for:
+- instrument and antenna mounting, sensor alignment and measurement correction;
+- autopilot, stabilization and control-system evaluation;
+- robotic balance, foot placement, grasping and manipulation on a moving deck;
+- machinery, battery, tank, payload and equipment mounting loads;
+- launch/recovery and operation of drones and rescue equipment from a moving vessel.
+
+A robot intended for deck work must be designed and tested for a moving support frame, not merely for static balance. It needs motion sensing, state estimation, control bandwidth and recovery/fail-safe behaviour appropriate to the defined sea-state envelope. Define what operations are permitted, degraded or prohibited at each sea state; do not promise safe operation in arbitrary storms.
+
+### Outputs
+
+Provide network and interface diagrams, equipment and sensor registers, antenna/transducer installation constraints, cable and power schedules, data-flow maps, alarm/failure matrices, environmental qualification requirements and traceable integration test plans.
+
+## Package 7 — Robotics, mechanisms and autonomous vehicles
+
+**Use a common mechanical and control foundation for humanoid robots, specialist robots, lifting equipment, winches, propellers and aerial vehicles.**
+
+### Skeleton-first and modular actuation architecture
+
+Start with a task-derived mechanical chassis/skeleton: coordinate frames, links, joints, degrees of freedom, ranges, limits, stiffness, backlash, load paths, mass, centre of gravity and inertia. Only then select and attach actuator “muscles” and transmissions to meet required forces, speed, power, compliance, precision, duty cycle and environmental conditions.
+
+Do not assume electric motors are the only or universally best actuator. Compare:
+- electric motors, geared drives and direct drives;
+- cable/tendon and remote-actuation systems;
+- hydraulic and pneumatic actuators;
+- compliant and elastic transmissions, series-elastic actuators and variable-stiffness mechanisms;
+- electroactive polymers and other emerging artificial-muscle technologies where reliable property data exists.
+
+For every actuator, model force/torque, stroke, speed, power, efficiency, thermal limits, bandwidth, compliance, fatigue life, failure modes, energy supply and maintenance. Distinguish demonstrated technologies from speculative materials; unknown properties remain unknown.
+
+### Robot families and marine requirements
+
+Support humanoid, mobile, wheeled, tracked, legged, manipulator, service, inspection, cooking/galley, deckhand, rescue and general-purpose configurations. The design workflow must choose morphology from the task and environment rather than forcing every robot into a human shape.
+
+Marine robot configurations must explicitly address corrosion-resistant materials and coatings, sealed joints/connectors, drainage, salt ingress, condensation, cold-weather operation, vibration, shock, washdown and serviceability. For onboard robots, integrate vessel motion and sea-state models from Package 6. Include balance and manipulation on moving decks, handholds/anchoring strategies, safe stowage, emergency stop and safe behaviour after loss of power or communications.
+
+### Mechanisms, winches and lifting systems
+
+Provide reusable solvers for gears, belts, chains, screws, linkages, bearings, clutches, brakes, cable drives, pulleys and reeving. Apply them to:
+- sailing winches sized from sail loads, sheet geometry, line lead, drum radius, gear ratio, handle/drive input, efficiency, duty and braking/holding requirements;
+- anchor and mooring winches, capstans and windlasses;
+- davits, crane beams, boat/rescue-craft hoists and other lifting systems;
+- robot joints, grippers, manipulators and deployable structures.
+
+Calculate line pull, torque, speed, power, drum capacity, rope fleet angle, line layering, brake/holding capacity, structural reactions, fatigue and dynamic loads. Include vessel motion, shock loading, corrosion and applicable safety factors/standards as explicit inputs. Never size a lifting device from nominal payload alone.
+
+### Propellers and rotors
+
+Support marine propellers and aerial rotors with geometry, blade count, diameter, pitch/twist, section data, material, rotational speed and operating medium. Calculate thrust, torque, power, efficiency and operating envelope; add cavitation, ventilation, tip-speed, structural, vibration and noise checks as appropriate. Keep air and water models physically distinct while reusing geometry, blade-element and rotating-machinery infrastructure where valid. Include propeller/rotor matching to motors, engines, shafts, gearboxes, controllers and energy systems.
+
+### Uncrewed and aerial vehicles
+
+Support multirotor, fixed-wing, hybrid VTOL and other UAV configurations, including larger cargo/rescue platforms. Model mass budget, centre of gravity, inertia, aerodynamics, propulsion, rotor/propeller performance, battery/fuel energy, endurance, range, payload, control authority, wind/gust response, take-off/landing and failure cases. Include maritime rescue use cases such as delivering a distress beacon or communications payload to another vessel, subject to aviation, maritime and radio regulations.
+
+### Verification
+
+Robot and vehicle outputs must include kinematic reach/workspace, collision checks, load and stability envelopes, actuator sizing, energy budget, thermal limits, fault response, maintenance access and test plans. Separate simulation from physical validation. Human-interacting and load-bearing systems require appropriate risk assessment, guarding, emergency stops and independent testing.
+
+## Package 8 — Invention methods and engineering knowledge base
 
 **Create a unified method library rather than choosing only one TRIZ variant.**
 
@@ -171,7 +249,7 @@ Every method/knowledge record must retain source, author, edition, license/usage
 
 Invention methods generate hypotheses; they do not prove feasibility.
 
-## Package 7 — Reverse engineering, repair and component lifecycle
+## Package 9 — Reverse engineering, repair and component lifecycle
 
 Support repair and reproduction of unavailable parts, from small engine components to structural assemblies.
 
@@ -189,13 +267,13 @@ Workflow:
 
 Classify part criticality. Sensor brackets, instrument housings, covers and plugs may be suitable for onboard production after checks. Mast, rigging, steering, engine-internal, pressure-containing, rotating and other safety-critical components require qualified materials/processes, engineering review, inspection and appropriate proof tests. A printable file is never an automatic approval.
 
-## Package 8 — Specialized design and mechanism pilots
+## Package 10 — Specialized design and mechanism pilots
 
 Once the common kernel and relevant solvers exist, use real projects as integration tests. The folding mast is a future pilot, not a prerequisite for building the general system.
 
 The saved concept notes include a mast folding in two or three stages depending on height, plus a separately folding/rolling arrangement using cross-shaped supports at bends with a cable passing through them. Do not invent missing geometry or mechanism details. When drawings are available, decompose and analyze mast sections, hinges, locks, cable path, actuation, rigging release/re-tensioning, stowage supports, vessel loads, transition loads, fail-safe states and operational interlocks.
 
-## Package 9 — Visualization and simulation presentation interface
+## Package 11 — Visualization and simulation presentation interface
 
 A separate visualization module should consume the same versioned geometry and engineering data. Provide interfaces for:
 - accurate CAD-based still renders and technical illustrations;
@@ -206,7 +284,7 @@ A separate visualization module should consume the same versioned geometry and e
 
 Keep accurate CAD/solver visualization distinct from generative concept images. Concept imagery must never be presented as validated geometry or engineering evidence. The same outputs can later support a project website.
 
-## Package 10 — Website/content and commercial workflows (later)
+## Package 12 — Website/content and commercial workflows (later)
 
 The engineering core should expose approved, versioned artifacts and descriptions to downstream agents.
 
