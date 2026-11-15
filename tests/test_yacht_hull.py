@@ -56,7 +56,7 @@ class YachtHullGeometryTests(unittest.TestCase):
         self.assertIn("polyhedron(", source)
         self.assertIn("points = [", source)
         self.assertIn("faces = [", source)
-        self.assertEqual(len(hull_triangles(hull)), 6 + 4 * 2 * (len(hull.stations)-1) + 6)
+        self.assertEqual(len(hull_triangles(hull)), 6 + 5 * 2 * (len(hull.stations)-1))
 
     def test_generates_three_view_technical_drawing(self):
         drawing = yacht_hull_technical_svg(sample_hull())
