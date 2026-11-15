@@ -153,6 +153,7 @@ class HydrostaticPanelLoadSolver:
                 force = tuple(-pressure_area * component for component in normal)
                 moment = tuple(-component for component in _cross(position_pressure, normal))
                 external_average = pressure_average + internal_pressure
+                maximum_external_panel_pressure = density * gravity * max(0.0, waterline - min(vertex[2] for vertex in vertices))
                 depth = max(0.0, waterline - centroid[2])
                 method = "polygon_integrated_linear_pressure"
                 pressure_value = pressure_average
@@ -168,6 +169,7 @@ class HydrostaticPanelLoadSolver:
             else:
                 depth = max(0.0, waterline - centroid[2])
                 external_average = density * gravity * depth
+                maximum_external_panel_pressure = external_average
                 pressure_value = external_average - internal_pressure
                 force = tuple(-pressure_value * area * component for component in normal)
                 moment = _cross(centroid, force)
@@ -178,13 +180,14 @@ class HydrostaticPanelLoadSolver:
                 total_force[axis] += force[axis]
                 total_moment[axis] += moment[axis]
             total_area += area
-            max_external_pressure = max(max_external_pressure, external_average)
+            max_external_pressure = max(max_external_pressure, maximum_external_panel_pressure)
             panel_results.append({
                 "panel_id": panel_id,
                 "area_m2": area,
                 "centroid_m": list(centroid),
                 "depth_below_waterline_m": depth,
                 "external_hydrostatic_pressure_pa": external_average,
+                "maximum_external_hydrostatic_pressure_pa": maximum_external_panel_pressure,
                 "internal_gauge_pressure_pa": internal_pressure,
                 "differential_pressure_pa": differential_average,
                 "force_xyz_n": list(force),
