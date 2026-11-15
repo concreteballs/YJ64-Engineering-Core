@@ -2,86 +2,76 @@
 
 ## System responsibilities
 
-- Application / consortium dispatcher: project state, permissions, routing, and audit history.
-- Yacht Agent: permitted research and workflow tasks; it is a client, not the owner of engineering truth.
-- CAD service: creates editable geometry and drawing artifacts.
-- Physics service: runs analytical solvers and external numerical simulation backends.
-- Commercial agent: consumes versioned engineering results to estimate manufacturing, operating, maintenance, and lifecycle costs.
-- Independent oversight: reviews proposed actions and consequences and cannot be modified by the supervised agent.
+- Consortium / application: design discussion, project state, permissions, routing and revision history.
+- Vision-capable model: interprets user sketches, photographs and markup; returns observations tied to image coordinates.
+- Yacht CAD service: owns validated parametric hull geometry and generates editable 2D/3D artifacts.
+- Physics service: consumes a versioned geometry/mesh and material/load definitions through bounded solver adapters.
+- Commercial agent: evaluates manufacturing and lifecycle cost using traceable engineering inputs.
+- Independent oversight: reviews assumptions, evidence and proposed real-world actions.
 
-## Contract boundary
+## Hull geometry contract
 
-The contracts.py module defines version 1.0 of the shared request/response envelope. Requests carry stable IDs, geometry, material data, load cases, operating conditions, requirements, assumptions, and SI units. Responses carry status, solver provenance, values and units, assumptions, warnings, limitations, uncertainty, and artifact references.
+The initial design target is a single monohull outer envelope. A hull is represented by an ordered list of longitudinal stations. Each station defines x position, half-beam, keel height, chine height and deck-edge height, all in SI metres. The section profile is currently a simple five-point chine shape. Station ordering and vertical relationships are validated before CAD generation.
 
-JSON serialization rejects non-finite numbers. Request and response deserialization reject JSON NaN/Infinity constants. The shared contract checks envelope structure and generic numeric validity; each backend must additionally validate required fields, dimensional meaning, physical ranges, boundary conditions, and solver suitability.
+The same validated YachtHull object drives all current hull outputs:
+- 2D SVG technical sketch: plan, profile and transverse sections;
+- editable OpenSCAD polyhedron source;
+- FreeCAD macro that creates a loft and exports native FCStd, STEP and STL when deliberately executed;
+- optional direct OpenSCAD STL rendering in a bounded subprocess.
 
-## Dispatcher
+The 2D view is a preliminary technical sketch, not a manufacturing drawing. The 3D model is the outer hull envelope only; it does not yet contain frames, stringers, bulkheads, laminate, plate thickness or scantlings.
 
-EngineeringDispatcher requires an explicit operation:
-- physics.axial_member routes to the analytical axial screening solver.
-- physics.axial_truss_fem routes a Z-axis axial load case to the registered CalculiX T3D2 solver.
-- cad.generate routes to a registered CAD backend named in operating_conditions.cad_backend.
+## Design iteration and image input
 
-AxialMemberSolver adapts the existing linear-elastic axial screening calculation. It accepts one load case, Z-axis force only, and no applied moment. Geometry must provide area_m2 and length_m; material must provide name, youngs_modulus_pa, and allowable_stress_pa. Unsupported loads are rejected rather than silently ignored.
+Natural-language interpretation is separated from geometry mutation:
+1. The language model interprets the user's words and proposes a structured change operation.
+2. apply_hull_changes accepts only a small whitelist: set_station, scale_beam, translate_vertical and rename.
+3. The updated station data is revalidated.
+4. A before/after parameter record is returned.
+5. The CAD service regenerates 2D and 3D artifacts from the new parameter set.
 
-## Engineering pipeline
+Visual collaboration uses the same controlled edit path:
+- ingest_reference_image accepts PNG/JPEG, records dimensions, SHA-256 and a local URI;
+- ImageAnnotation stores normalized user markup points;
+- VisualObservation stores vision-model descriptions, confidence and normalized image regions;
+- visual_changes converts only annotations with explicit station/field/value targets into structured edits.
 
-EngineeringPipeline executes two explicit branches for one EngineeringRequest:
-1. The configured physics operation (for example, physics.axial_member).
-2. cad.generate using operating_conditions.cad_backend.
+The image module does not itself perform semantic image recognition. A vision-capable model in the consortium must inspect the picture and return observations. Low-confidence or ambiguous observations must be presented to the user for clarification rather than silently changing the hull.
 
-Each branch is attempted independently. Exceptions are captured with their type and message in that branch; a failure in CAD does not prevent physics from running, and vice versa. Pipeline status is:
-- completed: both branches returned a dispatcher result;
-- partial: exactly one branch returned a dispatcher result;
-- failed: neither branch returned a dispatcher result.
+## Dispatcher and pipeline
 
-A branch execution completing does not mean that the design passed engineering screening. For example, a physics response with status fail_screening is still a successfully executed calculation whose result indicates a failed criterion.
+EngineeringDispatcher requires explicit operation names. CAD backends may return one or many ArtifactReference values; each generated artifact has its own media type, URI and optional SHA-256 digest.
 
-**Current data boundary:** both branches receive the same original request, but run independently. Physics does not read the CAD artifact, derive a mesh from it, or verify geometric equivalence. Geometry values required by each branch must be provided explicitly and kept consistent by the caller. The pipeline makes no claim of FEM accuracy or CAD-to-analysis traceability.
+EngineeringPipeline can run:
+- CAD-only during early shape exploration;
+- CAD plus an explicit physics operation once a suitable hull solver exists.
 
-## CalculiX FEM adapter
+A branch failure must not suppress the other branch. A completed CAD generation does not imply that a hull is structurally sound.
 
-CalculiXTrussSolver is a bounded external-process adapter for one explicitly limited analysis:
-- A single straight T3D2 truss element aligned with global Z.
-- One axial force component in global Z; transverse forces and applied moments are rejected.
-- Explicit area, length, Young's modulus, and Poisson ratio in SI units.
-- Node 1 fixed in all translations; node 2 restrained in X/Y and loaded in Z.
-- The solver writes its own input deck in a configured workspace, starts `ccx -i <job>` with `shell=False`, and enforces a timeout.
-- It reads the tip displacement from the CalculiX text result. Axial strain and stress are then derived from that displacement and the supplied material modulus.
+## Visual and CAD artifact traceability
 
-The adapter does not accept arbitrary LLM-provided .inp files. The current one-element truss has no bending stiffness and does not resolve 3D solid stress concentrations, buckling, fatigue, contact, or nonlinear behavior. It is a narrow FEM integration and verification milestone, not a general structural solver.
+Each design request has a stable request ID. Generated files use a sanitized version of that ID. Multi-artifact CAD responses return separate artifact references. Reference images retain a SHA-256 digest so later revisions can identify the exact user markup or source image. Structured edits include before/after geometry and the originating operations.
 
-## CAD adapters
+## Physics boundary and next milestone
 
-The workspace-bound adapters implement the CADBackend interface and currently support cylinder geometry:
-- OpenSCADSourceBackend writes editable .scad source; it does not execute OpenSCAD.
-- FreeCADMacroBackend writes a .FCMacro file; it does not execute FreeCAD.
-- SVGDrawingBackend writes a schematic orthographic SVG; it is explicitly not a manufacturing drawing.
+The existing CalculiX T3D2 adapter is a one-element axial truss check. It is not a hull solver and must not be used to report hull strength.
 
-Each adapter receives a workspace path at construction. The request cannot choose an arbitrary output path. Filenames are derived from a sanitized request ID. Generated artifacts are returned as typed artifact references in EngineeringResponse when both format and location are supplied.
+The next hull-specific physics milestone is:
+1. define structural components and material/laminate thickness separately from the outer moulded surface;
+2. generate a controlled shell mesh from the CAD geometry;
+3. validate mesh topology, normals, element quality and units;
+4. define boundary conditions and representative load cases with explicit user review;
+5. run a CalculiX shell analysis;
+6. check reaction balance, mesh convergence and solver warnings;
+7. return contour data and numerical summaries linked to the exact geometry revision.
 
-## Data flow
-
-1. The consortium converts a design discussion into an EngineeringRequest.
-2. The application validates it and calls EngineeringPipeline with an explicit physics operation.
-3. The pipeline invokes the physics and CAD dispatcher branches independently.
-4. Each branch returns a versioned EngineeringResponse or a captured branch error.
-5. The combined result is returned to the consortium for review and design iteration.
-6. The commercial agent evaluates manufacturing and lifecycle costs using traceable inputs.
-7. Independent oversight reviews assumptions, evidence, and proposed real-world actions.
-
-## Current solver limits
-
-- Axial linear-elastic screening: implemented.
-- CAD source/macro/SVG generation for cylinders: implemented; external CAD executables are not run.
-- General 3D solid FEM, mesh generation/quality validation, CAD-to-mesh transfer, CFD, electromagnetic, thermal, multibody dynamics, fatigue, and optimization: not yet implemented.
-- The current CalculiX integration is limited to one axial T3D2 truss element.
-- Screening calculations and generated CAD artifacts are not certification or substitutes for physical testing.
+Hydrostatics, stability, resistance, slamming, fatigue, CFD, appendages, foils and catamaran assembly are later extensions. The first target is deliberately a single hull to keep the geometry and validation loop testable.
 
 ## Security and reliability
 
-- Do not execute arbitrary LLM-generated Python in the application process.
-- Keep artifact output inside an assigned project workspace.
-- Run external CAD/solver processes in isolated workers with resource limits.
-- Do not give engineering workers credentials or unrestricted network access.
-- Require independent validation for safety-critical designs.
+- Do not execute arbitrary LLM-generated Python.
+- Only whitelisted parameter edits may mutate hull geometry.
+- Keep artifacts inside a configured project workspace.
+- Run OpenSCAD, FreeCAD and FEM tools in isolated workers with time and resource limits.
+- Never treat a rendered model as engineering validation.
+- Require independent engineering review and physical testing for safety-critical use.
