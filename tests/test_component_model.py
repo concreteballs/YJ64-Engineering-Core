@@ -70,6 +70,20 @@ class EngineeringComponentTests(unittest.TestCase):
             stale_component_dependencies([consumer], {"hull.port.shell": 1}), {}
         )
 
+    def test_rejects_fractional_revision_numbers(self):
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            self.make_component(revision=1.5)
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            ComponentDependency("mast", 2.5, "attachment")
+
+    def test_rejects_non_integer_current_revision_map(self):
+        component = self.make_component(
+            component_id="crossbeam",
+            dependencies=(ComponentDependency("hull.port.shell", 1, "joint"),),
+        )
+        with self.assertRaisesRegex(ValueError, "positive integer revisions"):
+            stale_component_dependencies([component], {"hull.port.shell": 1.5})
+
     def test_rejects_non_finite_material_data(self):
         with self.assertRaisesRegex(ValueError, "finite"):
             self.make_component(material={"density_kg_m3": float("nan")})
