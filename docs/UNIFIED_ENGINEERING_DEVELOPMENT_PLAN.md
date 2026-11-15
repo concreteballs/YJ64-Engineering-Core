@@ -170,6 +170,20 @@ The system must model six-degree-of-freedom vessel motion (surge, sway, heave, r
 
 A robot intended for deck work must be designed and tested for a moving support frame, not merely for static balance. It needs motion sensing, state estimation, control bandwidth and recovery/fail-safe behaviour appropriate to the defined sea-state envelope. Define what operations are permitted, degraded or prohibited at each sea state; do not promise safe operation in arbitrary storms.
 
+### Separate design-time vessel dynamics from real-time onboard learning
+
+These are complementary models and must not be conflated.
+
+**Design-time naval architecture and hull hydrodynamics:** calculate how hull geometry and loading interact with waves, speed and heading. The model must support hydrostatics, resistance, seakeeping and six-degree-of-freedom response, wave encounter conditions, response amplitude operators (RAOs) where data/methods permit, added mass, damping, restoring forces, slamming and relevant structural loads. It must predict and compare candidate hull forms over defined operating conditions. A short rolling sensor history from one voyage cannot replace this design-time analysis or establish performance in unobserved sea states.
+
+**Onboard adaptive motion estimation for robots:** do not expect one fixed sea-motion profile to predict every changing wave pattern. A robot may use a smartphone as a replaceable onboard computing, communications and sensor package. It can provide phone calls where cellular coverage exists, and expose available sensors such as accelerometer, gyroscope, magnetometer, GNSS and barometer where supported. Sensor availability, sample rate, calibration, orientation, latency and drift must be measured rather than assumed. The phone must be rigidly mounted in a known frame; critical balance/control should also be able to use dedicated robot IMU/joint/foot-contact sensors if phone measurements are insufficient or unavailable.
+
+Use a configurable rolling local observation window (initial candidates: 5 or 15 minutes, not a fixed universal choice) to estimate recent motion statistics and short-horizon motion tendencies. Continuously update the estimate as new measurements arrive; track confidence and prediction error, detect abrupt regime changes, and fall back to a safe degraded mode when sensors or predictions become unreliable. This is adaptive short-horizon estimation, not guaranteed prediction of future waves. The control system must react to measured motion as well as anticipate it.
+
+**Data retention and privacy:** raw high-rate motion samples should remain in volatile/local working memory only for the configured rolling window and be automatically overwritten/deleted as the window advances. Do not create a persistent onboard archive of raw motion history. If the owner explicitly enables remote research/diagnostics, upload only a separately defined, minimized set of derived statistics or selected records, with consent, encryption, access control, retention limits and the ability to disable upload. Remote storage is optional and must never be required for real-time robot balance or safe operation. Loss of internet/cellular service must not interrupt local estimation or control.
+
+Record the algorithm version, sensor configuration, window length, uncertainty, prediction error and sea-state context with any uploaded aggregate so that datasets remain interpretable. Avoid retaining identifiable crew/location data unless strictly necessary and explicitly authorized.
+
 ### Outputs
 
 Provide network and interface diagrams, equipment and sensor registers, antenna/transducer installation constraints, cable and power schedules, data-flow maps, alarm/failure matrices, environmental qualification requirements and traceable integration test plans.
