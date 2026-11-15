@@ -101,3 +101,21 @@ and current revision map. Transitive invalidation, automatic reruns and artifact
 regeneration will be handled by a later project-graph service. A calculation with
 no declared component dependencies is not proof that it is independent of project
 geometry; dependency declarations must be explicit and reviewed.
+
+## In-memory project dependency graph
+
+`EngineeringProjectGraph` now provides a first project-level registry:
+
+- Components are registered with stable IDs; duplicate IDs are rejected.
+- Parent and dependency links must resolve to registered components.
+- Dependency revisions must match the current registered revision.
+- Component replacement requires a strictly higher revision.
+- Dependency cycles are rejected.
+- Staleness propagates transitively: if a hull component changes, a beam
+  depending on it becomes stale, and a foil depending on that beam becomes stale.
+- Calculations can be registered against exact component revisions. A calculation
+  is marked stale if any direct input or any transitive component dependency is stale.
+
+The graph is in-memory only. It does not yet persist project state, coordinate
+concurrent edits, schedule automatic reruns, or regenerate CAD/CAM artifacts.
+A stale result is flagged, never silently reused as current.
