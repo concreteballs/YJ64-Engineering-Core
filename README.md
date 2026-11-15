@@ -80,3 +80,5 @@ The long-term capability plan for general engineering, materials, metal additive
 ## Canonical engineering component model
 
 The shared component data contract is documented in [docs/COMPONENT_MODEL.md](docs/COMPONENT_MODEL.md). It gives each part or subsystem a stable ID and revision, stores geometry/material/mass properties and interfaces, pins dependencies to exact revisions, and fingerprints the serialized inputs. `stale_component_dependencies()` detects direct dependencies whose referenced revision changed or disappeared. Transitive invalidation and artifact regeneration remain responsibilities of the future project-graph manager; this data model does not certify component safety or manufacturability.
+
+Calculation traceability: every dispatched CAD/physics response now includes `provenance.input_digest_sha256`, calculated from the exact canonical request plus selected operation. `ComponentCalculationRecord` can pin a result to exact component revisions, and `stale_calculations()` flags results when a referenced component changes or disappears. This is explicit revision checking, not yet automatic transitive reruns or persistent project-graph storage.
