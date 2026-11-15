@@ -36,12 +36,12 @@ class CalculiXTrussSolverTests(unittest.TestCase):
         def fake_run(args, **kwargs):
             if args[-1] == "-v":
                 return subprocess.CompletedProcess(
-                    args, 0, stdout="CalculiX Version 2.21\\n", stderr=""
+                    args, 0, stdout="CalculiX Version 2.21\n", stderr=""
                 )
             job_name = args[-1]
             Path(kwargs["cwd"], f"{job_name}.dat").write_text(
-                "displacements (vx,vy,vz) for set TIP and time 0.1000000E+01\\n"
-                " 2 0.000000E+00 0.000000E+00 1.000000E-05\\n",
+                "displacements (vx,vy,vz) for set TIP and time 0.1000000E+01\n"
+                " 2 0.000000E+00 0.000000E+00 1.000000E-05\n",
                 encoding="utf-8",
             )
             return subprocess.CompletedProcess(args, 0, stdout="completed", stderr="")
@@ -95,7 +95,7 @@ class CalculiXTrussSolverTests(unittest.TestCase):
             if args[-1] == "-v":
                 return subprocess.CompletedProcess(args, 0, stdout="CalculiX 2.21", stderr="")
             Path(kwargs["cwd"], f"{args[-1]}.dat").write_text(
-                "no displacement table\\n", encoding="utf-8"
+                "no displacement table\n", encoding="utf-8"
             )
             return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
@@ -127,6 +127,7 @@ class CalculiXIntegrationTests(unittest.TestCase):
                 },
             )
             result = solver.solve(request)
+            print((Path(tempdir) / "real-ccx-check.dat").read_text(encoding="utf-8"))
             expected = 1000.0 * 2.0 / (0.001 * 200e9)
             self.assertAlmostEqual(
                 result.values["tip_displacement_z_m"], expected, delta=expected * 1e-5
