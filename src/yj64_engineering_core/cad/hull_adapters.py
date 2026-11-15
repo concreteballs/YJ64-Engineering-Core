@@ -122,6 +122,10 @@ class YachtHullCADBackend:
         else:
             warnings.append("STL mesh not rendered; provide an OpenSCAD executable to enable it.")
 
+        for item in outputs:
+            artifact_path = Path(item["location"].removeprefix("file://"))
+            item["sha256"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+
         return {
             "format": "application/vnd.yj64.cad-artifact-set",
             "location": scad_path.as_uri(),
