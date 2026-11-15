@@ -1,6 +1,6 @@
 """YJ64 Engineering Core public API."""
 from .contracts import CONTRACT_VERSION, ArtifactReference, EngineeringRequest, EngineeringResponse, GeometrySpec, LoadCase, SolverProvenance
-from .component_model import ComponentCalculationRecord, ComponentDependency, ComponentInterface, ComponentMassProperties, EngineeringComponent, EvidenceRecord, ManufacturingConstraint, stale_calculations, stale_component_dependencies
+from .component_model import ComponentCalculationRecord, ComponentDependency, ComponentInterface, ComponentMassProperties, EngineeringComponent, EngineeringProjectGraph, EvidenceRecord, ManufacturingConstraint, stale_calculations, stale_component_dependencies
 from .dispatcher import AxialMemberSolver, DispatchResult, EngineeringDispatcher
 from .cad.adapters import FreeCADMacroBackend, OpenSCADSourceBackend, SVGDrawingBackend
 from .cad.hull import HullStation, YachtHull
@@ -21,7 +21,7 @@ from .physics.hull_material import HullMaterialScreeningSolver
 
 __all__ = [
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
-    "ComponentCalculationRecord", "ComponentDependency", "ComponentInterface", "ComponentMassProperties", "EngineeringComponent",
+    "ComponentCalculationRecord", "ComponentDependency", "ComponentInterface", "ComponentMassProperties", "EngineeringComponent", "EngineeringProjectGraph",
     "EvidenceRecord", "ManufacturingConstraint", "stale_calculations", "stale_component_dependencies",
     "ArtifactReference", "AxialMemberSolver", "CalculiXTrussSolver", "DispatchResult",
     "EngineeringDispatcher", "EngineeringPipeline", "EngineeringRequest", "EngineeringResponse",
