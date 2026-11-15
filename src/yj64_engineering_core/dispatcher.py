@@ -108,16 +108,24 @@ class EngineeringDispatcher:
         artifact = backend.generate(specification)
         if not isinstance(artifact, dict):
             raise TypeError("CAD backend must return an artifact metadata object")
-        artifact_references = ()
-        if artifact.get("location") and artifact.get("format"):
-            artifact_references = (
-                ArtifactReference(
-                    artifact_id=f"{request.request_id}-cad",
-                    media_type=artifact["format"],
-                    uri=artifact["location"],
-                    sha256=artifact.get("sha256"),
-                ),
+        artifact_items = artifact.get("artifacts")
+        if artifact_items is None:
+            artifact_items = (
+                [{"format": artifact["format"], "location": artifact["location"],
+                  "sha256": artifact.get("sha256")}]
+                if artifact.get("location") and artifact.get("format")
+                else []
             )
+        artifact_references = tuple(
+            ArtifactReference(
+                artifact_id=f"{request.request_id}-cad-{index + 1}",
+                media_type=item["format"],
+                uri=item["location"],
+                sha256=item.get("sha256"),
+            )
+            for index, item in enumerate(artifact_items)
+            if item.get("format") and item.get("location")
+        )
         response = EngineeringResponse(
             request_id=request.request_id,
             status="completed",
