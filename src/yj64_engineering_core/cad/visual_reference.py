@@ -50,6 +50,37 @@ class ImageAnnotation:
 
 
 @dataclass(frozen=True)
+class VisualObservation:
+    """A vision-model observation anchored to a normalized image region."""
+    feature: str
+    description: str
+    confidence: float
+    bbox: tuple[float, float, float, float]
+    station_index: int | None = None
+    suggested_parameter: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.feature.strip() or not self.description.strip():
+            raise ValueError("visual observation feature and description are required")
+        if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)):
+            raise TypeError("confidence must be numeric")
+        if not math.isfinite(self.confidence) or not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("confidence must be within 0..1")
+        if len(self.bbox) != 4:
+            raise ValueError("bbox must be (x, y, width, height)")
+        x, y, width, height = self.bbox
+        if any(not math.isfinite(v) or not 0.0 <= v <= 1.0 for v in self.bbox):
+            raise ValueError("bbox values must be within 0..1")
+        if width <= 0 or height <= 0 or x + width > 1.0 or y + height > 1.0:
+            raise ValueError("bbox must fit inside the normalized image")
+        if self.station_index is not None and (
+            isinstance(self.station_index, bool) or not isinstance(self.station_index, int)
+            or self.station_index < 0
+        ):
+            raise ValueError("station_index must be a non-negative integer")
+
+
+@dataclass(frozen=True)
 class VisualReference:
     image_uri: str
     media_type: str
@@ -57,6 +88,7 @@ class VisualReference:
     height_px: int
     sha256: str
     annotations: tuple[ImageAnnotation, ...] = ()
+    observations: tuple[VisualObservation, ...] = ()
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False, sort_keys=True, allow_nan=False)
@@ -104,6 +136,7 @@ def _image_dimensions(data: bytes, suffix: str) -> tuple[int, int, str]:
 def ingest_reference_image(
     image_path: str | Path,
     annotations: tuple[ImageAnnotation, ...] = (),
+    observations: tuple[VisualObservation, ...] = (),
 ) -> VisualReference:
     path = Path(image_path).expanduser().resolve()
     if not path.is_file():
@@ -114,6 +147,8 @@ def ingest_reference_image(
         raise ValueError("image dimensions must be positive")
     if not all(isinstance(item, ImageAnnotation) for item in annotations):
         raise TypeError("annotations must contain ImageAnnotation values")
+    if not all(isinstance(item, VisualObservation) for item in observations):
+        raise TypeError("observations must contain VisualObservation values")
     return VisualReference(
         image_uri=path.as_uri(),
         media_type=media_type,
@@ -121,6 +156,7 @@ def ingest_reference_image(
         height_px=height,
         sha256=hashlib.sha256(data).hexdigest(),
         annotations=annotations,
+        observations=observations,
     )
 
 
