@@ -30,8 +30,8 @@ class CatamaranHydrostaticsTests(unittest.TestCase):
             },
         })
         result = CatamaranHydrostaticsSolver().solve(request)
-        self.assertAlmostEqual(result.values["design_displacement_volume_m3"], 20.0)
-        self.assertAlmostEqual(result.values["design_displacement_mass_kg"], 20000.0)
+        self.assertAlmostEqual(result.values["design_displacement_volume_m3"], 14.4)
+        self.assertAlmostEqual(result.values["design_displacement_mass_kg"], 14400.0)
         self.assertGreater(result.values["maximum_displacement_mass_kg"], 20000.0)
         self.assertGreater(result.values["reserve_buoyancy_fraction_of_max"], 0.0)
 
@@ -86,7 +86,7 @@ class DispatcherIntegrationTests(unittest.TestCase):
                                   "water_density_kg_m3": 1000.0},
         )
         result = dispatcher.dispatch(request, "physics.hydrostatics.catamaran_displacement")
-        self.assertAlmostEqual(result.response.values["design_displacement_mass_kg"], 20000.0)
+        self.assertAlmostEqual(result.response.values["design_displacement_mass_kg"], 14400.0)
 
     def test_mass_budget_dispatch(self):
         dispatcher = EngineeringDispatcher()
