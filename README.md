@@ -92,9 +92,11 @@ The CalculiX adapter is registered like any other physics solver. Its analysis n
 
     from pathlib import Path
     from yj64_engineering_core import (
-        AnalysisRequest,
         CalculiXTrussSolver,
         EngineeringDispatcher,
+        EngineeringRequest,
+        GeometrySpec,
+        LoadCase,
     )
 
     dispatcher = EngineeringDispatcher()
@@ -102,23 +104,26 @@ The CalculiX adapter is registered like any other physics solver. Its analysis n
         CalculiXTrussSolver(Path("./calculix-work"))
     )
 
-    fem_request = AnalysisRequest(
-        analysis_type="axial_truss_fem",
-        parameters={
-            "request_id": "bar-fem-001",
-            "force_n": 1000.0,
-            "area_m2": 0.001,
-            "length_m": 2.0,
-            "material": {
-                "name": "Example steel",
-                "youngs_modulus_pa": 200e9,
-                "poisson_ratio": 0.3,
-            },
+    fem_request = EngineeringRequest(
+        request_id="bar-fem-001",
+        title="Axial bar FEM",
+        objective="Run a preliminary axial truss finite-element analysis",
+        geometry=GeometrySpec(
+            "prismatic_member",
+            {"area_m2": 0.001, "length_m": 2.0},
+        ),
+        material={
+            "name": "Example steel",
+            "youngs_modulus_pa": 200e9,
+            "poisson_ratio": 0.3,
         },
+        load_cases=(
+            LoadCase("service", force_n=(0.0, 0.0, 1000.0)),
+        ),
     )
 
-    fem_result = dispatcher._physics_solvers[0].solve(fem_request)
-    print(fem_result.to_dict())
+    fem_result = dispatcher.dispatch(fem_request, "physics.axial_truss_fem")
+    print(fem_result.response.to_json())
 
 The adapter generates its own minimal CalculiX input deck and invokes the `ccx` executable with `shell=False`, a fixed workspace, and a timeout. It does not accept arbitrary .inp files from an LLM. The example is an axial truss verification case: it has no bending stiffness, no local stress concentrations, and no CAD-to-mesh transfer. The returned axial stress is derived from the FEM displacement using the supplied Young's modulus.
 
