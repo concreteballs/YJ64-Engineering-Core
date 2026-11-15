@@ -299,12 +299,14 @@ To minimize repeated work, implement in these combined passes:
 3. **Materials and manufacturing pass:** Package 3 together with the manufacturing fields in Package 1. Material/process data must be consistent with solver and CAD records.
 4. **Electrical vessel pass:** Complete Package 4 as a coherent subsystem, then connect its mass, heat, space, control and safety interfaces to Package 5.
 5. **Marine/vessel integration pass:** Package 5, using existing hydrostatics, mass-budget, flow and hull-material work as starting points; expand the simplified models instead of treating them as finished naval architecture.
-6. **Invention and repair pass:** Packages 6 and 7. Connect idea generation to actual solvers and manufacturing feasibility, not just text suggestions.
-7. **Pilot validation pass:** Package 8 with one or more real mechanisms/components; the folding mast can be one when its drawings are available.
-8. **Visualization pass:** Package 9 against versioned design and simulation data.
-9. **Downstream publishing/commercial pass:** Package 10 after reliable engineering outputs and approvals exist.
+6. **Marine electronics and automation pass:** Package 6, integrated with vessel power, motion, navigation and communications.
+7. **Robotics and mechanisms pass:** Package 7, starting with reusable kinematics, actuator models, winches and propellers before complete robots and UAVs.
+8. **Invention and repair pass:** Packages 8 and 9. Connect idea generation to actual solvers and manufacturing feasibility, not just text suggestions.
+9. **Pilot validation pass:** Package 10 with real mechanisms/components; the folding mast can be one when its drawings are available.
+10. **Visualization pass:** Package 11 against versioned design and simulation data.
+11. **Downstream publishing/commercial pass:** Package 12 after reliable engineering outputs and approvals exist.
 
-Packages 2–6 can be developed by parallel contributors only after Package 1 contracts are stable. Integration and validation remain centralized in the core repository.
+Packages 2–7 can be developed by parallel contributors only after Package 1 contracts are stable. Integration and validation remain centralized in the core repository.
 
 ## Current implementation versus target
 
