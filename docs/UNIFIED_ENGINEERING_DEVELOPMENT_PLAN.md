@@ -384,3 +384,8 @@ Packages 2–7 can be developed by parallel contributors only after Package 1 co
 Already present in the repository are early foundations for dispatch/pipeline contracts, CAD adapters, flow/aero/hydro screening, sail polars and material screening, apparent wind, simplified twin-hull hydrostatics, vessel mass budgeting and hull material mass/cost/maintenance screening.
 
 These are starting points, not completed full-discipline engineering systems. In particular, the current hydrostatics is not a full stability analysis, the current structural adapter is not hull FEM, coefficient-based flow models are not CFD, and the current hull material comparison is not structural equivalence sizing. Future work must preserve these distinctions.
+
+
+### Latest executable improvement: polygon-integrated hull pressure loads
+
+The hull pressure-load operation now supports optional ordered `vertices_m` for convex planar panels. It integrates the linear hydrostatic differential-pressure field over triangulated panels, computes pressure-weighted force and moment resultants, and reports the pressure-resultant centroid. It validates polygon planarity, area consistency, normal orientation consistency and rejects waterline-crossing panels rather than silently approximating a discontinuous wet/dry boundary. The original centroid-panel mode remains available for compatibility. Automated tests cover a depth-gradient side panel, resultant-centroid moment, waterline crossing, area mismatch and non-planar geometry. This is still a load generator; structural plate/shell/stiffener stress analysis remains a separate next stage.
