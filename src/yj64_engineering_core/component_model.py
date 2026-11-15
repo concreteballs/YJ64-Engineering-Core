@@ -232,3 +232,62 @@ def stale_component_dependencies(
         if outdated:
             stale[component.component_id] = outdated
     return stale
+
+
+@dataclass(frozen=True)
+class ComponentCalculationRecord:
+    """Immutable link between a calculation result and exact component revisions."""
+
+    calculation_id: str
+    operation: str
+    input_digest_sha256: str
+    component_dependencies: tuple[ComponentDependency, ...]
+    result_digest_sha256: str | None = None
+    artifact_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _identifier(self.calculation_id, "calculation_id")
+        if not self.operation.strip():
+            raise ValueError("calculation operation cannot be empty")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", self.input_digest_sha256):
+            raise ValueError("input_digest_sha256 must be a 64-character SHA-256 digest")
+        if self.result_digest_sha256 is not None and not re.fullmatch(
+            r"[0-9a-fA-F]{64}", self.result_digest_sha256
+        ):
+            raise ValueError("result_digest_sha256 must be a 64-character SHA-256 digest")
+        dependency_ids = [item.component_id for item in self.component_dependencies]
+        if len(set(dependency_ids)) != len(dependency_ids):
+            raise ValueError("calculation dependencies must be unique")
+        for artifact_id in self.artifact_ids:
+            _identifier(artifact_id, "artifact_id")
+
+    def fingerprint(self) -> str:
+        payload = json.dumps(
+            asdict(self), ensure_ascii=False, allow_nan=False, sort_keys=True
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def stale_calculations(
+    calculations: tuple[ComponentCalculationRecord, ...] | list[ComponentCalculationRecord],
+    current_revisions: dict[str, int],
+) -> dict[str, tuple[str, ...]]:
+    """Identify calculations pinned to missing or superseded component revisions."""
+    if any(
+        not isinstance(component_id, str)
+        or isinstance(revision, bool)
+        or not isinstance(revision, int)
+        or revision < 1
+        for component_id, revision in current_revisions.items()
+    ):
+        raise ValueError("current_revisions must map component IDs to positive integer revisions")
+    stale: dict[str, tuple[str, ...]] = {}
+    for calculation in calculations:
+        outdated = tuple(
+            dependency.component_id
+            for dependency in calculation.component_dependencies
+            if current_revisions.get(dependency.component_id) != dependency.revision
+        )
+        if outdated:
+            stale[calculation.calculation_id] = outdated
+    return stale
