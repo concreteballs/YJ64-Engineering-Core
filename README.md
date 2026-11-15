@@ -7,9 +7,9 @@ Its purpose is to let language models, autonomous agents, and commercial agents 
 ## Architecture
 
 - **Versioned contracts** — canonical JSON requests and responses shared by agents and engineering services.
+- **Dispatcher** — explicit routing to registered CAD and physics backends; operations are never guessed.
 - **Physics adapters** — a common interface for analytical solvers and external simulation engines.
 - **CAD adapters** — a common interface for 2D drawings and parametric 3D geometry.
-- **Agent integration** — stable JSON contracts so the application, Yacht Agent, and consortium members can use the same services.
 - **Validation and provenance** — SI units, finite numeric values, explicit assumptions, solver identity, warnings, limitations, and artifact references.
 
 ## Engineering rule
@@ -20,33 +20,52 @@ A generated drawing or 3D model is not proof that a design is physically safe. A
 
 1. Versioned engineering request/response contracts (contracts.py).
 2. Validation and JSON serialization for geometry, load cases, provenance, and artifact references.
-3. A transparent axial-member screening calculation.
-4. OpenSCAD source generation for a simple cylinder.
-5. FreeCAD macro generation for a parametric cylinder and export instructions.
-6. Basic orthographic SVG generation for a cylinder.
-7. Automated unit tests and GitHub Actions.
+3. Explicit engineering dispatcher (dispatcher.py).
+4. Built-in dispatcher adapter for axial linear-elastic screening.
+5. OpenSCAD source generation for a simple cylinder.
+6. FreeCAD macro generation for a parametric cylinder and export instructions.
+7. Basic orthographic SVG generation for a cylinder.
+8. Automated unit tests and GitHub Actions.
+
+The dispatcher supports explicit operations such as physics.axial_member and cad.generate. CAD backends must be registered by the application and selected explicitly in operating_conditions.cad_backend. The current CAD dispatcher test uses a dummy backend; the real CAD generators have not yet been wrapped as production backend plugins.
 
 The FreeCAD adapter currently generates a macro; actual CAD execution requires FreeCAD to be installed and explicitly invoked. FEM, CFD, thermal, electromagnetic, and hardware-control integrations are not yet implemented.
 
-## Contract example
+## Dispatcher example
 
-    from yj64_engineering_core import EngineeringRequest, GeometrySpec, LoadCase
+    from yj64_engineering_core import (
+        AxialMemberSolver,
+        EngineeringDispatcher,
+        EngineeringRequest,
+        GeometrySpec,
+        LoadCase,
+    )
+
+    dispatcher = EngineeringDispatcher()
+    dispatcher.register_physics_solver(AxialMemberSolver())
 
     request = EngineeringRequest(
-        request_id="bracket-001",
-        title="Bracket concept",
-        objective="Prepare a preliminary structural check",
+        request_id="bar-001",
+        title="Axial bar",
+        objective="Preliminary axial screening",
         geometry=GeometrySpec(
-            geometry_type="plate",
-            parameters={"width_m": 0.08, "thickness_m": 0.006},
+            "prismatic_member",
+            {"area_m2": 0.001, "length_m": 2.0},
         ),
+        material={
+            "name": "Example steel",
+            "youngs_modulus_pa": 200e9,
+            "allowable_stress_pa": 150e6,
+        },
         load_cases=(
-            LoadCase(name="service", force_n=(0.0, 0.0, -1200.0)),
+            LoadCase("service", force_n=(0.0, 0.0, 1000.0)),
         ),
     )
 
-    payload = request.to_json()
-    validated_request = EngineeringRequest.from_json(payload)
+    result = dispatcher.dispatch(request, "physics.axial_member")
+    print(result.response.to_json())
+
+## Contract rules
 
 Contract version 1.0 accepts SI units only. Geometry parameter names should carry unit suffixes (for example, width_m or diameter_m). The contract validates numeric finiteness and structural shape; backend-specific validators must still check required parameters, physical ranges, material standards, boundary conditions, and solver suitability.
 
@@ -59,10 +78,11 @@ Python 3.11 or newer.
 
 ## Planned integrations
 
+- Wrap the existing FreeCAD and OpenSCAD generators as registered CAD backend plugins.
 - CalculiX or another solver for finite-element analysis.
 - Additional physics engines for CFD, thermal, electromagnetic, multibody dynamics, fatigue, and optimization.
 - More complete CAD feature trees, assemblies, tolerances, and production drawings.
-- A service dispatcher and isolated workers for CAD and physics backends.
+- Isolated workers and a service API for CAD and physics backends.
 
 ## Data exchange
 
