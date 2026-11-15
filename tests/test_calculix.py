@@ -50,13 +50,13 @@ class CalculiXTrussSolverTests(unittest.TestCase):
             result = self.solver.solve(self.request)
 
         self.assertEqual(result.status, "completed")
-        self.assertAlmostEqual(result.values["tip_displacement_x_m"], 1e-5)
+        self.assertAlmostEqual(result.values["tip_displacement_z_m"], 1e-5)
         self.assertAlmostEqual(result.values["axial_stress_from_displacement_pa"], 1e6)
         self.assertEqual(result.solver_version, "CalculiX Version 2.21")
         self.assertEqual(run.call_count, 2)
         deck = (self.workspace / "ccx-test-001.inp").read_text(encoding="utf-8")
         self.assertIn("*ELEMENT, TYPE=T3D2, ELSET=BAR", deck)
-        self.assertIn("*NODE PRINT, NSET=TIP", deck)
+        self.assertIn("*NODE PRINT, NSET=TIP", deck)\n        self.assertIn("2, 3, 1000", deck)
 
     def test_rejects_invalid_poisson_ratio_before_running(self):
         parameters = dict(self.request.parameters)
