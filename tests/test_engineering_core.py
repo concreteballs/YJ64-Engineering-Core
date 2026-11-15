@@ -44,7 +44,8 @@ class AxialMemberTests(unittest.TestCase):
             length_m=1.0,
             material=self.steel,
         )
-        self.assertTrue(math.isinf(result.values["safety_factor_vs_allowable"]))
+        self.assertIsNone(result.values["safety_factor_vs_allowable"])
+        self.assertTrue(result.warnings)
 
     def test_invalid_area_is_rejected(self):
         with self.assertRaises(ValueError):
