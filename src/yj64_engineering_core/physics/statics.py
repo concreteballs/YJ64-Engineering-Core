@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from ..models import AnalysisResult, MaterialProperties
 
 
@@ -23,6 +25,9 @@ def calculate_axial_member(
 
     This is a screening calculation, not a complete component verification.
     """
+    for name, value in (("force_n", force_n), ("area_m2", area_m2), ("length_m", length_m)):
+        if not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"{name} must be a finite number")
     if area_m2 <= 0:
         raise ValueError("area_m2 must be positive")
     if length_m <= 0:
@@ -31,15 +36,20 @@ def calculate_axial_member(
     stress_pa = abs(force_n) / area_m2
     strain = stress_pa / material.youngs_modulus_pa
     elongation_m = strain * length_m
-    safety_factor = material.allowable_stress_pa / stress_pa if stress_pa else float("inf")
+
+    # JSON has no standard representation for infinity. Use null for the
+    # zero-load case and explain it in the result warnings.
+    safety_factor = material.allowable_stress_pa / stress_pa if stress_pa else None
 
     warnings: list[str] = []
     if stress_pa > material.allowable_stress_pa:
         warnings.append("Calculated axial stress exceeds the supplied allowable stress.")
-    if safety_factor < 1.0:
-        status = "fail_screening"
-    else:
-        status = "screening_only"
+    if safety_factor is None:
+        warnings.append("Safety factor is undefined at zero applied load.")
+    elif safety_factor < 1.0:
+        warnings.append("Screening safety factor is below 1.0.")
+
+    status = "fail_screening" if safety_factor is not None and safety_factor < 1.0 else "screening_only"
 
     return AnalysisResult(
         analysis_type="axial_member",
