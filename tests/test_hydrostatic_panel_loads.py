@@ -160,7 +160,7 @@ class HydrostaticPanelLoadTests(unittest.TestCase):
         response = dispatcher.dispatch(
             request, "physics.hydrostatics.panel_pressure_loads"
         ).response
-        self.assertEqual(response.status, "load_generation_only")
+        self.assertEqual(response.status, "screening_only")
         self.assertEqual(response.request_id, "hull-pressure-001")
         self.assertEqual(len(response.provenance.input_digest_sha256), 64)
 
