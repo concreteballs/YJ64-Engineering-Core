@@ -106,7 +106,7 @@ class HydrostaticPanelLoadTests(unittest.TestCase):
         )
         self.assertEqual(result.values["panels"][1]["loading_direction"], "outward")
         self.assertAlmostEqual(
-            result.values["panels"][1]["force_xyz_n"][2], -pressure_at_two_metres
+            result.values["panels"][1]["force_xyz_n"][2], pressure_at_two_metres
         )
 
     def test_moment_about_global_origin(self):
