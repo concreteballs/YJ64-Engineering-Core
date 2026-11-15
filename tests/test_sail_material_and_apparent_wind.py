@@ -1,6 +1,7 @@
 import unittest
 
 from yj64_engineering_core.models import AnalysisRequest
+from yj64_engineering_core import EngineeringDispatcher, EngineeringRequest, GeometrySpec
 from yj64_engineering_core.physics.sail_material import SailMaterialSolver
 from yj64_engineering_core.physics.apparent_wind import ApparentWindSolver
 
@@ -82,6 +83,38 @@ class ApparentWindTests(unittest.TestCase):
                 true_wind_speed_m_s=-1.0, true_wind_from_angle_deg=0.0,
                 vessel_velocity_x_forward_m_s=0.0, vessel_velocity_y_starboard_m_s=0.0,
             )
+
+
+class DispatcherIntegrationTests(unittest.TestCase):
+    def test_material_solver_dispatch(self):
+        dispatcher = EngineeringDispatcher()
+        dispatcher.register_physics_solver(SailMaterialSolver())
+        request = EngineeringRequest(
+            request_id="sail-material-dispatch",
+            title="Sail material",
+            objective="Estimate sail fabric mass",
+            geometry=GeometrySpec("sail", {"sail_area_m2": 100.0}),
+            material={"areal_density_kg_m2": 0.3},
+        )
+        result = dispatcher.dispatch(request, "physics.sail.material_screen")
+        self.assertAlmostEqual(result.response.values["fabric_mass_kg"], 30.0)
+
+    def test_apparent_wind_solver_dispatch(self):
+        dispatcher = EngineeringDispatcher()
+        dispatcher.register_physics_solver(ApparentWindSolver())
+        request = EngineeringRequest(
+            request_id="apparent-wind-dispatch",
+            title="Apparent wind",
+            objective="Calculate apparent wind",
+            operating_conditions={
+                "true_wind_speed_m_s": 8.0,
+                "true_wind_from_angle_deg": 0.0,
+                "vessel_velocity_x_forward_m_s": 2.0,
+                "vessel_velocity_y_starboard_m_s": 0.0,
+            },
+        )
+        result = dispatcher.dispatch(request, "physics.aerodynamics.apparent_wind")
+        self.assertAlmostEqual(result.response.values["apparent_wind_speed_m_s"], 10.0)
 
 
 if __name__ == "__main__":
