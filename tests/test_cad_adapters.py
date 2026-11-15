@@ -80,6 +80,24 @@ class CADAdapterTests(unittest.TestCase):
         self.assertEqual(result.response.values["artifact_count"], 1)
         self.assertTrue(result.response.artifacts[0].uri.endswith("through-dispatcher.scad"))
 
+    def test_rejects_boolean_dimension(self):
+        backend = OpenSCADSourceBackend(self.workspace)
+        with self.assertRaisesRegex(TypeError, "radius_m must be numeric"):
+            backend.generate({
+                "request_id": "bad-dimension",
+                "geometry_type": "cylinder",
+                "parameters": {"radius_m": True, "height_m": 0.1},
+            })
+
+    def test_rejects_non_finite_dimension(self):
+        backend = OpenSCADSourceBackend(self.workspace)
+        with self.assertRaisesRegex(ValueError, "radius_m must be finite"):
+            backend.generate({
+                "request_id": "bad-dimension",
+                "geometry_type": "cylinder",
+                "parameters": {"radius_m": float("inf"), "height_m": 0.1},
+            })
+
     def test_rejects_unsupported_geometry(self):
         backend = OpenSCADSourceBackend(self.workspace)
         with self.assertRaisesRegex(ValueError, "cylinder geometry only"):
