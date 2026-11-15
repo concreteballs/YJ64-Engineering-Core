@@ -80,3 +80,24 @@ This first model is a data contract, not a CAD kernel, materials database,
 structural solver, PLM system or certification engine. It does not infer missing
 properties, approve manufacturing parameters, prove interface compatibility,
 or perform transitive graph invalidation. Unknown values remain absent.
+
+## Calculation traceability and invalidation
+
+Every dispatched CAD or physics result now carries
+`provenance.input_digest_sha256`: a SHA-256 digest over the canonical engineering
+request JSON and the explicitly selected operation. Thus a changed load, geometry,
+material input, operating condition or operation produces a different digest.
+The solver's own name, version and method remain recorded separately.
+
+When a calculation depends on particular project components, create a
+`ComponentCalculationRecord` with the result's input digest and pinned
+`ComponentDependency` entries. The record may also retain a digest of the result
+payload and IDs of generated artifacts. `stale_calculations()` identifies records
+whose referenced component revision changed or disappeared.
+
+This is a deterministic traceability primitive, not yet a persistent project
+database or automatic scheduler. The caller must supply the component dependencies
+and current revision map. Transitive invalidation, automatic reruns and artifact
+regeneration will be handled by a later project-graph service. A calculation with
+no declared component dependencies is not proof that it is independent of project
+geometry; dependency declarations must be explicit and reviewed.
