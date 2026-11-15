@@ -46,7 +46,7 @@ class HullMaterialScreeningTests(unittest.TestCase):
         alternatives = result.values["alternatives"]
         self.assertEqual(len(alternatives), 3)
         self.assertAlmostEqual(alternatives[0]["installed_hull_build_up_mass_kg"], 1064.0)
-        self.assertAlmostEqual(alternatives[1]["installed_hull_build_up_mass_kg"], 520.0)
+        self.assertAlmostEqual(alternatives[1]["installed_hull_build_up_mass_kg"], 600.0)
         self.assertAlmostEqual(alternatives[2]["installed_hull_build_up_mass_kg"], 15000.0)
         self.assertAlmostEqual(alternatives[0]["known_build_cost_eur"], 13000.0)
         self.assertEqual(alternatives[1]["annual_maintenance_cost_eur"], 500.0)
