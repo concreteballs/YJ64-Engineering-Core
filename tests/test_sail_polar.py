@@ -30,7 +30,7 @@ def make_request(**overrides):
                 "sail_area_m2": 30.0,
                 "span_m": 12.0,
                 "mean_chord_m": 2.5,
-                "polar_points": POLAR,
+                "polar_points": [dict(row) for row in POLAR],
                 "polar_source": "unit-test polar",
             },
             "operating_conditions": conditions,
