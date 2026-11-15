@@ -291,3 +291,143 @@ def stale_calculations(
         if outdated:
             stale[calculation.calculation_id] = outdated
     return stale
+
+
+class EngineeringProjectGraph:
+    """In-memory component/dependency registry with transitive stale propagation.
+
+    Persistence, collaboration/locking and automatic solver reruns are intentionally
+    outside this first graph implementation.
+    """
+
+    def __init__(self) -> None:
+        self._components: dict[str, EngineeringComponent] = {}
+        self._calculations: dict[str, ComponentCalculationRecord] = {}
+
+    @property
+    def components(self) -> dict[str, EngineeringComponent]:
+        return dict(self._components)
+
+    @property
+    def calculations(self) -> dict[str, ComponentCalculationRecord]:
+        return dict(self._calculations)
+
+    def add_component(self, component: EngineeringComponent) -> None:
+        if not isinstance(component, EngineeringComponent):
+            raise TypeError("component must be an EngineeringComponent")
+        if component.component_id in self._components:
+            raise ValueError(f"Component already exists: {component.component_id}")
+        self._validate_component_links(component, self._components)
+        candidate = dict(self._components)
+        candidate[component.component_id] = component
+        self._assert_acyclic(candidate)
+        self._components = candidate
+
+    def replace_component(self, component: EngineeringComponent) -> None:
+        if not isinstance(component, EngineeringComponent):
+            raise TypeError("component must be an EngineeringComponent")
+        previous = self._components.get(component.component_id)
+        if previous is None:
+            raise KeyError(f"Unknown component: {component.component_id}")
+        if component.revision <= previous.revision:
+            raise ValueError("replacement component revision must increase")
+        candidate = dict(self._components)
+        candidate[component.component_id] = component
+        self._validate_component_links(component, candidate)
+        self._assert_acyclic(candidate)
+        self._components = candidate
+
+    def add_calculation(self, calculation: ComponentCalculationRecord) -> None:
+        if not isinstance(calculation, ComponentCalculationRecord):
+            raise TypeError("calculation must be a ComponentCalculationRecord")
+        if calculation.calculation_id in self._calculations:
+            raise ValueError(f"Calculation already exists: {calculation.calculation_id}")
+        for dependency in calculation.component_dependencies:
+            current = self._components.get(dependency.component_id)
+            if current is None or current.revision != dependency.revision:
+                raise ValueError(
+                    f"Calculation dependency is missing or stale: {dependency.component_id}"
+                )
+        if self.stale_component_ids():
+            stale_ids = ", ".join(sorted(self.stale_component_ids()))
+            raise ValueError(
+                "Cannot register a calculation while project components are stale: "
+                + stale_ids
+            )
+        self._calculations[calculation.calculation_id] = calculation
+
+    def stale_component_ids(self) -> set[str]:
+        """Return direct and transitively affected component IDs."""
+        stale: set[str] = set()
+        changed = True
+        while changed:
+            changed = False
+            for component in self._components.values():
+                if component.component_id in stale:
+                    continue
+                invalid_dependency = any(
+                    dependency.component_id in stale
+                    or (
+                        dependency.component_id not in self._components
+                        or self._components[dependency.component_id].revision
+                        != dependency.revision
+                    )
+                    for dependency in component.dependencies
+                )
+                if invalid_dependency:
+                    stale.add(component.component_id)
+                    changed = True
+        return stale
+
+    def stale_calculation_ids(self) -> set[str]:
+        """Return calculations directly or transitively affected by stale inputs."""
+        stale_components = self.stale_component_ids()
+        stale: set[str] = set()
+        for calculation in self._calculations.values():
+            if any(
+                dependency.component_id in stale_components
+                or dependency.component_id not in self._components
+                or self._components[dependency.component_id].revision != dependency.revision
+                for dependency in calculation.component_dependencies
+            ):
+                stale.add(calculation.calculation_id)
+        return stale
+
+    @staticmethod
+    def _validate_component_links(
+        component: EngineeringComponent,
+        available: dict[str, EngineeringComponent],
+    ) -> None:
+        for parent_id in component.parent_component_ids:
+            if parent_id not in available:
+                raise ValueError(f"Unknown parent component: {parent_id}")
+        for dependency in component.dependencies:
+            target = available.get(dependency.component_id)
+            if target is None:
+                raise ValueError(f"Unknown dependency component: {dependency.component_id}")
+            if target.revision != dependency.revision:
+                raise ValueError(
+                    f"Dependency revision mismatch for {dependency.component_id}: "
+                    f"requested {dependency.revision}, current {target.revision}"
+                )
+
+    @staticmethod
+    def _assert_acyclic(components: dict[str, EngineeringComponent]) -> None:
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(component_id: str) -> None:
+            if component_id in visiting:
+                raise ValueError(f"Component dependency cycle detected at {component_id}")
+            if component_id in visited:
+                return
+            visiting.add(component_id)
+            component = components[component_id]
+            for dependency in component.dependencies:
+                if dependency.component_id in components:
+                    visit(dependency.component_id)
+            visiting.remove(component_id)
+            visited.add(component_id)
+
+        for component_id in components:
+            visit(component_id)
