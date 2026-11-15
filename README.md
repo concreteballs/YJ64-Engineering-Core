@@ -1,85 +1,49 @@
 # YJ64 Engineering Core
 
-A modular engineering service for the YJ64 multi-agent system. The first real design workflow is a parametric yacht hull: generate technical views and editable 3D geometry, revise it from structured instructions or visual markup, and preserve traceable revisions.
+A modular engineering service for the YJ64 multi-agent system. The current practical workflow is parametric yacht geometry plus independently routed engineering solvers.
 
-## Current architecture
+## Current capabilities
 
-- Versioned engineering contracts using SI units.
-- Explicit dispatcher and pipeline; CAD-only iteration is supported.
-- Parametric yacht hull with 2D SVG and editable OpenSCAD/FreeCAD outputs.
-- Visual reference intake with image hashes, normalized markup and structured observations from a vision-capable model.
-- Controlled geometry edits with before/after records.
-- Physics plugins for axial structural screening, a narrow CalculiX T3D2 verification case, and first coefficient-based aerodynamic/hydrodynamic force screening.
+- Versioned JSON engineering requests and responses using SI units.
+- Explicit dispatcher and pipeline for CAD and physics backends.
+- Parametric monohull envelope with SVG plan/profile/sections, editable OpenSCAD source, FreeCAD macro and optional STL rendering.
+- Controlled geometry edits from structured instructions, with before/after records.
+- PNG/JPEG reference intake, hashes, normalized markup and structured observations from a vision-capable model.
+- Axial structural screening and a narrow CalculiX T3D2 verification case.
+- Coefficient-based aerodynamic and hydrodynamic force screening.
+- Sail aerodynamic polar interpolation with finite-span induced-drag correction.
 
-## Preliminary aerodynamic and hydrodynamic layer
+## Sail aerodynamic model
 
-The core exposes two independently registerable physics plugins:
+`SailAerodynamicsSolver` is available as `physics.aerodynamics.sail_polar`. It interpolates a supplied table of angle of attack, lift coefficient (CL), profile drag coefficient (CD) and quarter-chord moment coefficient (CM). It rejects requests outside the supplied polar range, adds a classical induced-drag correction from sail aspect ratio and Oswald efficiency, and returns lift, profile drag, induced drag, total drag, pitching moment, Reynolds number and vessel-axis force components.
 
-- AerodynamicsSolver — operation physics.aerodynamics.coefficient_forces.
-- HydrodynamicsSolver — operation physics.hydrodynamics.coefficient_forces.
+Run:
 
-Both calculate dynamic pressure, lift, drag, side force and Reynolds number from SI inputs and explicitly supplied force coefficients. This provides a common calculation contract for early sail, foil and body-force bookkeeping.
+    python examples/sail_polar_screen.py
 
-Important boundary: these are low-order steady-flow screening models, not CFD. They do not predict sail/foil coefficients, hull resistance, free-surface waves, cavitation, ventilation, transient manoeuvres or foil-borne transition. Coefficients must come from validated polars, test data or an independently justified source. Results are labelled screening_only.
-
-See docs/FLOW_ANALYSIS.md for the input contract and staged roadmap.
+The included polar is illustrative test data only, not a validated sail characteristic. Replace it with data representative of the actual sail shape, trim, rig and Reynolds-number range before using results for design decisions. This solver is steady-flow screening, not CFD; it does not generate sail polars or model aeroelasticity, rig interference, gusts or automatic trim. See docs/FLOW_ANALYSIS.md.
 
 ## Yacht hull geometry
 
-The first hull model is a single-hull outer envelope. Each longitudinal station contains x_m, half_beam_m, keel_z_m, chine_z_m and deck_z_m, all in SI metres. The section profile is a deliberately simple five-point chine shape: useful for iteration, not a complete naval-architecture model.
+The first hull is a single-hull outer envelope defined by ordered longitudinal stations: x position, half-beam, keel height, chine height and deck-edge height. The section is a simple five-point chine profile. It is an editable geometry demonstrator, not a complete naval-architecture model.
 
-### Generate 2D and 3D artifacts
+The current hull has no internal frames, stringers, bulkheads, laminate schedule, thickness or scantlings. It has no hydrostatics, stability, resistance, slamming or hull-specific shell FEM. The existing CalculiX T3D2 adapter is only a single axial truss check and must not be treated as a hull-strength calculation.
 
-    from pathlib import Path
-    from yj64_engineering_core import EngineeringDispatcher, EngineeringPipeline, EngineeringRequest, GeometrySpec, YachtHullCADBackend
+## Foiling catamaran engineering roadmap
 
-    hull_parameters = {
-        "name": "Prototype mono-hull",
-        "chine_fraction": 0.72,
-        "stations": [
-            {"x_m": 0.0, "half_beam_m": 0.025, "keel_z_m": -0.35, "chine_z_m": -0.10, "deck_z_m": 0.45},
-            {"x_m": 1.0, "half_beam_m": 0.55, "keel_z_m": -0.55, "chine_z_m": -0.22, "deck_z_m": 0.65},
-            {"x_m": 3.0, "half_beam_m": 0.90, "keel_z_m": -0.62, "chine_z_m": -0.24, "deck_z_m": 0.72},
-            {"x_m": 5.0, "half_beam_m": 0.70, "keel_z_m": -0.50, "chine_z_m": -0.18, "deck_z_m": 0.68},
-            {"x_m": 6.0, "half_beam_m": 0.025, "keel_z_m": -0.30, "chine_z_m": -0.08, "deck_z_m": 0.40},
-        ],
-    }
-    dispatcher = EngineeringDispatcher()
-    dispatcher.register_cad_backend("yacht_hull", YachtHullCADBackend(Path("./hull-artifacts")))
-    request = EngineeringRequest(
-        request_id="hull-001",
-        title="Prototype yacht hull",
-        objective="Create a preliminary hull technical drawing and editable 3D CAD",
-        geometry=GeometrySpec("yacht_hull", hull_parameters),
-        operating_conditions={"cad_backend": "yacht_hull"},
-    )
-    result = EngineeringPipeline(dispatcher).run(request)
+1. Validate and import sail and foil polars with source and Reynolds-number metadata.
+2. Calculate apparent wind from true wind and vessel velocity; solve sail trim and force/moment equilibrium.
+3. Add hull resistance and hydrostatics.
+4. Add foil lift/drag, cavitation and ventilation models.
+5. Couple sail, hull and foil loads in a six-degree-of-freedom transient displacement-to-foil transition model.
+6. Transfer loads into hull shell, crossbeams, mast and foil attachments.
+7. Optimise for cruising accommodation, payload, range, stability, structural margins and operating envelope.
 
-The default backend creates SVG, editable OpenSCAD source and a FreeCAD loft macro. An optional OpenSCAD run exports STL.
+The displacement-to-foil transition must be treated as a transient problem, not inferred from a single steady-state lift calculation.
 
-## Iteration from words and drawings
+## Data exchange and reliability
 
-A language model translates natural-language requests into whitelisted operations accepted by apply_hull_changes; it must not execute arbitrary Python. Supported operations include set_station, scale_beam, translate_vertical and rename. Each edit returns a validated hull and before/after change record.
-
-For visual correction, ingest_reference_image records PNG/JPEG dimensions, SHA-256 and URI. A vision-capable model must interpret the image and return structured observations; the image parser itself does not claim semantic image recognition. Only explicit, validated annotation-to-parameter mappings become geometry edits.
-
-## Current engineering boundary
-
-The present hull is geometry, not a certified design:
-- no internal frames, stringers, bulkheads, laminate schedule, plate thickness or scantlings;
-- no hydrostatics, stability, resistance, slamming or fatigue model;
-- no hull-specific shell/solid FEM or verified CAD-to-mesh-to-FEM handoff;
-- no coupled sail–hull–foil equilibrium or time-domain foiling-transition simulation.
-
-The existing CalculiX adapter only validates a single axial T3D2 truss element. It must not be used to claim that the yacht hull has been structurally calculated. The next milestones are validated aerodynamic/hydrodynamic coefficient sources, sail force and moment equilibrium, hull resistance/hydrostatics, foil analysis, coupled dynamics and then hull-specific shell FEM.
-
-The first hull profile is monohull. Catamaran/multihull assembly, appendages, foils and interior structure remain future work.
-
-## Data exchange and safety
-
-STEP for solid CAD exchange; DXF/SVG for 2D drawings; STL for meshes; versioned JSON for design parameters, edits, observations and results.
-
-Every calculation must identify its method, inputs, assumptions, units, warnings and limitations. External CAD/solver processes must run with bounded time and resources in an isolated worker. Safety-critical designs require independent engineering review and physical validation.
+STEP for solid CAD exchange; DXF/SVG for drawings; STL for meshes; versioned JSON for parameters, edits, observations and results. Every calculation identifies its method, inputs, assumptions, units, warnings and limitations. External CAD/solver processes must run with bounded time/resources in isolated workers. Safety-critical designs require independent engineering review and physical validation.
 
 ## Development
 
@@ -87,5 +51,3 @@ Python 3.11 or newer.
 
     python -m pip install -e .
     python -m unittest discover -s tests -v
-
-GitHub Actions installs CalculiX and OpenSCAD, then runs unit tests, an axial FEM test and a real yacht-hull STL rendering test.
