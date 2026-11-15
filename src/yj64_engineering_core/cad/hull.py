@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass
 from typing import Any
+from xml.sax.saxutils import escape
 
 
 @dataclass(frozen=True)
@@ -130,10 +131,11 @@ def yacht_hull_openscad(hull: YachtHull) -> str:
     face_text = ",\n".join(
         f"    [{a}, {b}, {c}]" for a, b, c in faces
     )
+    safe_name = hull.name.replace("\\r", " ").replace("\\n", " ")
     return (
         "// YJ64 Engineering Core — parametric station-based yacht hull\n"
         "// Outer envelope only; not a structural laminate/scantling model.\n"
-        f"// Hull: {hull.name.replace(chr(10), ' ')}\n"
+        f"// Hull: {safe_name}\n"
         f"// Length: {hull.length_m:.4f} m | Maximum beam: {hull.maximum_beam_m:.4f} m\n"
         "polyhedron(\n"
         "  points = [\n" + point_text + "\n  ],\n"
@@ -210,11 +212,12 @@ def yacht_hull_technical_svg(hull: YachtHull) -> str:
             + '" fill="none" stroke="#111" stroke-width="2"/>'
         )
 
+    safe_title = escape(hull.name)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="920" viewBox="0 0 1200 920">
-<title>{hull.name} — preliminary three-view hull technical sketch</title>
+<title>{safe_title} — preliminary three-view hull technical sketch</title>
 <rect x="1" y="1" width="1198" height="918" fill="white" stroke="black"/>
 <g font-family="sans-serif" fill="#111">
-  <text x="28" y="36" font-size="22" font-weight="bold">YJ64 ENGINEERING CORE — {hull.name}</text>
+  <text x="28" y="36" font-size="22" font-weight="bold">YJ64 ENGINEERING CORE — {safe_title}</text>
   <text x="28" y="62" font-size="13">PRELIMINARY OUTER HULL GEOMETRY | UNITS: m | NOT FOR MANUFACTURE</text>
   <text x="28" y="95" font-size="16" font-weight="bold">PLAN VIEW</text>
   <text x="28" y="350" font-size="16" font-weight="bold">PROFILE VIEW</text>
