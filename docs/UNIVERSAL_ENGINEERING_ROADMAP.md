@@ -262,3 +262,8 @@ Do not collapse these states into a single pass/fail badge. Record test conditio
 - Every manufacturing artifact is tied to a specific validated design revision and machine/process profile.
 - Generated concept imagery is never treated as CAD geometry or engineering evidence.
 - Safety-critical release requires the appropriate qualified review, inspection and tests.
+
+
+### Implemented hull pressure integration increment
+
+The `hydrostatics.panel_pressure_loads` solver now has two explicit modes: legacy centroid pressure for compact input and polygon integration when panel vertices are supplied. Polygon mode integrates the depth-linear differential pressure over convex planar triangles, preserving the pressure gradient and calculating the pressure-resultant centroid and moment. It rejects waterline-crossing panels (split them first), non-planar geometry and inconsistent supplied area. This improves load fidelity but does not yet solve hull structural stresses or automatically create FEM boundary conditions.
