@@ -267,3 +267,8 @@ Do not collapse these states into a single pass/fail badge. Record test conditio
 ### Implemented hull pressure integration increment
 
 The `hydrostatics.panel_pressure_loads` solver now has two explicit modes: legacy centroid pressure for compact input and polygon integration when panel vertices are supplied. Polygon mode integrates the depth-linear differential pressure over convex planar triangles, preserving the pressure gradient and calculating the pressure-resultant centroid and moment. It rejects waterline-crossing panels (split them first), non-planar geometry and inconsistent supplied area. This improves load fidelity but does not yet solve hull structural stresses or automatically create FEM boundary conditions.
+
+
+## Delivered: rigid-body vessel motion kinematics
+
+Implemented and tested a six-DOF rigid-body point-kinematics solver for deck-mounted equipment and robot bases. It consumes a prescribed vessel pose, translational velocity/acceleration and body angular velocity/acceleration, then returns earth-frame point position/velocity/acceleration. This is the base-motion transform only; wave-response prediction, seakeeping, sensor fusion and robot stabilization remain open roadmap items. Details: `docs/VESSEL_MOTION_KINEMATICS.md`.
