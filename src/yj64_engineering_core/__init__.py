@@ -11,15 +11,16 @@ from .pipeline import EngineeringPipeline, PipelineBranch, PipelineResult
 from .physics.aerodynamics import AerodynamicsSolver
 from .physics.calculix import CalculiXTrussSolver
 from .physics.hydrodynamics import HydrodynamicsSolver
+from .physics.sail import SailAerodynamicsSolver
 
 __all__ = [
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
     "ArtifactReference", "AxialMemberSolver", "CalculiXTrussSolver", "DispatchResult",
     "EngineeringDispatcher", "EngineeringPipeline", "EngineeringRequest", "EngineeringResponse",
     "FreeCADMacroBackend", "GeometrySpec", "HullStation", "YachtHull", "YachtHullCADBackend",
-    "HydrodynamicsSolver", "ImageAnnotation", "VisualObservation", "VisualReference",
-    "apply_hull_changes", "ingest_reference_image", "visual_changes", "LoadCase",
-    "MaterialProperties", "OpenSCADSourceBackend", "PipelineBranch", "PipelineResult",
-    "Point3D", "SVGDrawingBackend", "SolverProvenance",
+    "HydrodynamicsSolver", "SailAerodynamicsSolver", "ImageAnnotation", "VisualObservation",
+    "VisualReference", "apply_hull_changes", "ingest_reference_image", "visual_changes",
+    "LoadCase", "MaterialProperties", "OpenSCADSourceBackend", "PipelineBranch",
+    "PipelineResult", "Point3D", "SVGDrawingBackend", "SolverProvenance",
 ]
 __version__ = "0.1.0"
