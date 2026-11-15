@@ -88,12 +88,14 @@ class CatamaranHydrostaticsSolver:
         if not self.supports(request.analysis_type):
             raise ValueError(f"Unsupported analysis type: {request.analysis_type}")
         p = request.parameters
-        hulls = p.get("hulls")
+        geometry = p.get("geometry") or {}
+        conditions = p.get("operating_conditions") or {}
+        hulls = geometry.get("hulls") if isinstance(geometry, dict) else None
         if not isinstance(hulls, list) or len(hulls) != 2:
             raise ValueError("hulls must contain exactly two hull geometry objects")
-        design_wl = _number(p.get("design_waterline_z_m"), "design_waterline_z_m")
-        max_wl = _number(p.get("maximum_waterline_z_m"), "maximum_waterline_z_m")
-        density = _number(p.get("water_density_kg_m3", 1025.0), "water_density_kg_m3")
+        design_wl = _number(conditions.get("design_waterline_z_m"), "design_waterline_z_m")
+        max_wl = _number(conditions.get("maximum_waterline_z_m"), "maximum_waterline_z_m")
+        density = _number(conditions.get("water_density_kg_m3", 1025.0), "water_density_kg_m3")
         if max_wl <= design_wl:
             raise ValueError("maximum_waterline_z_m must be above design_waterline_z_m")
         if density <= 0:
