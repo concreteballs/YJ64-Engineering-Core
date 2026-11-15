@@ -2,6 +2,7 @@ import unittest
 
 from yj64_engineering_core.contracts import EngineeringRequest, GeometrySpec, LoadCase
 from yj64_engineering_core.dispatcher import AxialMemberSolver, EngineeringDispatcher
+from yj64_engineering_core.models import AnalysisResult
 
 
 class DummyCADBackend:
@@ -16,6 +17,26 @@ class DummyCADBackend:
             "warnings": ["Dummy backend: no real geometry generated"],
             "limitations": ["Test double only"],
         }
+
+
+class DummyTrussSolver:
+    name = "dummy-truss"
+    version = "test"
+
+    def supports(self, analysis_type):
+        return analysis_type == "axial_truss_fem"
+
+    def solve(self, request):
+        self.last_request = request
+        return AnalysisResult(
+            analysis_type=request.analysis_type,
+            status="completed",
+            values={"tip_displacement_z_m": 0.00001},
+            units={"tip_displacement_z_m": "m"},
+            method="dummy test solver",
+            solver_name=self.name,
+            solver_version=self.version,
+        )
 
 
 class DispatcherTests(unittest.TestCase):
@@ -92,6 +113,52 @@ class DispatcherTests(unittest.TestCase):
         self.assertIn("Test double", dispatched.response.limitations[0])
         self.assertEqual(dispatched.response.artifacts[0].uri, "workspace://part.step")
         self.assertEqual(dispatched.response.artifacts[0].media_type, "application/step")
+
+
+    def test_routes_engineering_request_to_axial_truss_fem_solver(self):
+        solver = DummyTrussSolver()
+        self.dispatcher.register_physics_solver(solver)
+        request = EngineeringRequest(
+            request_id="truss-fem-001",
+            title="Axial truss FEM",
+            objective="Map an engineering request to the CalculiX adapter contract",
+            geometry=GeometrySpec(
+                "prismatic_member",
+                {"area_m2": 0.001, "length_m": 2.0},
+            ),
+            material={
+                "name": "Test steel",
+                "youngs_modulus_pa": 200e9,
+                "poisson_ratio": 0.3,
+            },
+            load_cases=(LoadCase(name="service", force_n=(0.0, 0.0, 1000.0)),),
+        )
+        dispatched = self.dispatcher.dispatch(request, "physics.axial_truss_fem")
+        self.assertEqual(dispatched.response.status, "completed")
+        self.assertEqual(solver.last_request.parameters["request_id"], "truss-fem-001")
+        self.assertEqual(solver.last_request.parameters["force_n"], 1000.0)
+        self.assertEqual(solver.last_request.parameters["material"]["poisson_ratio"], 0.3)
+
+    def test_axial_truss_fem_rejects_transverse_force(self):
+        solver = DummyTrussSolver()
+        self.dispatcher.register_physics_solver(solver)
+        request = EngineeringRequest(
+            request_id="truss-fem-002",
+            title="Invalid truss case",
+            objective="Reject transverse loading for an axial-only element",
+            geometry=GeometrySpec(
+                "prismatic_member",
+                {"area_m2": 0.001, "length_m": 2.0},
+            ),
+            material={
+                "name": "Test steel",
+                "youngs_modulus_pa": 200e9,
+                "poisson_ratio": 0.3,
+            },
+            load_cases=(LoadCase(name="service", force_n=(100.0, 0.0, 1000.0)),),
+        )
+        with self.assertRaisesRegex(ValueError, "Z-axis axial force"):
+            self.dispatcher.dispatch(request, "physics.axial_truss_fem")
 
     def test_cad_requires_explicit_backend(self):
         request = EngineeringRequest(
