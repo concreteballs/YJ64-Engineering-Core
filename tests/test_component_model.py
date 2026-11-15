@@ -1,12 +1,14 @@
 import unittest
 
 from yj64_engineering_core.component_model import (
+    ComponentCalculationRecord,
     ComponentDependency,
     ComponentInterface,
     ComponentMassProperties,
     EngineeringComponent,
     EvidenceRecord,
     ManufacturingConstraint,
+    stale_calculations,
     stale_component_dependencies,
 )
 from yj64_engineering_core.contracts import GeometrySpec
@@ -83,6 +85,61 @@ class EngineeringComponentTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "positive integer revisions"):
             stale_component_dependencies([component], {"hull.port.shell": 1.5})
+
+
+    def test_calculation_record_pins_component_revisions(self):
+        record = ComponentCalculationRecord(
+            calculation_id="calc.foil-root.loadcase-a",
+            operation="physics.axial_member",
+            input_digest_sha256="a" * 64,
+            component_dependencies=(
+                ComponentDependency("foil.root", 2, "geometry and material"),
+                ComponentDependency("crossbeam.main", 4, "attachment stiffness"),
+            ),
+            result_digest_sha256="b" * 64,
+            artifact_ids=("report.foil-root",),
+        )
+        self.assertEqual(len(record.fingerprint()), 64)
+        self.assertEqual(stale_calculations([record], {
+            "foil.root": 3,
+            "crossbeam.main": 4,
+        }), {"calc.foil-root.loadcase-a": ("foil.root",)})
+
+    def test_calculation_is_stale_when_dependency_is_missing(self):
+        record = ComponentCalculationRecord(
+            calculation_id="calc.hull.shell",
+            operation="physics.shell_fem",
+            input_digest_sha256="c" * 64,
+            component_dependencies=(
+                ComponentDependency("hull.port.shell", 1, "mesh source"),
+            ),
+        )
+        self.assertEqual(
+            stale_calculations([record], {}),
+            {"calc.hull.shell": ("hull.port.shell",)},
+        )
+
+    def test_current_calculation_dependencies_are_not_stale(self):
+        record = ComponentCalculationRecord(
+            calculation_id="calc.hull.shell",
+            operation="physics.shell_fem",
+            input_digest_sha256="d" * 64,
+            component_dependencies=(
+                ComponentDependency("hull.port.shell", 1, "mesh source"),
+            ),
+        )
+        self.assertEqual(
+            stale_calculations([record], {"hull.port.shell": 1}), {}
+        )
+
+    def test_calculation_record_rejects_invalid_digest(self):
+        with self.assertRaisesRegex(ValueError, "input_digest_sha256"):
+            ComponentCalculationRecord(
+                calculation_id="calc.invalid",
+                operation="physics.test",
+                input_digest_sha256="not-a-digest",
+                component_dependencies=(),
+            )
 
     def test_rejects_non_finite_material_data(self):
         with self.assertRaisesRegex(ValueError, "finite"):
