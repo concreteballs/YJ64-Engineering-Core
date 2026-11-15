@@ -48,7 +48,7 @@ class HydrostaticPanelLoadTests(unittest.TestCase):
         )
         self.assertAlmostEqual(result.values["total_force_xyz_n"][2], 2.0 * pressure)
         self.assertEqual(result.values["panels"][0]["loading_direction"], "inward")
-        self.assertEqual(result.status, "load_generation_only")
+        self.assertEqual(result.status, "screening_only")
 
     def test_panel_above_waterline_has_zero_external_pressure(self):
         panels = [{
