@@ -71,3 +71,7 @@ Python 3.11 or newer.
 Each layer is entered using cured laminate areal mass or supplied thickness and density. Secondary installation mass, material/manufacturing cost per square metre, annual maintenance cost and major-maintenance interval are optional explicit inputs. No generic material weight, price or maintenance rate is invented. The solver returns layer and total build-up mass plus any cost/maintenance values supplied.
 
 This is not a structural equivalence comparison: equal surface area does not mean equal strength, stiffness, fatigue life, impact resistance or safety. Each alternative must be independently sized for the same loads. Aluminium requires weld, corrosion and galvanic-isolation review; composites require laminate/core/adhesive, impact and repair review; concrete requires reinforcement, cracking, shrinkage, creep and corrosion assessment. The current solver does not calculate scantlings, laminate theory, structural margins or lifecycle cost forecasts.
+
+## Universal engineering roadmap
+
+The long-term capability plan for general engineering, materials, metal additive manufacturing, CNC machining, heat treatment, repair of unavailable components, solver integration and TRIZ-based invention support is maintained in [docs/UNIVERSAL_ENGINEERING_ROADMAP.md](docs/UNIVERSAL_ENGINEERING_ROADMAP.md). This is a roadmap and interface target; it does not imply that these capabilities are already implemented.
