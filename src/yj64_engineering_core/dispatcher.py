@@ -7,6 +7,7 @@ The dispatcher never guesses which operation to run. Callers must choose
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from typing import Any
 
 from .contracts import ArtifactReference, EngineeringRequest, EngineeringResponse, SolverProvenance
@@ -133,6 +134,7 @@ class EngineeringDispatcher:
                 solver_name=getattr(backend, "name", backend_name),
                 solver_version=getattr(backend, "version", "unspecified"),
                 method="cad_backend_generation",
+                input_digest_sha256=self._input_digest(request, "cad.generate"),
             ),
             values={"artifact_count": len(artifact_references)},
             units={"artifact_count": "count"},
@@ -191,6 +193,9 @@ class EngineeringDispatcher:
                 solver_name=result.solver_name or solver.name,
                 solver_version=result.solver_version or solver.version,
                 method=result.method,
+                input_digest_sha256=self._input_digest(
+                    request, f"physics.{analysis_type}"
+                ),
             ),
             values=result.values,
             units=result.units,
@@ -199,6 +204,12 @@ class EngineeringDispatcher:
             limitations=tuple(result.limitations),
         )
         return DispatchResult(operation=f"physics.{analysis_type}", response=response)
+
+    @staticmethod
+    def _input_digest(request: EngineeringRequest, operation: str) -> str:
+        """Bind a result to the exact canonical request and selected operation."""
+        payload = f"{operation}\\n{request.to_json()}"
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _axial_parameters(request: EngineeringRequest) -> dict[str, Any]:
