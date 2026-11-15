@@ -154,6 +154,37 @@ class YachtHullCADTests(unittest.TestCase):
             self.assertTrue((Path(tempdir) / "hull-design-001.FCMacro").is_file())
             self.assertIn("Part.makeLoft", (Path(tempdir) / "hull-design-001.FCMacro").read_text())
 
+
+    def test_edited_hull_regenerates_both_2d_and_3d_artifacts(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            original = sample_hull()
+            revised, change_record = apply_hull_changes(original, [
+                {"operation": "set_station", "station_index": 2,
+                 "field": "half_beam_m", "value": 1.05}
+            ])
+            backend = YachtHullCADBackend(tempdir)
+            before = backend.generate({
+                "request_id": "hull-revision-01",
+                "geometry_type": "yacht_hull",
+                "parameters": original.to_parameters(),
+            })
+            after = backend.generate({
+                "request_id": "hull-revision-02",
+                "geometry_type": "yacht_hull",
+                "parameters": revised.to_parameters(),
+            })
+            self.assertTrue(change_record["changed"])
+            self.assertEqual(len(before["artifacts"]), 3)
+            self.assertEqual(len(after["artifacts"]), 3)
+            self.assertNotEqual(
+                (Path(tempdir) / "hull-revision-01.scad").read_text(),
+                (Path(tempdir) / "hull-revision-02.scad").read_text(),
+            )
+            self.assertNotEqual(
+                (Path(tempdir) / "hull-revision-01.svg").read_text(),
+                (Path(tempdir) / "hull-revision-02.svg").read_text(),
+            )
+
     def test_pipeline_supports_cad_only_design_iteration(self):
         with tempfile.TemporaryDirectory() as tempdir:
             dispatcher = EngineeringDispatcher()
