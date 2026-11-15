@@ -126,6 +126,14 @@ Do not use one fixed “water density” for every calculation. Support water te
 
 Typical seawater density is around 1025 kg/m³, while freshwater is around 1000 kg/m³; actual seawater density changes with temperature, salinity and pressure. This affects displacement and hydrostatics. Conductivity and chloride content also matter for corrosion, electrical leakage and material selection. Keep these effects distinct rather than treating “salt water” as one correction factor.
 
+### Hydrostatic pressure and hull structural strength
+
+Hydrostatics must feed structural load cases, not stop at displacement. For each operating/loading condition, calculate the external hydrostatic pressure field from local depth, water density and gravity, and the relevant internal pressure/reference level. For a vented hull with approximately atmospheric internal pressure, use the external-to-internal differential pressure on the wetted shell; do not mistake absolute ambient pressure for the net shell load. Pressure varies with depth and must be mapped over the actual hull geometry and waterline.
+
+Use these pressure fields to define local panel and global structural cases for bottom and side shell plating/laminates, stiffeners, frames, floors, bulkheads, cross-structure and joints. Couple them with hull-girder bending/torsion, payload and tank loads, support reactions, wave-induced loads, slamming and local impact where applicable. Evaluate deflection, stress/strain, buckling, fatigue and failure modes using material/process-specific properties and appropriate shell/solid FEM or validated analytical methods. Account for openings, penetrations, bonded joints, laminate direction/thickness, core shear and skin wrinkling in sandwich construction.
+
+The model must distinguish static hydrostatic pressure in displacement mode from dynamic pressure, slamming, impact, grounding and pressure loads on sealed compartments. A simplified pressure calculation is a load generator/screening step, not a complete scantling rule or class approval. The weight of the vessel is not a single downward force carried by the bottom: buoyancy arises from the distributed pressure field, while structural response depends on geometry, supports, internal structure and all load paths.
+
 ### Whole-vessel subsystems
 - twin hulls, crossbeams, decks, bulkheads, frames, stringers and structural joints;
 - hull material alternatives: marine aluminium, glass-fibre composite, carbon composite, sandwich/honeycomb and reinforced concrete as a special comparison;
@@ -232,6 +240,16 @@ Support multirotor, fixed-wing, hybrid VTOL and other UAV configurations, includ
 ### Verification
 
 Robot and vehicle outputs must include kinematic reach/workspace, collision checks, load and stability envelopes, actuator sizing, energy budget, thermal limits, fault response, maintenance access and test plans. Separate simulation from physical validation. Human-interacting and load-bearing systems require appropriate risk assessment, guarding, emergency stops and independent testing.
+
+### Small underwater inspection and service ROVs
+
+Include a dedicated design path for compact remotely operated underwater vehicles (ROVs), initially targeting a 15–20 m operating depth for yacht maintenance and recovery support. Representative tasks include inspecting the anchor, chain and seabed around a fouled anchor; inspecting hull bottoms, rudders, propellers, foils and intakes; locating entanglements; and performing limited non-destructive service tasks. Treat anchor recovery as inspection/assistance, not an assumption that a small ROV can safely lift or free a loaded anchor or chain.
+
+Model the vehicle as a complete system: pressure-resistant electronics/battery enclosures and end closures; penetrators, connectors and tether; cameras, lights and optional sonar; thrusters and guards; buoyancy/ballast and trim; frame, lifting points and tether management; control, navigation aids and communications; optional manipulator/tooling; power, thermal management, leak detection and emergency recovery. Evaluate hydrodynamic drag, tether drag/current loads, stability, controllability, thrust margin, endurance, visibility, handling and recovery from loss of power or tether communication.
+
+At 15–20 m, calculate ambient pressure and differential pressure for each sealed volume using actual water density and depth. Pressure-vessel design must address external-pressure collapse/implosion, shell geometry and thickness, end-cap restraint, penetrator stress concentrations, seals, buckling imperfections, material properties, manufacturing tolerances, fatigue/cycles and proof/leak testing. A nominal depth rating is a verified design and test requirement, not a label inferred from component marketing. Pressure housings, battery enclosures and connectors require independently substantiated ratings; buoyancy materials must be qualified for depth and water absorption.
+
+The first target is a tethered inspection ROV with camera, lighting, controlled thrusters and depth/heading feedback. Manipulation and anchor/chain intervention are later capability levels, requiring explicit force limits, tool design, tether/vehicle reaction analysis and hazard controls. The 15–20 m target is an initial product envelope, not a claim of achieved capability or certification.
 
 ## Package 8 — Invention methods and engineering knowledge base
 
