@@ -35,3 +35,12 @@ jobs:
         run: python -m pip install -e .
       - name: Run unit, FEM and real 3D CAD integration tests
         run: python -m unittest discover -s tests -v
+      - name: Generate 12m yacht hull demonstration artifacts
+        run: python examples/generate_demo_hull.py
+      - name: Upload 2D and 3D yacht hull artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yj64-yacht-hull-demo
+          path: build/hull-demo/
+          if-no-files-found: error
+          retention-days: 14
