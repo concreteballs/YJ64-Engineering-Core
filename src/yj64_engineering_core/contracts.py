@@ -229,9 +229,50 @@ class EngineeringResponse:
             _finite_tree(value, name)
         if not all(isinstance(key, str) and isinstance(unit, str) for key, unit in self.units.items()):
             raise TypeError("units must map string value names to unit strings")
+        for name, items in (
+            ("assumptions", self.assumptions),
+            ("warnings", self.warnings),
+            ("limitations", self.limitations),
+        ):
+            if not all(isinstance(item, str) and item.strip() for item in items):
+                raise ValueError(f"{name} must contain non-empty strings")
+        if not isinstance(self.provenance, SolverProvenance):
+            raise TypeError("provenance must be a SolverProvenance")
+        if not all(isinstance(item, ArtifactReference) for item in self.artifacts):
+            raise TypeError("artifacts must contain ArtifactReference values")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False, sort_keys=True)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "EngineeringResponse":
+        if not isinstance(data, dict):
+            raise TypeError("Engineering response must be a JSON object")
+        payload = dict(data)
+        provenance = payload.get("provenance")
+        if provenance is not None and not isinstance(provenance, SolverProvenance):
+            payload["provenance"] = SolverProvenance(**provenance)
+        payload["artifacts"] = tuple(
+            item if isinstance(item, ArtifactReference) else ArtifactReference(**item)
+            for item in payload.get("artifacts", ())
+        )
+        for name in ("assumptions", "warnings", "limitations"):
+            if name in payload:
+                payload[name] = tuple(payload[name])
+        return cls(**payload)
+
+    @classmethod
+    def from_json(cls, source: str) -> "EngineeringResponse":
+        try:
+            data = json.loads(
+                source,
+                parse_constant=lambda token: (_ for _ in ()).throw(
+                    ValueError(f"Invalid JSON numeric constant: {token}")
+                ),
+            )
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Invalid engineering response JSON: {exc}") from exc
+        return cls.from_dict(data)
