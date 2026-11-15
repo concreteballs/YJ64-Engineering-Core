@@ -23,6 +23,21 @@ EngineeringDispatcher requires an explicit operation:
 
 AxialMemberSolver adapts the existing linear-elastic axial screening calculation. It accepts one load case, Z-axis force only, and no applied moment. Geometry must provide area_m2 and length_m; material must provide name, youngs_modulus_pa, and allowable_stress_pa. Unsupported loads are rejected rather than silently ignored.
 
+## Engineering pipeline
+
+EngineeringPipeline executes two explicit branches for one EngineeringRequest:
+1. The configured physics operation (for example, physics.axial_member).
+2. cad.generate using operating_conditions.cad_backend.
+
+Each branch is attempted independently. Exceptions are captured with their type and message in that branch; a failure in CAD does not prevent physics from running, and vice versa. Pipeline status is:
+- completed: both branches returned a dispatcher result;
+- partial: exactly one branch returned a dispatcher result;
+- failed: neither branch returned a dispatcher result.
+
+A branch execution completing does not mean that the design passed engineering screening. For example, a physics response with status fail_screening is still a successfully executed calculation whose result indicates a failed criterion.
+
+**Current data boundary:** both branches receive the same original request, but run independently. Physics does not read the CAD artifact, derive a mesh from it, or verify geometric equivalence. Geometry values required by each branch must be provided explicitly and kept consistent by the caller. The pipeline makes no claim of FEM accuracy or CAD-to-analysis traceability.
+
 ## CAD adapters
 
 The workspace-bound adapters implement the CADBackend interface and currently support cylinder geometry:
@@ -35,16 +50,17 @@ Each adapter receives a workspace path at construction. The request cannot choos
 ## Data flow
 
 1. The consortium converts a design discussion into an EngineeringRequest.
-2. The application validates it and calls the dispatcher with an explicit operation.
-3. The selected CAD or physics adapter performs the operation.
-4. The dispatcher returns a versioned EngineeringResponse with provenance and limitations.
-5. The consortium revises the design based on evidence.
-6. The commercial agent evaluates manufacturing and lifecycle costs.
+2. The application validates it and calls EngineeringPipeline with an explicit physics operation.
+3. The pipeline invokes the physics and CAD dispatcher branches independently.
+4. Each branch returns a versioned EngineeringResponse or a captured branch error.
+5. The combined result is returned to the consortium for review and design iteration.
+6. The commercial agent evaluates manufacturing and lifecycle costs using traceable inputs.
 7. Independent oversight reviews assumptions, evidence, and proposed real-world actions.
 
 ## Current solver limits
 
 - Axial linear-elastic screening: implemented.
+- CAD source/macro/SVG generation for cylinders: implemented; external CAD executables are not run.
 - FEM, CFD, electromagnetic, thermal, multibody dynamics, fatigue, and optimization: not yet implemented.
 - Screening calculations and generated CAD artifacts are not certification or substitutes for physical testing.
 
