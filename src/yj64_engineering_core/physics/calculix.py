@@ -130,7 +130,7 @@ class CalculiXTrussSolver:
             analysis_type="axial_truss_fem",
             status="completed",
             values={
-                "tip_displacement_x_m": displacement_m,
+                "tip_displacement_z_m": displacement_m,
                 "axial_strain_from_displacement": axial_strain,
                 "axial_stress_from_displacement_pa": axial_stress_pa,
                 "applied_force_n": force_n,
@@ -138,7 +138,7 @@ class CalculiXTrussSolver:
                 "member_length_m": length_m,
             },
             units={
-                "tip_displacement_x_m": "m",
+                "tip_displacement_z_m": "m",
                 "axial_strain_from_displacement": "dimensionless",
                 "axial_stress_from_displacement_pa": "Pa",
                 "applied_force_n": "N",
@@ -194,7 +194,7 @@ class CalculiXTrussSolver:
 YJ64 generated axial truss verification model
 *NODE, NSET=ALL
 1, 0.0, 0.0, 0.0
-2, {length_m:.16g}, 0.0, 0.0
+2, 0.0, 0.0, {length_m:.16g}
 *NSET, NSET=TIP
 2
 *ELEMENT, TYPE=T3D2, ELSET=BAR
@@ -210,7 +210,7 @@ YJ64 generated axial truss verification model
 *STEP
 *STATIC
 *CLOAD
-2, 1, {force_n:.16g}
+2, 3, {force_n:.16g}
 *NODE PRINT, NSET=TIP
 U
 *END STEP
@@ -236,5 +236,5 @@ U
             values = [float(value.replace("D", "E").replace("d", "e")) for value in numeric]
             if not all(math.isfinite(value) for value in values):
                 raise RuntimeError("CalculiX returned a non-finite displacement")
-            return values[0]
+            return values[2]
         raise RuntimeError("Could not parse node 2 displacement from CalculiX .dat output")
