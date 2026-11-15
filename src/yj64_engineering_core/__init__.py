@@ -14,7 +14,7 @@ from .cad.adapters import FreeCADMacroBackend, OpenSCADSourceBackend, SVGDrawing
 from .cad.hull import HullStation, YachtHull
 from .cad.hull_adapters import YachtHullCADBackend
 from .cad.hull_edits import apply_hull_changes
-from .cad.visual_reference import ImageAnnotation, VisualReference, ingest_reference_image, visual_changes
+from .cad.visual_reference import ImageAnnotation, VisualObservation, VisualReference, ingest_reference_image, visual_changes
 from .models import (
     AnalysisRequest,
     AnalysisResult,
@@ -42,6 +42,7 @@ __all__ = [
     "YachtHull",
     "YachtHullCADBackend",
     "ImageAnnotation",
+    "VisualObservation",
     "VisualReference",
     "apply_hull_changes",
     "ingest_reference_image",
