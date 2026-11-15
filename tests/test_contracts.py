@@ -78,9 +78,11 @@ class EngineeringResponseContractTests(unittest.TestCase):
                 ),
             ),
         )
-        data = json.loads(response.to_json())
+        payload = response.to_json()
+        data = json.loads(payload)
         self.assertEqual(data["provenance"]["method"], "linear_elastic_screening")
         self.assertEqual(data["artifacts"][0]["media_type"], "image/svg+xml")
+        self.assertEqual(EngineeringResponse.from_json(payload), response)
 
     def test_rejects_unknown_status(self):
         with self.assertRaises(ValueError):
