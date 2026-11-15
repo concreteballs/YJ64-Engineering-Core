@@ -17,7 +17,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install CalculiX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y calculix-ccx
+          ccx -v
       - name: Install package
         run: python -m pip install -e .
-      - name: Run tests
+      - name: Run unit and CalculiX integration tests
         run: python -m unittest discover -s tests -v
