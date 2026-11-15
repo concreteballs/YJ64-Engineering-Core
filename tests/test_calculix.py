@@ -1,3 +1,4 @@
+import math
 import shutil
 import subprocess
 import tempfile
@@ -5,7 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from yj64_engineering_core.contracts import EngineeringRequest, GeometrySpec, LoadCase
+from yj64_engineering_core.dispatcher import EngineeringDispatcher
 from yj64_engineering_core.models import AnalysisRequest
+from yj64_engineering_core.pipeline import EngineeringPipeline
+from yj64_engineering_core.cad.adapters import OpenSCADSourceBackend
 from yj64_engineering_core.physics.calculix import CalculiXTrussSolver
 
 
@@ -110,6 +115,54 @@ class CalculiXTrussSolverTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("ccx"), "CalculiX executable is not installed")
 class CalculiXIntegrationTests(unittest.TestCase):
+
+    def test_real_calculix_runs_through_dispatcher_and_cad_pipeline(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            dispatcher = EngineeringDispatcher()
+            dispatcher.register_physics_solver(
+                CalculiXTrussSolver(root / "fem", timeout_seconds=30)
+            )
+            dispatcher.register_cad_backend(
+                "openscad", OpenSCADSourceBackend(root / "cad")
+            )
+            area_m2 = math.pi * (0.025 ** 2)
+            request = EngineeringRequest(
+                request_id="pipeline-real-fem",
+                title="Cylinder axial FEM and CAD",
+                objective="Run one axial truss FEM analysis alongside CAD source generation",
+                geometry=GeometrySpec(
+                    "cylinder",
+                    {
+                        "diameter_m": 0.05,
+                        "height_m": 2.0,
+                        "area_m2": area_m2,
+                        "length_m": 2.0,
+                    },
+                ),
+                material={
+                    "name": "Test steel",
+                    "youngs_modulus_pa": 200e9,
+                    "poisson_ratio": 0.3,
+                },
+                load_cases=(
+                    LoadCase("service", force_n=(0.0, 0.0, 1000.0)),
+                ),
+                operating_conditions={"cad_backend": "openscad"},
+            )
+            result = EngineeringPipeline(dispatcher).run(
+                request, physics_operation="physics.axial_truss_fem"
+            )
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.branches["physics"].execution_status, "completed")
+            self.assertEqual(result.branches["cad"].execution_status, "completed")
+            expected = 1000.0 * 2.0 / (area_m2 * 200e9)
+            actual = result.branches["physics"].result.response.values[
+                "tip_displacement_z_m"
+            ]
+            self.assertAlmostEqual(actual, expected, delta=expected * 1e-5)
+            self.assertTrue((root / "cad" / "pipeline-real-fem.scad").is_file())
+
     def test_real_calculix_axial_truss_case(self):
         with tempfile.TemporaryDirectory() as tempdir:
             solver = CalculiXTrussSolver(tempdir, timeout_seconds=30)
