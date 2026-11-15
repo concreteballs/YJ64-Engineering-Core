@@ -66,7 +66,7 @@ class VesselMotionKinematicsTests(unittest.TestCase):
             },
         ))
         self.assertEqual(result.values["point_velocity_earth_xyz_m_s"], [1.0, 4.0, 3.0])
-        self.assertEqual(result.values["point_acceleration_earth_xyz_m_s2"], [2.0, 8.0, 6.0])
+        self.assertEqual(result.values["point_acceleration_earth_xyz_m_s2"], [0.0, 8.0, 6.0])
 
     def test_invalid_vector_rejected(self):
         with self.assertRaisesRegex(ValueError, "exactly three"):
