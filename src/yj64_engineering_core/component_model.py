@@ -94,7 +94,7 @@ class ComponentDependency:
 
     def __post_init__(self) -> None:
         _identifier(self.component_id, "dependency component_id")
-        if isinstance(self.revision, bool) or self.revision < 1:
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("dependency revision must be a positive integer")
         if not self.purpose.strip():
             raise ValueError("dependency purpose cannot be empty")
@@ -172,7 +172,7 @@ class EngineeringComponent:
 
     def __post_init__(self) -> None:
         _identifier(self.component_id, "component_id")
-        if isinstance(self.revision, bool) or self.revision < 1:
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 1:
             raise ValueError("component revision must be a positive integer")
         if not self.name.strip() or not self.component_type.strip():
             raise ValueError("component name and component_type cannot be empty")
@@ -214,6 +214,14 @@ def stale_component_dependencies(
     callers can apply it repeatedly to propagate invalidation through a graph.
     """
     _finite_tree(current_revisions, "current_revisions")
+    if any(
+        not isinstance(component_id, str)
+        or isinstance(revision, bool)
+        or not isinstance(revision, int)
+        or revision < 1
+        for component_id, revision in current_revisions.items()
+    ):
+        raise ValueError("current_revisions must map component IDs to positive integer revisions")
     stale: dict[str, tuple[str, ...]] = {}
     for component in components:
         outdated = tuple(
