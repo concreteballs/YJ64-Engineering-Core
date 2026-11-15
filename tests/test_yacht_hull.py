@@ -12,7 +12,7 @@ from yj64_engineering_core.cad.hull import (
 from yj64_engineering_core.cad.hull_adapters import YachtHullCADBackend
 from yj64_engineering_core.cad.hull_edits import apply_hull_changes
 from yj64_engineering_core.cad.visual_reference import (
-    ImageAnnotation, ingest_reference_image, visual_changes,
+    ImageAnnotation, VisualObservation, ingest_reference_image, visual_changes,
 )
 from yj64_engineering_core.contracts import EngineeringRequest, GeometrySpec
 from yj64_engineering_core.dispatcher import EngineeringDispatcher
@@ -108,12 +108,25 @@ class VisualReferenceTests(unittest.TestCase):
                 label="Widen midship", target_station_index=2,
                 target_field="half_beam_m", target_value=1.05,
             )
-            reference = ingest_reference_image(path, (annotation,))
+            observation = VisualObservation(
+                feature="midship sheer",
+                description="The marked sheer line appears higher than the current model.",
+                confidence=0.93,
+                bbox=(0.35, 0.2, 0.25, 0.3),
+                station_index=2,
+                suggested_parameter="deck_z_m",
+            )
+            reference = ingest_reference_image(
+                path, (annotation,), observations=(observation,)
+            )
             self.assertEqual(reference.width_px, 320)
             self.assertEqual(reference.height_px, 200)
             self.assertEqual(len(reference.sha256), 64)
             self.assertEqual(reference.media_type, "image/png")
             self.assertEqual(visual_changes(reference)[0]["value"], 1.05)
+            self.assertEqual(reference.observations[0].confidence, 0.93)
+            updated, _ = apply_hull_changes(sample_hull(), visual_changes(reference))
+            self.assertAlmostEqual(updated.stations[2].half_beam_m, 1.05)
 
     def test_rejects_out_of_bounds_annotation(self):
         with self.assertRaisesRegex(ValueError, "within 0..1"):
