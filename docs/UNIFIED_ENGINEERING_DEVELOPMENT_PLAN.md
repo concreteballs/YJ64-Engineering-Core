@@ -282,6 +282,12 @@ At 15–20 m, calculate ambient pressure and differential pressure for each seal
 
 The first target is a tethered inspection ROV with camera, lighting, controlled thrusters and depth/heading feedback. Manipulation and anchor/chain intervention are later capability levels, requiring explicit force limits, tool design, tether/vehicle reaction analysis and hazard controls. The 15–20 m target is an initial product envelope, not a claim of achieved capability or certification.
 
+#### First implemented pressure-housing solver
+
+The first executable ROV structural calculation is `rov.pressure_housing_cylinder_screen`. It accepts a cylindrical isotropic housing's outer diameter and wall thickness, operating depth, water density, internal gauge pressure, Young's modulus, Poisson ratio, allowable von Mises stress, a justified buckling-imperfection factor and design factor of safety. It reports hydrostatic/differential pressure, thin-wall hoop and axial membrane stresses, von Mises stress, an ideal long-cylinder elastic-buckling estimate reduced by the supplied imperfection factor, utilization ratios and the pressure resultant on the end-cap projected area.
+
+This is intentionally a preliminary screen only. It is limited to thin-wall isotropic cylinders and does not size end caps, flanges, bolts, seals, viewports, penetrators, welds or composite housings. The imperfection factor must come from defensible evidence; it is never silently guessed. A passing result is not a depth rating. Next steps are finite-length and boundary-condition effects, shell imperfections/cut-outs, end-cap and joint calculations, material/process records, corrosion/fatigue, and validated proof/leak-test planning.
+
 ## Package 8 — Invention methods and engineering knowledge base
 
 **Create a unified method library rather than choosing only one TRIZ variant.**
