@@ -1,5 +1,14 @@
 """YJ64 Engineering Core public API."""
 
+from .contracts import (
+    CONTRACT_VERSION,
+    ArtifactReference,
+    EngineeringRequest,
+    EngineeringResponse,
+    GeometrySpec,
+    LoadCase,
+    SolverProvenance,
+)
 from .models import (
     AnalysisRequest,
     AnalysisResult,
@@ -8,10 +17,17 @@ from .models import (
 )
 
 __all__ = [
+    "CONTRACT_VERSION",
     "AnalysisRequest",
     "AnalysisResult",
+    "ArtifactReference",
+    "EngineeringRequest",
+    "EngineeringResponse",
+    "GeometrySpec",
+    "LoadCase",
     "MaterialProperties",
     "Point3D",
+    "SolverProvenance",
 ]
 
 __version__ = "0.1.0"
