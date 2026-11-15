@@ -90,6 +90,8 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(dispatched.response.status, "completed")
         self.assertEqual(backend.last_specification["geometry_type"], "cylinder")
         self.assertIn("Test double", dispatched.response.limitations[0])
+        self.assertEqual(dispatched.response.artifacts[0].uri, "workspace://part.step")
+        self.assertEqual(dispatched.response.artifacts[0].media_type, "application/step")
 
     def test_cad_requires_explicit_backend(self):
         request = EngineeringRequest(
