@@ -40,7 +40,35 @@ The architecture should support independently installable and replaceable solver
 
 Use explicit operation names, typed SI-unit inputs and outputs, solver/version metadata, bounded execution and structured warnings. A solver result is not automatically validated merely because a solver completed successfully.
 
-## 3. Materials and material condition
+## 3. Marine electronics, automation and moving-vessel environment
+
+Marine electronics is a vessel-wide subsystem shared by navigation, propulsion, safety, communications and onboard robotics. It is not limited to robot electronics.
+
+Cover radar, AIS, GNSS, chartplotters, sonar/echosounders, autopilot, heading and motion sensors, wind and speed instruments, communications, distress signalling, cameras, machinery sensors, embedded controllers, displays, data networks and power electronics. Integrate these with the electrical architecture, cable schedules, antennas/transducers, grounding, bonding, shielding, EMC and equipment-specific installation requirements.
+
+Represent marine environmental qualification explicitly: ingress and immersion exposure, salt mist, corrosion, humidity, condensation, temperature and cold, vibration, shock, UV, electrical transients, interference and power interruption. Store sourced IP/environmental ratings and manufacturer limits rather than inferring protection.
+
+Create a shared six-degree-of-freedom vessel-motion model (surge, sway, heave, roll, pitch, yaw), angular rates and accelerations, tied to sea-state scenarios and uncertainty. This model feeds instrument correction, autopilot/stabilization, equipment mounting, robotic balance and manipulation, and UAV launch/recovery. Define operational and degraded envelopes by sea state. A robot must be designed for a moving deck, not just static equilibrium.
+
+## 4. Robotics, mechanisms and autonomous vehicles
+
+Use a task-derived skeleton/chassis-first architecture. Define coordinate frames, links, joints, degrees of freedom, ranges, stiffness, load paths, mass, centre of gravity and inertia before selecting actuator muscles. Support humanoid and non-humanoid morphologies: wheeled, tracked, legged, manipulator, deckhand, rescue, inspection, galley and general-purpose robots.
+
+Actuator choices must be technology-neutral and comparable: electric motor/gear drives, cable/tendon actuation, hydraulic and pneumatic systems, compliant/series-elastic transmissions, variable-stiffness systems and emerging electroactive/artificial-muscle materials where validated data exists. Record force/torque, stroke, speed, efficiency, power, thermal limits, bandwidth, compliance, fatigue, failure modes and maintenance. Do not treat speculative muscle materials as proven.
+
+Marine robots require corrosion-resistant materials/coatings, sealing, drainage, salt and condensation protection, cold-weather operation, vibration/shock resistance, safe stowage, emergency stop and fail-safe behaviour. Their stability and manipulation must account for vessel motion and defined sea-state limits.
+
+The same mechanism solvers should support robot joints and grippers, gears, linkages, bearings, clutches, brakes, cable/pulley systems, sailing and anchor winches, capstans, davits, crane beams and rescue-boat hoists. Winch sizing must include line pull, sheet/rope geometry, drum radius/capacity, gear ratio, efficiency, speed, holding brake, duty, fatigue, corrosion and dynamic vessel loads—not only nominal sail area or payload.
+
+Support marine propellers and aerial rotors, keeping hydrodynamic and aerodynamic operating models distinct. Calculate thrust, torque, power, efficiency and operating envelope, with cavitation/ventilation for water and tip-speed, wind/gust and acoustic considerations for air. Match rotors/propellers to motors, engines, gearboxes, controllers and energy storage.
+
+Support multirotor, fixed-wing, hybrid VTOL and larger cargo/rescue UAVs. Model mass, CG, inertia, aerodynamics, propulsion, energy, endurance, range, payload, control authority, wind response and failure modes. Include maritime delivery of distress beacons or communications payloads as a use case, subject to applicable aviation, maritime and radio requirements.
+
+## 5. Verification for marine electronics, robots and vehicles
+
+All new domains use common versioned components, solver contracts, material records, mass/power/thermal budgets, provenance and evidence states. Distinguish analytical screening, simulation, review, prototype, bench/field testing and qualification. Human-interacting robots, lifting systems, propellers and aircraft require appropriate hazard analysis, safeguards and independent verification; successful simulation is not certification.
+
+## 6. Materials and material condition
 
 The material knowledge layer must cover metals and alloys, polymers, elastomers, ceramics, glass, composites, sandwich structures, foams, adhesives, coatings and relevant construction materials.
 
@@ -55,7 +83,7 @@ Material records must distinguish nominal alloy/polymer identity from actual con
 
 Heat treatment is a process linked to a particular alloy, product form and target properties, not a generic label. The system must represent process stages, temperature/time profile, atmosphere or quench medium, cooling, aging, distortion risk, hardness and verification tests. It must not invent a universal heat-treatment cycle when alloy and condition are unknown.
 
-## 4. Digital manufacturing and onboard production
+## 7. Digital manufacturing and onboard production
 
 Manufacturing is a first-class engineering domain, not a final file-export button.
 
@@ -86,7 +114,7 @@ Manufacturing feasibility checks must include machine envelope, tolerances, mini
 ### Part criticality and evidence
 Classify parts by consequence of failure and required assurance. Non-critical covers, brackets, sensor mounts and plugs may be candidates for onboard production after fit and environmental checks. Load-bearing, rotating, pressure-containing, engine-internal, steering, rigging, mast and safety-critical parts require appropriate qualified materials/processes, engineering verification, inspection and proof testing. The system must never mark a part safe solely because it can generate a printable file.
 
-## 5. Design for repair and unavailable parts
+## 8. Design for repair and unavailable parts
 
 The system should support reverse engineering from measurements, photographs, scans, samples and partial drawings. It should record measurement uncertainty and distinguish observed geometry from inferred geometry.
 
@@ -102,7 +130,7 @@ For a missing or obsolete part, workflow:
 
 This applies to small mechanisms and engine components as well as large structures. The core must not assume that visual similarity proves functional equivalence.
 
-## 6. TRIZ and systematic invention support
+## 9. TRIZ and systematic invention support
 
 Add a pluggable engineering knowledge and invention-support layer. TRIZ should be one method in a broader method library.
 
@@ -133,7 +161,7 @@ The knowledge layer must use licensed or openly usable source material, retain a
 
 TRIZ output is a hypothesis generator, not proof. No proposed improvement should bypass physical modelling, independent review or testing when those are required.
 
-## 7. Evidence and validation levels
+## 10. Evidence and validation levels
 
 Every artifact and result should carry a clear state, for example:
 - concept;
@@ -148,7 +176,7 @@ Every artifact and result should carry a clear state, for example:
 
 Do not collapse these states into a single pass/fail badge. Record test conditions, instrumentation, calibration, acceptance criteria, failures and deviations.
 
-## 8. Recommended implementation order
+## 11. Recommended implementation order
 
 1. Stabilize the common versioned component/project schema and solver contracts.
 2. Add material records, units, provenance, uncertainty and process-condition representation.
@@ -160,7 +188,7 @@ Do not collapse these states into a single pass/fail badge. Record test conditio
 8. Demonstrate the complete workflow on representative components of increasing criticality, including a small replacement part and a mechanism assembly.
 9. Connect domain-specific design, visualization, content and commercial modules through versioned interfaces.
 
-## 9. Non-negotiable architecture rules
+## 12. Non-negotiable architecture rules
 
 - No arbitrary LLM-generated code execution in the core process.
 - Specialist tools run in isolated, resource-bounded workers.
