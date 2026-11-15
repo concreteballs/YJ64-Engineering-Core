@@ -389,3 +389,8 @@ These are starting points, not completed full-discipline engineering systems. In
 ### Latest executable improvement: polygon-integrated hull pressure loads
 
 The hull pressure-load operation now supports optional ordered `vertices_m` for convex planar panels. It integrates the linear hydrostatic differential-pressure field over triangulated panels, computes pressure-weighted force and moment resultants, and reports the pressure-resultant centroid. It validates polygon planarity, area consistency, normal orientation consistency and rejects waterline-crossing panels rather than silently approximating a discontinuous wet/dry boundary. The original centroid-panel mode remains available for compatibility. Automated tests cover a depth-gradient side panel, resultant-centroid moment, waterline crossing, area mismatch and non-planar geometry. This is still a load generator; structural plate/shell/stiffener stress analysis remains a separate next stage.
+
+
+## Implemented foundation: six-DOF vessel motion kinematics
+
+The core now includes `VesselMotionKinematicsSolver` (`marine.vessel_motion_point_kinematics`). It transforms body-fixed equipment/robot-base points into earth-frame position, velocity and acceleration from a supplied rigid-body six-DOF state. The implementation includes roll/pitch/yaw rotation, translational motion, angular velocity, angular acceleration and centripetal acceleration, with tests and explicit axis conventions. It is a kinematics layer only: wave response, RAOs, seakeeping, hydrodynamic coefficients, sensor fusion and robot balance/control remain future work. See `docs/VESSEL_MOTION_KINEMATICS.md`.
