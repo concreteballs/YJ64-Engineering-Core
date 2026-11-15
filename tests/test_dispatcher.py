@@ -69,6 +69,13 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(dispatched.response.values["stress_pa"], 1e6)
         self.assertEqual(dispatched.response.provenance.method, "linear_elastic_axial_stress")
         self.assertEqual(dispatched.response.request_id, "bar-test-001")
+        self.assertEqual(len(dispatched.response.provenance.input_digest_sha256), 64)
+        self.assertEqual(
+            dispatched.response.provenance.input_digest_sha256,
+            self.dispatcher.dispatch(
+                self.make_axial_request(), "physics.axial_member"
+            ).response.provenance.input_digest_sha256,
+        )
 
     def test_axial_adapter_rejects_transverse_force(self):
         request = EngineeringRequest(
@@ -88,6 +95,37 @@ class DispatcherTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "Z-axis axial force"):
             self.dispatcher.dispatch(request, "physics.axial_member")
+
+    def test_input_digest_changes_when_load_changes(self):
+        first = self.dispatcher.dispatch(
+            self.make_axial_request(force_n=1000.0), "physics.axial_member"
+        )
+        second = self.dispatcher.dispatch(
+            self.make_axial_request(force_n=2000.0), "physics.axial_member"
+        )
+        self.assertNotEqual(
+            first.response.provenance.input_digest_sha256,
+            second.response.provenance.input_digest_sha256,
+        )
+
+    def test_operation_is_part_of_input_digest(self):
+        solver = DummyTrussSolver()
+        self.dispatcher.register_physics_solver(solver)
+        request = self.make_axial_request()
+        axial = self.dispatcher.dispatch(request, "physics.axial_member")
+        truss_request = EngineeringRequest(
+            request_id="bar-test-001",
+            title="Axial bar screening",
+            objective="Calculate preliminary axial stress and elongation",
+            geometry=GeometrySpec("prismatic_member", {"area_m2": 0.001, "length_m": 2.0}),
+            material={"name": "Test steel", "youngs_modulus_pa": 200e9, "poisson_ratio": 0.3},
+            load_cases=(LoadCase(name="service", force_n=(0.0, 0.0, 1000.0)),),
+        )
+        truss = self.dispatcher.dispatch(truss_request, "physics.axial_truss_fem")
+        self.assertNotEqual(
+            axial.response.provenance.input_digest_sha256,
+            truss.response.provenance.input_digest_sha256,
+        )
 
     def test_unknown_operation_is_not_guessed(self):
         with self.assertRaisesRegex(ValueError, "Unsupported operation"):
@@ -113,6 +151,7 @@ class DispatcherTests(unittest.TestCase):
         self.assertIn("Test double", dispatched.response.limitations[0])
         self.assertEqual(dispatched.response.artifacts[0].uri, "workspace://part.step")
         self.assertEqual(dispatched.response.artifacts[0].media_type, "application/step")
+        self.assertEqual(len(dispatched.response.provenance.input_digest_sha256), 64)
 
 
     def test_routes_engineering_request_to_axial_truss_fem_solver(self):
