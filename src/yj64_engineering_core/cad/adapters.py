@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,11 @@ class _WorkspaceBackend:
         height_m = parameters.get("height_m")
         if radius_m is None or height_m is None:
             raise ValueError("Cylinder requires radius_m or diameter_m, and height_m")
+        for name, value in (("radius_m", radius_m), ("height_m", height_m)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{name} must be numeric")
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
         return float(radius_m) * 1000.0, float(height_m) * 1000.0
 
 
