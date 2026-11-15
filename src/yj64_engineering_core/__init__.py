@@ -18,6 +18,7 @@ from .models import (
     Point3D,
 )
 from .pipeline import EngineeringPipeline, PipelineBranch, PipelineResult
+from .physics.calculix import CalculiXTrussSolver
 
 __all__ = [
     "CONTRACT_VERSION",
@@ -25,6 +26,7 @@ __all__ = [
     "AnalysisResult",
     "ArtifactReference",
     "AxialMemberSolver",
+    "CalculiXTrussSolver",
     "DispatchResult",
     "EngineeringDispatcher",
     "EngineeringPipeline",
