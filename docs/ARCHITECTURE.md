@@ -1,19 +1,43 @@
 # YJ64 Engineering Core — architecture
 
-## Services and responsibilities
+## System responsibilities
 
-- Application / consortium dispatcher: user-facing project state, permissions, routing, and audit history.
+- Application / consortium dispatcher: project state, permissions, routing, and audit history.
 - Yacht Agent: permitted research and workflow tasks; it is a client, not the owner of engineering truth.
 - CAD service: creates editable geometry and drawing artifacts.
 - Physics service: runs analytical solvers and external numerical simulation backends.
 - Commercial agent: consumes versioned engineering results to estimate manufacturing, operating, maintenance, and lifecycle costs.
 - Independent oversight: reviews proposed actions and consequences and cannot be modified by the supervised agent.
 
-## Shared request/result contract
+## Contract boundary
 
-Exchange structured JSON with explicit SI units. Results should include solver/backend name and version, input parameters and units, assumptions and boundary conditions, calculated values and units, warnings and limitations, uncertainty where available, and artifact identifiers and hashes.
+The contracts.py module defines version 1.0 of the shared request/response envelope.
 
-A language model may translate natural language into a structured request, but the adapter must validate it before passing it to a solver.
+A request contains:
+- stable request ID, title, and objective;
+- optional geometry descriptor and parameters;
+- material data;
+- named load cases with force (N) and moment (N·m) vectors;
+- operating conditions, requirements, and assumptions;
+- explicit SI unit system and contract version.
+
+A response contains:
+- matching request ID and controlled status;
+- solver name, version, and method;
+- values and a unit for each reported value;
+- assumptions, warnings, and limitations;
+- artifact references and optional uncertainty data.
+
+JSON serialization rejects non-finite numbers. Request deserialization rejects JSON NaN/Infinity constants. The shared contract checks envelope structure and generic numeric validity; each backend must additionally validate its own required fields, dimensional meaning, physical ranges, boundary conditions, and supported analysis types.
+
+## Data-flow target
+
+1. The language-model consortium converts a design discussion into an EngineeringRequest.
+2. The dispatcher validates the request and routes geometry work to a CAD adapter.
+3. A physics adapter receives validated geometry/material/load data and returns an EngineeringResponse.
+4. The consortium revises the design based on solver results and limitations.
+5. The commercial agent evaluates manufacturing and lifecycle costs from versioned artifacts and results.
+6. Independent oversight reviews assumptions, evidence, and proposed real-world actions.
 
 ## CAD backend status
 
@@ -35,4 +59,4 @@ A language model may translate natural language into a structured request, but t
 - Validate structured inputs and restrict output paths to an assigned project workspace in production.
 - Run external CAD/solver processes in isolated workers with resource limits.
 - Do not give engineering workers credentials or unrestricted network access.
-- Require review and independent validation for safety-critical designs.
+- Require independent validation for safety-critical designs.
