@@ -9,7 +9,7 @@ Its purpose is to let language models, autonomous agents, and commercial agents 
 - **Versioned contracts** — canonical JSON requests and responses shared by agents and engineering services.
 - **Dispatcher** — explicit routing to registered CAD and physics backends; operations are never guessed.
 - **Engineering pipeline** — runs CAD and physics branches for the same request and preserves each branch's result or error independently.
-- **Physics adapters** — a common interface for analytical solvers and external simulation engines.
+- **Physics adapters** — analytical solvers plus an optional CalculiX T3D2 finite-element worker for a narrowly defined axial-bar case.
 - **CAD adapters** — workspace-bound OpenSCAD, FreeCAD macro, and SVG generators.
 - **Validation and provenance** — SI units, finite numeric values, explicit assumptions, solver identity, warnings, limitations, and artifact references.
 
@@ -27,7 +27,7 @@ A generated drawing or 3D model is not proof that a design is physically safe. A
 6. Workspace-bound FreeCAD macro generation.
 7. Workspace-bound schematic SVG drawing generation.
 8. Independent CAD + physics pipeline with combined JSON result (pipeline.py).
-9. Automated unit tests and GitHub Actions.
+9. CalculiX T3D2 one-element axial-truss FEM adapter with bounded subprocess execution and explicit solver provenance.\n10. Automated unit tests and a GitHub Actions job that installs CalculiX and runs a real solver integration test.
 
 The dispatcher supports explicit operations such as physics.axial_member and cad.generate. CAD backends are registered by the application and selected explicitly in operating_conditions.cad_backend. The built-in CAD adapters currently support cylinder geometry only.
 
@@ -35,7 +35,7 @@ The pipeline runs the selected physics operation and cad.generate independently 
 
 **Important boundary:** in this first pipeline version, CAD and physics consume the same source request independently. Physics does not yet import or derive its calculation mesh/geometry from the generated CAD artifact. No geometry equivalence or FEM result is implied.
 
-The FreeCAD adapter generates a macro but never runs it automatically. OpenSCAD source generation also does not invoke the OpenSCAD executable. FEM, CFD, thermal, electromagnetic, and hardware-control integrations are not yet implemented.
+The FreeCAD adapter generates a macro but never runs it automatically. OpenSCAD source generation also does not invoke the OpenSCAD executable. CalculiX is now used for one tightly constrained T3D2 axial-truss FEM case; this is not a general 3D solid solver workflow. CFD, thermal, electromagnetic, and hardware-control integrations are not yet implemented.
 
 ## Pipeline example
 
@@ -86,6 +86,44 @@ The FreeCAD adapter generates a macro but never runs it automatically. OpenSCAD 
 
 The cylinder geometry fields used by the CAD generator and the area/length fields used by the axial screening solver are deliberately explicit. The caller must supply consistent values; the current pipeline does not infer cross-sectional area from the CAD solid.
 
+## CalculiX axial-truss FEM example
+
+The CalculiX adapter is registered like any other physics solver. Its analysis name is deliberately distinct from the analytical axial screening operation.
+
+    from pathlib import Path
+    from yj64_engineering_core import (
+        AnalysisRequest,
+        CalculiXTrussSolver,
+        EngineeringDispatcher,
+    )
+
+    dispatcher = EngineeringDispatcher()
+    dispatcher.register_physics_solver(
+        CalculiXTrussSolver(Path("./calculix-work"))
+    )
+
+    fem_request = AnalysisRequest(
+        analysis_type="axial_truss_fem",
+        parameters={
+            "request_id": "bar-fem-001",
+            "force_n": 1000.0,
+            "area_m2": 0.001,
+            "length_m": 2.0,
+            "material": {
+                "name": "Example steel",
+                "youngs_modulus_pa": 200e9,
+                "poisson_ratio": 0.3,
+            },
+        },
+    )
+
+    fem_result = dispatcher._physics_solvers[0].solve(fem_request)
+    print(fem_result.to_dict())
+
+The adapter generates its own minimal CalculiX input deck and invokes the `ccx` executable with `shell=False`, a fixed workspace, and a timeout. It does not accept arbitrary .inp files from an LLM. The example is an axial truss verification case: it has no bending stiffness, no local stress concentrations, and no CAD-to-mesh transfer. The returned axial stress is derived from the FEM displacement using the supplied Young's modulus.
+
+The CI workflow installs the Ubuntu `calculix-ccx` package and runs a real solver test when the executable is available. A skipped integration test on another environment means only that CalculiX is absent there; mocked adapter tests still cover request generation and result handling.
+
 ## Dispatcher example
 
     from yj64_engineering_core import (
@@ -134,7 +172,7 @@ Python 3.11 or newer.
 ## Planned integrations
 
 - Parametric CAD geometry, assemblies, tolerances, and production drawings.
-- CalculiX or another solver for finite-element analysis.
+- General 3D solid FEM, CAD-to-mesh transfer, and independent mesh-quality validation beyond the current one-element T3D2 axial case.
 - Additional physics engines for CFD, thermal, electromagnetic, multibody dynamics, fatigue, and optimization.
 - A verified geometry-to-mesh handoff between CAD and numerical solvers.
 - Isolated workers and a service API for CAD and physics backends.
