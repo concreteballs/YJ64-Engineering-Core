@@ -146,6 +146,8 @@ class EngineeringDispatcher:
             raise LookupError(f"No registered solver supports: {analysis_type}")
         if analysis_type == "axial_member":
             parameters = self._axial_parameters(request)
+        elif analysis_type == "axial_truss_fem":
+            parameters = self._axial_truss_parameters(request)
         else:
             parameters = {
                 "geometry": (
@@ -215,4 +217,40 @@ class EngineeringDispatcher:
             "area_m2": geometry["area_m2"],
             "length_m": geometry["length_m"],
             "material": material,
+        }
+
+
+    @staticmethod
+    def _axial_truss_parameters(request: EngineeringRequest) -> dict[str, Any]:
+        """Map the shared request into the constrained CalculiX T3D2 case."""
+        if request.geometry is None:
+            raise ValueError("axial_truss_fem requires geometry")
+        geometry = request.geometry.parameters
+        for key in ("area_m2", "length_m"):
+            if key not in geometry:
+                raise ValueError(f"axial_truss_fem geometry requires {key}")
+        material = dict(request.material)
+        required_material = ("name", "youngs_modulus_pa", "poisson_ratio")
+        missing = [key for key in required_material if key not in material]
+        if missing:
+            raise ValueError(
+                f"axial_truss_fem material requires: {', '.join(missing)}"
+            )
+        if len(request.load_cases) != 1:
+            raise ValueError("axial_truss_fem requires exactly one load case")
+        force_x, force_y, force_z = request.load_cases[0].force_n
+        if force_x != 0 or force_y != 0:
+            raise ValueError("axial_truss_fem supports only Z-axis axial force")
+        if any(request.load_cases[0].moment_nm):
+            raise ValueError("axial_truss_fem does not support applied moments")
+        return {
+            "request_id": request.request_id,
+            "force_n": force_z,
+            "area_m2": geometry["area_m2"],
+            "length_m": geometry["length_m"],
+            "material": {
+                "name": material["name"],
+                "youngs_modulus_pa": material["youngs_modulus_pa"],
+                "poisson_ratio": material["poisson_ratio"],
+            },
         }
