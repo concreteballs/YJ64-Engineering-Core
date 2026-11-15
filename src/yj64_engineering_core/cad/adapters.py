@@ -24,6 +24,9 @@ class _WorkspaceBackend:
         self.workspace = Path(workspace).expanduser().resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
 
+    def supported_formats(self) -> tuple[str, ...]:
+        return ()
+
     def _target(self, filename: str) -> Path:
         target = (self.workspace / filename).resolve()
         if target.parent != self.workspace:
@@ -49,6 +52,9 @@ class OpenSCADSourceBackend(_WorkspaceBackend):
 
     name = "YJ64 OpenSCAD source generator"
 
+    def supported_formats(self) -> tuple[str, ...]:
+        return ("scad",)
+
     def generate(self, specification: dict) -> dict:
         radius_mm, height_mm = self._cylinder_dimensions(specification)
         source = cylinder_scad(radius_mm=radius_mm, height_mm=height_mm)
@@ -66,6 +72,9 @@ class FreeCADMacroBackend(_WorkspaceBackend):
     """Write a FreeCAD macro; never executes FreeCAD automatically."""
 
     name = "YJ64 FreeCAD macro generator"
+
+    def supported_formats(self) -> tuple[str, ...]:
+        return ("FCMacro",)
 
     def generate(self, specification: dict) -> dict:
         radius_mm, height_mm = self._cylinder_dimensions(specification)
@@ -93,6 +102,9 @@ class SVGDrawingBackend(_WorkspaceBackend):
     """Write a schematic orthographic SVG drawing for a cylinder."""
 
     name = "YJ64 SVG drawing generator"
+
+    def supported_formats(self) -> tuple[str, ...]:
+        return ("svg",)
 
     def generate(self, specification: dict) -> dict:
         radius_mm, height_mm = self._cylinder_dimensions(specification)
