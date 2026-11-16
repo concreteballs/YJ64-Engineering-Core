@@ -34,6 +34,13 @@ External tools own their specialist numerical algorithms and native data structu
 | Elmer FEM | Multiphysics FEM for suitable structural, thermal and electromagnetic cases | Compare formulations and validation case-by-case | Medium |
 | Code_Aster | Advanced structural mechanics workflows | Assess automation, complexity and compute footprint | Medium |
 | NASA Software Catalog: GMAT, Trick, GUNNS, NASA CEA and other releases | Reuse task-specific mission, aerospace, system and physical tools | Every release has its own scope, interfaces and licence conditions | Per-task |
+| Orekit | Astrodynamics, orbit determination/propagation, frames, time and flight dynamics | Evaluate supported use cases, data dependencies, exact version and licence | High candidate |
+| Tudat | Astrodynamics and trajectory simulation | Research/toolkit scope; benchmark and integration effort must be assessed | Medium |
+| NASA SPICE / NAIF | Planetary and spacecraft geometry, kernels, ephemeris-based computations | Kernel provenance, time/frame conventions and data licensing/coverage | High candidate |
+| NOVAS / ERFA / Skyfield | Astronomical transformations, astrometry and ephemeris-related calculations | Distinguish reference algorithms from data sources; validate time scales and accuracy | Per-task |
+| OpenCPN and Signal K ecosystem | Marine navigation interoperability, instrument data and plugin interfaces | Do not assume access to proprietary chart data or compatibility with every app | High evaluation |
+| Celeste and other celestial-navigation apps | Reference implementations for offline celestial-navigation workflows | Evaluate code licence, algorithm correctness, offline datasets and safety limits | Research |
+| Navionics and other commercial chart/anchoring apps | Existing user-facing charting, route and anchoring capabilities | Integrate only through documented/licensed APIs or supported exports; no scraping or licence bypass | Per-provider |
 | 3DEXPERIENCE, Siemens Xcelerator/Simcenter, Ansys ModelCenter | Commercial architecture/workflow benchmarks and optional integrations | Not the open-source foundation; access and terms apply | Reference |
 
 OpenMDAO is not treated as a physics solver. SALOME is not treated as a universal solver. FMI is an interface standard, not a solver or complete coupling algorithm.
@@ -46,6 +53,8 @@ Evaluate:
 - STEP for suitable solid CAD exchange; record application protocol and fidelity losses.
 - Solver-specific mesh and field formats, without assuming identical semantics from matching file extensions.
 - Versioned JSON contracts for canonical YJ64 project, request/response, evidence and provenance records.
+- NMEA 0183/NMEA 2000 and Signal K for marine instrument exchange where the exact implementation and licensing permit; GPX for suitable route/track/waypoint exchange.
+- Time and reference-frame standards/conventions required by astronomical and geospatial data; every adapter declares UTC/TAI/TT/UT1 or other time-scale handling explicitly.
 
 Standards are interoperability boundaries, not substitutes for validation. Every adapter states what is preserved, transformed, approximated or discarded.
 
@@ -143,3 +152,22 @@ These are starting points, not legal opinions or permanent licence guarantees. R
 - Do not equate successful execution with numerical/physical validity.
 - Do not silently convert units, frames, sign conventions or assumptions.
 - Do not allow an external solver to rewrite canonical project data without a validated, reviewable import.
+
+
+## 12. Navigation, location and time integrations
+
+Evaluate phone platform location APIs and sensor interfaces, external GNSS receivers, marine instrument gateways, NMEA 0183/2000, Signal K, GPX, OpenCPN plugins and provider-supported APIs for commercial charting/anchoring applications. Each integration must document permissions, data ownership, offline behaviour, update/correction policy, licensing and whether it provides a fix, an estimate or only a route/chart artifact. Do not reverse-engineer protected interfaces, scrape chart tiles or imply that an app offers a public API without verification.
+
+Time-source adapters must preserve source, last synchronization, uncertainty, monotonic-clock relation, UTC/time-scale semantics and timezone separately. Peer time is not trusted merely because a device recently had internet access; its synchronization provenance and drift must be evaluated.
+
+## 13. Astronomy and astrodynamics candidates
+
+Evaluate Orekit, Tudat, NASA SPICE/NAIF, NOVAS, ERFA and Skyfield for concrete tasks. Pin ephemeris/kernel datasets separately from software versions. Validate reference frames, time scales, leap-second data, gravitational parameters, coordinate transformations and numerical tolerances against authoritative references. Celestial-navigation application examples may inform UI and procedures but do not replace independently verified navigation algorithms.
+
+## 14. Integration boundaries
+
+- A charting application is not a YJ64 navigation solver; it may be a licensed external provider or user-facing companion.
+- A phone sensor is not a calibrated navigation-grade instrument by default.
+- A dead-reckoned position is an estimate with growing uncertainty, not a GNSS-equivalent fix.
+- An ephemeris library and its ephemeris datasets are separate dependencies with separate provenance.
+- Candidate names are evaluation leads, not approved dependencies or claims of current API availability.
