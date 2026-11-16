@@ -38,7 +38,7 @@ class UnitDefinition:
     def __post_init__(self) -> None:
         if not self.symbol or self.symbol.strip() != self.symbol:
             raise ValueError("unit symbol must be non-empty and have no surrounding whitespace")
-        if len(self.dimension) != 7 or any(not isinstance(x, int) for x in self.dimension):
+        if len(self.dimension) != 7 or any(isinstance(x, bool) or not isinstance(x, int) for x in self.dimension):
             raise ValueError("dimension must contain seven integer SI exponents")
         if not math.isfinite(self.scale_to_si) or self.scale_to_si <= 0:
             raise ValueError("scale_to_si must be finite and greater than zero")
