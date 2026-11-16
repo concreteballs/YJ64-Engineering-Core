@@ -416,7 +416,8 @@ class Nexscope1688SearchAdapter:
                 )
             warnings.append(
                 f"{product_id}: 1688 search does not provide verified live stock or destination "
-                "shipping/customs; obtain separate supplier and freight confirmation."
+                "shipping/customs; obtain separate supplier and freight confirmation. "
+                "Source data freshness is not specified by the API documentation."
             )
             for tier_index, (minimum_quantity, unit_price) in enumerate(tiers):
                 offers.append(SupplierOffer(
