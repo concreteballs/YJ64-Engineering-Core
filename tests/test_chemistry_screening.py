@@ -41,6 +41,7 @@ def make_candidate(*, mode="electric", evidence_state="measured", reversible=Tru
                 unit="kg/m3",
                 test_method="mass-volume measurement",
                 source="test dataset",
+                evidence_state="measured",
             ),
         )),
     )
@@ -143,6 +144,9 @@ class ChemistryScreeningTests(unittest.TestCase):
         response = self.engine.screen(make_request(), (candidate,)).to_contract_response((candidate,))
         self.assertEqual(response.candidates[0].candidate_id, "candidate-001")
         self.assertEqual(response.request_id, "request-001")
+        self.assertEqual(response.candidates[0].property_evidence[0].evidence_state, "measured")
+        self.assertEqual(response.candidates[0].stimulus_responses[0].mode, "electric")
+        self.assertEqual(response.candidates[0].stimulus_responses[0].electric_field_v_m, 2.0e6)
 
 
 if __name__ == "__main__":
