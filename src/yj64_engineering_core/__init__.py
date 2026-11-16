@@ -15,6 +15,7 @@ from .models import AnalysisRequest, AnalysisResult, MaterialProperties, Point3D
 from .pipeline import EngineeringPipeline, PipelineBranch, PipelineResult
 from .physics.aerodynamics import AerodynamicsSolver
 from .physics.calculix import CalculiXTrussSolver
+from .physics.typed_calculix import TypedCalculiXAxialTrussSolver
 from .physics.hydrodynamics import HydrodynamicsSolver
 from .physics.sail import SailAerodynamicsSolver
 from .physics.sail_material import SailMaterialSolver
@@ -56,7 +57,7 @@ __all__ = [
     "ComponentMassProperties", "EngineeringComponent", "EngineeringProjectGraph",
     "EvidenceRecord", "ManufacturingConstraint", "stale_calculations",
     "stale_component_dependencies", "ArtifactReference", "AxialMemberSolver",
-    "CalculiXTrussSolver", "DispatchResult", "EngineeringDispatcher",
+    "CalculiXTrussSolver", "TypedCalculiXAxialTrussSolver", "DispatchResult", "EngineeringDispatcher",
     "EngineeringPipeline", "EngineeringRequest", "EngineeringResponse",
     "FreeCADMacroBackend", "GeometrySpec", "HullStation", "YachtHull",
     "YachtHullCADBackend", "HydrodynamicsSolver", "SailAerodynamicsSolver",
