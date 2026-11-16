@@ -27,11 +27,11 @@ class UnitProfileTests(unittest.TestCase):
     def test_field_override_supports_hybrid_units(self):
         prefs = UnitDisplayPreferences(
             MARINE_HYBRID_PROFILE,
-            {"plumbing.nominal_pipe_diameter": "in",
+            {"plumbing.actual_pipe_outside_diameter": "in",
              "plumbing.wall_penetration_hole_diameter": "mm"},
         )
         self.assertAlmostEqual(prefs.display(
-            "plumbing.nominal_pipe_diameter", Quantity(25.4, "mm")
+            "plumbing.actual_pipe_outside_diameter", Quantity(25.4, "mm")
         ).value, 1.0)
         self.assertAlmostEqual(prefs.display(
             "plumbing.wall_penetration_hole_diameter", Quantity(1.0, "in")
