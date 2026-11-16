@@ -6,6 +6,7 @@
 - MODULAR_BIOMECHANICAL_ROBOTICS.md — actuator-neutral modular robot-body architecture.
 - ARTIFICIAL_MUSCLE_MATERIAL_DISCOVERY.md — multi-scale responsive-material research brief.
 - CHEMISTRY_AND_ARTIFICIAL_MUSCLE_MODULE_ARCHITECTURE.md — separate Chemistry & Molecular Design and Artificial Muscle Engineering discipline packs, their shared contracts and coordinated workflow.
+- Initial executable contract foundation: `discipline_contracts.py`, `chemistry` and `artificial_muscle` public packages, plus validation tests. These are data contracts only; material discovery and actuator solvers remain planned.
 - UNIVERSAL_ENGINEERING_ROADMAP.md — concise architecture and domain roadmap.
 - EXTERNAL_ENGINEERING_ECOSYSTEM.md — candidate inventory, evaluation policy, adapter requirements and integration gates.
 - IMPLEMENTATION_STATUS.md — factual implementation ledger; code and tests, not plans, determine status.
