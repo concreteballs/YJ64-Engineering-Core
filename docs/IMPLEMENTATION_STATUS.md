@@ -13,7 +13,7 @@ This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PL
 
 | Work package | Status | Existing implementation | Main remaining work |
 |---|---|---|---|
-| 1. Universal kernel, project model and extension contracts | Partially implemented | Request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass/CG/inertia, evidence/stale-result tracking; evidence-aware material/environment foundation; unit-aware Quantity and extensible UnitRegistry | Coordinate frames/transforms, reusable geometry primitives, typed loads/boundary conditions, persistent project/artifact store, full provenance/version compatibility and plugin capability contracts |
+| 1. Universal kernel, project model and extension contracts | Partially implemented | Request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass/CG/inertia, evidence/stale-result tracking; unit-aware quantities; single-root coordinate-frame tree and rigid transforms; validated geometry primitives; typed force/moment loads and fixed/displacement/rotation/pressure/temperature boundary conditions | Persistent project/artifact store, full provenance/version compatibility, plugin capability contracts, mesh/entity mapping and solver-specific load adapters |
 | 2. Shared physics, materials, environments and evidence feedback | Partially implemented | Material identity/property evidence and in-memory registry; dry-air ideal-gas density; atmospheric-pressure seawater EOS-80; bounded marine/aero calculations | Persistent verified datasets, humid air, pressure-aware seawater, viscosity/conductivity, specialist media, experiment intake, discrepancy analysis, research-data collector and reviewed adaptive model updates |
 | 3. External engineering ecosystem, adapters and coupled execution | Planned; candidate inventory defined | Existing limited CalculiX truss adapter and CAD adapters; candidate evaluation and adapter policy documented in EXTERNAL_ENGINEERING_ECOSYSTEM.md | Exact-release/licence/API reviews, adapter SDK, isolated workers, selected pilot integrations, coupling, benchmarks, compatibility and licence/version management |
 | 4. Materials, manufacturing, reverse engineering and invention | Partially implemented | Hull material screening; material evidence records; visual-reference metadata and annotations; some CAD generation | Persistent process-aware datasets, additive/CNC/joining/heat-treatment workflows, tolerances, inspection, scan reconstruction, repair/lifecycle and structured invention workflows |
@@ -26,7 +26,10 @@ This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PL
 
 - Core: shared request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass properties, evidence and stale-result tracking.
 - Physics kernel: evidence-aware material records and in-memory registry; dry-air ideal-gas density; atmospheric-pressure seawater density using UNESCO 1983 EOS-80.
-- Quantities: Quantity, UnitDefinition, UnitRegistry and DEFAULT_UNIT_REGISTRY in physics/kernel/quantities.py; explicit SI dimension vectors, named-unit conversion, offset temperature conversion, finite-value checks and extensible registration. Automated tests have been added; do not claim CI success until a passing run is observed.
+- Quantities: Quantity, UnitDefinition, UnitRegistry and DEFAULT_UNIT_REGISTRY; explicit SI dimension vectors, named-unit conversion, offset temperature conversion, finite-value checks and extensible registration. Force, moment and pressure dimension constants are available.
+- Coordinate frames: CoordinateFrame, CoordinateFrameRegistry and RigidTransform; a single-root right-handed frame tree, proper orthonormal rotations, point/vector mapping, inverse transforms and frame-to-frame composition.
+- Geometry: frame-aware points/vectors, line segments, planes, axis-aligned bounding boxes, spheres and cylinders with finite-value, degeneracy and frame-consistency checks.
+- Loads/conditions: AppliedLoad validates force/moment dimensions and application-point frames; BoundaryCondition validates fixed, displacement, rotation, pressure and temperature conditions. These are shared input contracts, not mesh-bound solver implementations. Tests have been added; do not claim CI success until a passing run is observed.
 - Marine/aero: preliminary catamaran hydrostatics, mass budget, sail polar from supplied data, apparent wind, coefficient-based aero/hydrodynamics, hull material screening.
 - Structures/ROV: axial member screening, limited CalculiX axial truss adapter, ROV cylindrical pressure-housing screen, hydrostatic panel pressure-load generation including polygon integration.
 - Motion: six-DOF rigid-body point kinematics for a supplied/prescribed vessel state. This is not wave-response prediction, seakeeping, sensor fusion or robot stabilization.
@@ -34,7 +37,7 @@ This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PL
 
 ## Immediate implementation sequence
 
-1. Package 1: coordinate frames/transforms, geometry primitives/validation, typed loads and boundary conditions; then connect common types to existing solvers.
+1. Package 1: initial coordinate-frame, geometry and typed load/boundary-condition foundations are implemented with tests. Next connect these shared types to existing solver interfaces and add persistent project/artifact provenance.
 2. Package 3 evaluation: review exact releases, licences/dependencies, APIs and workflows for OpenMDAO, SALOME, FreeCAD, OpenModelica/OMSimulator, OpenFOAM, MOOSE, FEM candidates and relevant NASA tools. Evaluation does not mean adoption.
 3. Package 3 pilots: after relevant YJ64 contracts stabilize, run small standalone benchmarks and implement the first thin, isolated adapter.
 4. Package 2: expand material/environment evidence and reproducible experiment feedback.
