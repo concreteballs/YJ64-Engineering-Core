@@ -168,3 +168,8 @@ A root `index.html` now provides a mobile-friendly map/GPS destination picker. M
 ## 1688 marketplace connector checkpoint
 
 `Nexscope1688SearchAdapter` is an optional read-only adapter for 1688 product search through Nexscope. It normalizes listing identity, supplier/shop identity, CNY price, MOQ and quantity-price tiers. It does not invent stock, delivery days, shipping, customs or freshness. The API documentation reports 10–19 credits per call; the adapter requires an API key and explicit `credit_budget_per_call >= 19`. No paid request has been executed. See `ECONOMIC_AND_LOCAL_SOURCING_MODULE.md`.
+
+
+## Bounded supplier search execution
+
+`economics/execution.py` adds a provider execution layer for agent-generated plans. It currently routes China tasks to the optional 1688/Nexscope adapter only when explicitly registered and credit-capped; unsupported market scopes are reported rather than silently skipped. The execution layer does not create a durable background job. The `/api/discovery` endpoint remains planning-only and does not spend third-party API credits.
