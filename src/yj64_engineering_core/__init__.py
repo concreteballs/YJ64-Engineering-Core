@@ -1,5 +1,9 @@
 """YJ64 Engineering Core public API."""
 from .documents import DocumentSegment, SourceDocument, ingest_document
+from .economics import (
+    AssemblyCost, BillOfMaterialsLine, EconomicLocation, EconomicOption,
+    EconomicReport, EconomicRequest, EconomicScreeningEngine, ShippingQuote, SupplierOffer,
+)
 from .typed_solver import (TypedSolverDispatcher, TypedSolverRequest, TypedSolverResponse, TypedSolverResult)
 from .persistence import ProjectSnapshot, ProjectStore, StoredArtifact, StoredCalculation
 from .extensions import CapabilityRequirement, ExtensionCapability, ExtensionDependency, ExtensionManifest, ExtensionRegistry
@@ -41,6 +45,8 @@ from .physics.kernel import (
 )
 
 __all__ = [
+    "AssemblyCost", "BillOfMaterialsLine", "EconomicLocation", "EconomicOption",
+    "EconomicReport", "EconomicRequest", "EconomicScreeningEngine", "ShippingQuote", "SupplierOffer",
     "DocumentSegment", "SourceDocument", "ingest_document",
     "TypedSolverDispatcher", "TypedSolverRequest", "TypedSolverResponse", "TypedSolverResult",
     "ProjectSnapshot", "ProjectStore", "StoredArtifact", "StoredCalculation",
