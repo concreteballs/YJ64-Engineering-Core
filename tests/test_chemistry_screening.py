@@ -94,6 +94,17 @@ class ChemistryScreeningTests(unittest.TestCase):
         report = self.engine.screen(make_request(), (candidate,))
         self.assertEqual(report.unresolved[0].candidate_id, "candidate-001")
 
+    def test_hypothesis_property_does_not_pass_as_confirmed(self):
+        candidate = make_candidate(properties=(
+            MaterialPropertyEvidence(
+                "density", 1200.0, "kg/m3", "estimate", "unverified assumption",
+                evidence_state="hypothesis",
+            ),
+        ))
+        report = self.engine.screen(make_request(), (candidate,))
+        self.assertEqual(report.unresolved[0].candidate_id, "candidate-001")
+        self.assertTrue(any("only a hypothesis" in item for item in report.unresolved[0].unresolved_constraints))
+
     def test_hybrid_requires_explicit_hybrid_evidence(self):
         candidate = make_candidate(mode="electric")
         report = self.engine.screen(make_request("hybrid_electric_magnetic"), (candidate,))
