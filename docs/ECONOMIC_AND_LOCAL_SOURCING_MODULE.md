@@ -69,17 +69,28 @@ An additive, read-only adapter is implemented in `src/yj64_engineering_core/econ
 
 Official API information: [Mouser API Hub](https://www.mouser.es/es/api-hub/) and [Search API documentation](https://eu.mouser.com/en/api-search/). Mouser documents product availability and pricing access, API-key registration, and limits of up to 50 results per call, 30 calls per minute and 1,000 calls per day.
 
-## Málaga starter sourcing directory
+## Global location selection and multi-market discovery
 
-The following are discovery leads for local physical supply, not verified offers or guaranteed stock:
+The destination is selected at runtime by the user; it is not a deployment default or a hard-coded city.
 
-| Supplier | Relevant channel | Data path in the first release |
-|---|---|---|
-| [Comasur](https://www.comasur.com/) | Industrial supplies; its official company page lists a Málaga branch in Polígono Industrial Guadalhorce | Public catalogue and direct quotation; manual offer capture until a supported data feed/API is confirmed |
-| [Suminsur](https://suminsur.net/) | Industrial hardware and supplies; company describes Málaga and Sevilla locations and an online catalogue | Public storefront and direct quotation; manual offer capture until a supported data feed/API is confirmed |
-| [Obramat Málaga](https://www.obramat.es/almacenes/obramat-malaga.html) | Building and construction materials; Málaga warehouse | Public product/store information and direct quotation; shipping or pickup quote must be captured separately |
+- **Map:** the user selects a point on a map. The location contract requires coordinates and a resolved destination record.
+- **GPS:** the app requests device location permission only after the user chooses GPS. GPS coordinates are accepted only when the explicit permission flag is true.
+- **Manual:** a named destination can also be supplied for users who do not want to share device coordinates.
 
-These local sources do not yet have an integrated machine-readable supplier API in YJ64. A displayed web price, a branch address, or a product listing is not enough to create a costed procurement option: the item identity, quantity, VAT treatment, current stock, pickup/delivery terms and observation time must be captured. Manual quotation entry is the current safe path for these suppliers.
+The executable contract is LocationSelection in economics/discovery.py. It records whether the destination came from map, GPS or manual entry. This is a backend contract; a graphical map picker, Android permission flow and reverse-geocoding UI are not yet implemented.
+
+SupplierSearchPlanner creates separate search tasks for every requested category and four market scopes:
+
+1. **Local radius** around the selected destination (default planning radius: 150 km; configurable).
+2. **Domestic** suppliers elsewhere in the destination country.
+3. **International** suppliers worldwide outside the destination country and the separately tracked China scope.
+4. **China** — a dedicated global search scope for Chinese manufacturers, wholesalers and marketplaces.
+
+The default taxonomy separates chemicals/reagents, polymers/elastomers/resins, metals/alloys, composites, electronics, mechanical parts, fasteners, motors/actuators, sensors/control, cables/power, ceramics/thermal materials, and manufacturing services/equipment. A discipline can pass a narrower category list, so a search for an actuator does not waste requests on unrelated materials.
+
+The planner creates typed tasks; it does not itself crawl websites or claim current prices. Actual supplier connectors must execute those tasks and normalize each result into SupplierOffer with a product identity, supplier location, currency, stock semantics, MOQ, source URL and observation timestamp. Chinese and other cross-border offers must additionally provide shipping coverage and a landed-import estimate (freight, customs, import VAT, platform/payment fees where applicable). A low catalogue price without a credible delivered-cost quote cannot win the comparison.
+
+China is not automatically excluded for distance. It is compared as a separate sourcing market and ranked by total landed cost, delivery time, technical acceptance and evidence quality. Local suppliers can still win when pickup, short lead time, lower freight or easier returns outweigh a lower overseas unit price.
 
 ## Next adapter sequence
 
