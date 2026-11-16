@@ -15,8 +15,8 @@ Package: `yj64_engineering_core.economics`
 - `ShippingQuote`: supplier-to-destination price, currency, delivery time and optional mass capacity.
 - `BillOfMaterialsLine`: part identifier, quantity, unit and mass per unit.
 - `AssemblyCost`: explicit labour, tooling, consumables and energy cost.
-- `EconomicRequest`: target location, required quantity, tax rate and bounded supplier-combination search.
-- `EconomicScreeningEngine`: compares complete-item purchase options with BOM assembly options, groups shipping once per supplier, estimates tax on prices marked tax-exclusive, and sorts by total landed cost with delivery time as a tie-breaker.
+- `EconomicRequest`: target location, required quantity, tax rate, optional maximum supplier radius and bounded supplier-combination search.
+- `EconomicScreeningEngine`: compares complete-item purchase options with BOM assembly options, groups shipping once per supplier, estimates tax on prices marked tax-exclusive, reports supplier distance when coordinates are known, supports a maximum local radius, and sorts by total landed cost with delivery time and distance as tie-breakers.
 
 All prices in one comparison must use the destination currency. Currency conversion is deliberately not guessed; a future exchange-rate adapter must supply a timestamped rate and provenance. Supplier and shipping data are explicit inputs. The engine does not claim to browse shops, verify current prices, reserve stock or place orders.
 
@@ -34,7 +34,7 @@ The first version does not yet calculate customs/import duties, packaging, insur
 
 ## Locality and data freshness
 
-Location is a first-class request field, not a global preference. A request can target a workshop, city, region or country. Coordinates are optional and enable future distance/radius filtering. Each offer should preserve supplier location, source URI, observation timestamp and price validity. An adapter must distinguish:
+Location is a first-class request field, not a global preference. A request can target a workshop, city, region or country. Coordinates are optional; when present the engine calculates great-circle supplier distance. A request may set `maximum_supplier_distance_km` to exclude suppliers outside a local radius. If a radius is requested but coordinates are missing, that offer is excluded with an explicit warning. A shipping quote also identifies its service type (delivery, courier, freight or pickup). Each offer should preserve supplier location, source URI, observation timestamp and price validity. An adapter must distinguish:
 - physically nearby pickup;
 - domestic delivery;
 - cross-border delivery;
