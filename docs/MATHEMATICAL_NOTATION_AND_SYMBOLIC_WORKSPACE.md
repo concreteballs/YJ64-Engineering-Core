@@ -127,3 +127,17 @@ Official references:
 ## Current status
 
 Planned architectural capability. This document defines the target and candidate technologies; it does not claim that MathJax, a LaTeX parser, a symbolic engine, a proof assistant adapter or a mathematical editor is already integrated into YJ64.
+
+
+## Mathematical-to-physical verification and independent model checking
+
+The mathematical workspace must support a traceable path from a formal hypothesis to a physical/engineering model and, where available, comparison with measurements. This is a cross-disciplinary workflow, not a claim that a theorem prover can validate nature.
+
+- Represent each hypothesis and model as versioned typed expressions/specifications with explicit variables, units, dimensions, frames, domains, assumptions, boundary/initial conditions and provenance.
+- Generate reviewable proof obligations for independent proof-assistant adapters. Compare results only after establishing that both systems formalized equivalent statements and compatible assumptions; preserve each native proof and trusted checker. Two systems using the same mistaken specification are not independent confirmation.
+- Use CAS and numerical engines for symbolic transformations, parameter sweeps, sensitivity, uncertainty propagation, counterexample search and numerical consistency checks. A failure to find a counterexample is not proof.
+- Translate a reviewed semantic model into discipline-specific simulation inputs through validated adapters. Record model reductions, approximations, discretization, solver settings, convergence and applicability bounds.
+- Compare predictions with independent analytical references, public observations and physical experiments. Keep formal proof, numerical verification, empirical fit, experimental validation and engineering qualification as separate evidence states.
+- Preserve competing hypotheses, negative results, falsifying observations and model revisions; do not silently tune parameters against the same dataset used for final validation.
+
+Initial adjacent application: celestial mechanics and cosmological hypothesis testing. Detailed requirements: CELESTIAL_MECHANICS_AND_COSMOLOGY.md.
