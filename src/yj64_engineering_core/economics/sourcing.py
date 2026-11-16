@@ -47,6 +47,19 @@ class EconomicLocation:
                 raise ValueError("coordinates are outside geographic bounds")
 
 
+def _distance_km(origin: EconomicLocation, destination: EconomicLocation) -> float | None:
+    if origin.latitude is None or destination.latitude is None:
+        return None
+    lat1, lat2 = math.radians(origin.latitude), math.radians(destination.latitude)
+    dlat = lat2 - lat1
+    dlon = math.radians(destination.longitude - origin.longitude)
+    value = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    )
+    return 6371.0088 * 2 * math.asin(math.sqrt(min(1.0, value)))
+
+
 @dataclass(frozen=True, slots=True)
 class SupplierOffer:
     offer_id: str
@@ -90,12 +103,15 @@ class ShippingQuote:
     source_uri: str | None = None
     maximum_shipment_mass_kg: float | None = None
     observed_at: str | None = None
+    service_type: str = "delivery"
 
     def __post_init__(self) -> None:
-        for name in ("supplier_id", "destination_location_id", "currency"):
+        for name in ("supplier_id", "destination_location_id", "currency", "service_type"):
             _text(getattr(self, name), name)
         _number(self.cost, "shipping cost")
         _number(self.delivery_days, "delivery_days")
+        if self.service_type not in {"delivery", "courier", "freight", "pickup"}:
+            raise ValueError("service_type must be delivery, courier, freight or pickup")
         if self.maximum_shipment_mass_kg is not None:
             _number(self.maximum_shipment_mass_kg, "maximum_shipment_mass_kg", 0.0000001)
 
@@ -161,6 +177,8 @@ class EconomicOption:
     supplier_names: tuple[str, ...]
     delivery_days_estimate: float | None
     source_uris: tuple[str, ...]
+    supplier_distances_km: tuple[tuple[str, float], ...]
+    shipping_services: tuple[str, ...]
     warnings: tuple[str, ...]
 
 
@@ -251,6 +269,12 @@ class EconomicScreeningEngine:
                 total_landed_cost=items + tax + shipping, supplier_ids=(offer.supplier_id,),
                 supplier_names=(offer.supplier_name,), delivery_days_estimate=lead,
                 source_uris=tuple(x for x in (offer.source_uri, quote.source_uri) if x),
+                supplier_distances_km=(
+                    ((offer.supplier_id, distance),)
+                    if (distance := _distance_km(offer.supplier_location, request.destination)) is not None
+                    else ()
+                ),
+                shipping_services=(quote.service_type,),
                 warnings=(
                     "Supplier price/tax treatment and shipping quote are supplied inputs, not live-verified market data.",
                     *(
@@ -334,6 +358,12 @@ class EconomicScreeningEngine:
                         if missing_quote:
                             continue
                         supplier_names = tuple(sorted({o.supplier_name for o in selected}))
+                        supplier_locations = {o.supplier_id: o.supplier_location for o in selected}
+                        supplier_distances = tuple(
+                            (supplier_id, distance)
+                            for supplier_id, location in sorted(supplier_locations.items())
+                            if (distance := _distance_km(location, request.destination)) is not None
+                        )
                         options.append(EconomicOption(
                             option_id=f"assemble:{combo_index + 1}",
                             description="Assemble locally from sourced bill-of-materials parts",
@@ -344,6 +374,8 @@ class EconomicScreeningEngine:
                             supplier_ids=supplier_ids, supplier_names=supplier_names,
                             delivery_days_estimate=max(lead_days) if lead_days else None,
                             source_uris=tuple(dict.fromkeys(sources)),
+                            supplier_distances_km=supplier_distances,
+                            shipping_services=tuple(sorted({q.service_type for q in shipping_by_supplier.values()})),
                             warnings=(
                                 "BOM and assembly inputs are caller-supplied; verify compatibility, tooling, labour and taxes.",
                                 *tuple(
@@ -354,7 +386,12 @@ class EconomicScreeningEngine:
                             ),
                         ))
 
-        options.sort(key=lambda item: (item.total_landed_cost, item.delivery_days_estimate or float("inf"), item.option_id))
+        options.sort(key=lambda item: (
+            item.total_landed_cost,
+            item.delivery_days_estimate if item.delivery_days_estimate is not None else float("inf"),
+            max((distance for _, distance in item.supplier_distances_km), default=float("inf")),
+            item.option_id,
+        ))
         if not options:
             status = "insufficient_market_data"
             warnings.append("No fully costed procurement route: missing offers, stock, compatible currency or destination shipping quote.")
