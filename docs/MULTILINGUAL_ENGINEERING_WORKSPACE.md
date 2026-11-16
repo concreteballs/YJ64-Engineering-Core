@@ -70,7 +70,32 @@ Glossaries can be shared across projects, but project-specific overrides must be
 - Treat unit symbols as invariant technical tokens by default; localize explanatory names separately. Locale decimal formatting is a rendering choice, not a change to stored values.
 - Record source units, target units, conversion rule/registry version and rounding policy in exported artifacts.
 
-The current kernel already has a basic Quantity, UnitDefinition, UnitRegistry and explicit named-unit conversion. It does not yet provide a complete unit catalogue, unit-system profiles, arbitrary compound-unit parsing, locale-aware rendering or document-wide conversion.
+The kernel now includes common SI/metric/US customary named units, built-in SI, metric engineering, European metric, US customary and marine-hybrid display profiles, field-level unit overrides, document unit-policy choices, explicit voice-command intent parsing and a nominal-size designation type. It still does not provide a complete standards catalogue, automatic NPS/DN conversion tables, arbitrary compound-unit parsing, speech recognition, UI prompts, locale-aware rendering or document-wide conversion.
+
+## Unit-system selection at document import
+
+When a technical document is imported or translated, the workflow must explicitly ask how its units should be handled unless the user has already supplied an unambiguous instruction for this document:
+
+- preserve all source units and designations;
+- apply SI;
+- apply metric engineering / European metric;
+- apply US customary;
+- apply the marine hybrid profile;
+- use a project or user-defined profile.
+
+The language choice is a separate question. The system must not infer the unit system from the target language or the document's country. For example, translating an American manual into Russian does not imply converting inches, psi or °F.
+
+The selection applies as a default only. Engineers can override units field-by-field, component-by-component or discipline-by-discipline. Example: keep nominal pipe sizes in NPS inches, show drilled hole diameters in mm, mass in kg and tank capacity in litres. The document viewer should show the source value/unit alongside the selected display value when requested. A converted export must record the conversion policy and preserve the original source artifact.
+
+### Nominal and standards-defined sizes
+
+Some engineering sizes are trade designations rather than physical dimensions. Pipe sizes such as NPS and DN must not be converted by simply multiplying the displayed number by 25.4. The nominal designation and its governing standard/schedule remain identifiers; actual outside diameter, wall thickness and bore are separate physical quantities with explicit units and evidence. The kernel now provides a NominalSizeDesignation record to keep a standards-based nominal label separate from actual measured/design geometry. A standards mapping must be sourced and versioned before offering automatic NPS/DN equivalence.
+
+### Voice-driven unit changes
+
+Speech recognition is an application/UI responsibility. The kernel accepts a recognized transcript and parses explicit conversion intents such as “переведи дюймы в сантиметры”, “переведи дюймы в миллиметры для диаметра отверстия” or “convert kilograms to pounds”. The resulting command identifies source/target units and, when supplied, the target field. The application resolves natural-language field names against the active project selection and asks a clarification if multiple fields match.
+
+A voice request must never silently rewrite canonical project data. The application previews the affected field(s), conversion, rounding and downstream consequences. A command scoped to a selected display value changes its display unit; a request to rewrite stored/imported values or create a converted document derivative requires explicit confirmation and provenance. Dimension mismatches, unsupported units and ambiguous fields are rejected or clarified.
 
 ## User experience
 
