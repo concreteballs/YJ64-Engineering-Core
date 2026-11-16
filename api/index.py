@@ -1,8 +1,8 @@
-"""Minimal authenticated ingress for YJ64 GitHub Actions completion events.
+"""Authenticated, persistent ingress for YJ64 GitHub Actions completion events.
 
-This endpoint validates and logs events only. It deliberately does not claim
-durable storage, deduplication, or notification delivery; those require a
-configured persistence/notification service.
+POST /api validates the CI event, persists it in PostgreSQL and enqueues an
+idempotent process_ci_event task. A separate worker must claim and process
+that task; this endpoint does not run model inference or repository code.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ import os
 import re
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse
+
+from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
 
 
 EXPECTED_REPOSITORY = "concreteballs/YJ64-Engineering-Core"
@@ -40,7 +42,10 @@ class handler(BaseHTTPRequestHandler):
             {
                 "ok": True,
                 "service": "yj64-ci-webhook-ingress",
-                "mode": "validation-only",
+                "mode": "postgres_persistent_queue",
+                "persistence_configured": bool(
+                    os.environ.get("YJ64_DATABASE_URL") or os.environ.get("DATABASE_URL")
+                ),
             },
         )
 
@@ -53,10 +58,8 @@ class handler(BaseHTTPRequestHandler):
         if not secret:
             self._send_json(503, {"ok": False, "error": "webhook_not_configured"})
             return
-
         supplied = self.headers.get("Authorization", "")
-        expected = "Bearer " + secret
-        if not hmac.compare_digest(supplied, expected):
+        if not hmac.compare_digest(supplied, "Bearer " + secret):
             self._send_json(401, {"ok": False, "error": "unauthorized"})
             return
 
@@ -66,7 +69,6 @@ class handler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             self._send_json(411, {"ok": False, "error": "content_length_required"})
             return
-
         if body_length < 1 or body_length > MAX_BODY_BYTES:
             self._send_json(413, {"ok": False, "error": "invalid_body_size"})
             return
@@ -75,32 +77,22 @@ class handler(BaseHTTPRequestHandler):
         if len(raw_body) != body_length:
             self._send_json(400, {"ok": False, "error": "incomplete_body"})
             return
-
         try:
             payload = json.loads(raw_body)
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._send_json(400, {"ok": False, "error": "invalid_json"})
             return
-
         if not isinstance(payload, dict):
             self._send_json(400, {"ok": False, "error": "json_object_required"})
             return
 
         required = {
-            "event",
-            "repository",
-            "workflow",
-            "run_id",
-            "run_attempt",
-            "conclusion",
-            "commit_sha",
-            "branch",
-            "run_url",
+            "event", "repository", "workflow", "run_id", "run_attempt",
+            "conclusion", "commit_sha", "branch", "run_url",
         }
         if not required.issubset(payload):
             self._send_json(400, {"ok": False, "error": "missing_fields"})
             return
-
         if (
             payload["event"] != EXPECTED_EVENT
             or payload["repository"] != EXPECTED_REPOSITORY
@@ -109,7 +101,6 @@ class handler(BaseHTTPRequestHandler):
         ):
             self._send_json(422, {"ok": False, "error": "event_scope_rejected"})
             return
-
         if (
             not isinstance(payload["run_id"], int)
             or isinstance(payload["run_id"], bool)
@@ -120,26 +111,17 @@ class handler(BaseHTTPRequestHandler):
         ):
             self._send_json(422, {"ok": False, "error": "invalid_run_identity"})
             return
-
         if not isinstance(payload["commit_sha"], str) or not re.fullmatch(
             r"[0-9a-f]{40}", payload["commit_sha"]
         ):
             self._send_json(422, {"ok": False, "error": "invalid_commit_sha"})
             return
-
         if payload["conclusion"] not in {
-            "success",
-            "failure",
-            "cancelled",
-            "timed_out",
-            "action_required",
-            "neutral",
-            "skipped",
-            "stale",
+            "success", "failure", "cancelled", "timed_out",
+            "action_required", "neutral", "skipped", "stale",
         }:
             self._send_json(422, {"ok": False, "error": "invalid_conclusion"})
             return
-
         run_url = payload["run_url"]
         expected_prefix = (
             "https://github.com/" + EXPECTED_REPOSITORY + "/actions/runs/"
@@ -147,12 +129,11 @@ class handler(BaseHTTPRequestHandler):
         if (
             not isinstance(run_url, str)
             or not run_url.startswith(expected_prefix)
-            or not run_url[len(expected_prefix) :].split("/", 1)[0].isdigit()
+            or not run_url[len(expected_prefix):].split("/", 1)[0].isdigit()
         ):
             self._send_json(422, {"ok": False, "error": "invalid_run_url"})
             return
 
-        # Keep logs structured and avoid echoing arbitrary request fields.
         event_record = {
             "event": EXPECTED_EVENT,
             "repository": EXPECTED_REPOSITORY,
@@ -164,18 +145,27 @@ class handler(BaseHTTPRequestHandler):
             "branch": EXPECTED_BRANCH,
             "run_url": run_url,
         }
-        print(json.dumps(event_record, separators=(",", ":")))
+        database_url = os.environ.get("YJ64_DATABASE_URL") or os.environ.get("DATABASE_URL")
+        if not database_url:
+            self._send_json(503, {"ok": False, "error": "database_not_configured"})
+            return
+        try:
+            result = PostgresCycleStore(database_url).record_ci_event(event_record)
+        except Exception:
+            # Do not expose connection strings, SQL details or provider diagnostics.
+            self._send_json(503, {"ok": False, "error": "persistent_queue_unavailable"})
+            return
         self._send_json(
             202,
             {
                 "ok": True,
                 "accepted": True,
-                "mode": "validation-only",
-                "run_id": payload["run_id"],
-                "run_attempt": payload["run_attempt"],
+                "duplicate": result["duplicate"],
+                "event_id": result["event_id"],
+                "task_enqueued": result["task_enqueued"],
+                "mode": "postgres_persistent_queue",
             },
         )
 
     def log_message(self, format: str, *args: object) -> None:
-        # Avoid logging request headers, which may contain credentials.
         return
