@@ -197,6 +197,28 @@ def parse_voice_unit_command(transcript: str) -> VoiceUnitCommand:
     return VoiceUnitCommand(source, target, field_key)
 
 
+def apply_voice_unit_command(
+    preferences: UnitDisplayPreferences,
+    command: VoiceUnitCommand,
+    selected_quantity: Quantity,
+    field_key: str | None = None,
+) -> UnitDisplayPreferences:
+    """Return updated display preferences for one selected field.
+
+    Canonical project data is not mutated. The application may pass a stable
+    field_key resolved from the current selection or from its field-name resolver.
+    """
+    target_field = field_key or command.field_key
+    if not target_field:
+        raise ValueError("voice conversion needs a selected or explicitly named field")
+    if selected_quantity.unit != command.source_unit:
+        raise ValueError(
+            f"selected value is in '{selected_quantity.unit}', not requested source unit '{command.source_unit}'"
+        )
+    selected_quantity.to(command.target_unit)  # validates dimensional compatibility
+    return preferences.with_override(target_field, command.target_unit)
+
+
 def convert_by_voice(quantity: Quantity, command: VoiceUnitCommand) -> Quantity:
     """Apply a parsed conversion only when the selected value uses the stated source unit."""
     if quantity.unit != command.source_unit:
