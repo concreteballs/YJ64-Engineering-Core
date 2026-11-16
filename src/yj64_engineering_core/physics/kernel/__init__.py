@@ -13,7 +13,7 @@ from .geometry import (
     LineSegment, Plane, Sphere,
 )
 from .conditions import AppliedLoad, BoundaryCondition
-from .quantities import (
+from .unit_profiles import (\n    BUILTIN_UNIT_PROFILES, EUROPEAN_METRIC_PROFILE, MARINE_HYBRID_PROFILE,\n    METRIC_ENGINEERING_PROFILE, SI_PROFILE, US_CUSTOMARY_PROFILE,\n    DocumentUnitPolicy, UnitDisplayPreferences, UnitSystemProfile,\n    VoiceUnitCommand, convert_by_voice, parse_voice_unit_command,\n)\nfrom .quantities import (
     DEFAULT_UNIT_REGISTRY, FORCE, MOMENT, PRESSURE,
     Quantity,
     UnitDefinition,
@@ -21,7 +21,7 @@ from .quantities import (
 )
 
 __all__ = [
-    "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
+    "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",\n    "METRIC_ENGINEERING_PROFILE", "SI_PROFILE", "US_CUSTOMARY_PROFILE",\n    "DocumentUnitPolicy", "UnitDisplayPreferences", "UnitSystemProfile",\n    "VoiceUnitCommand", "convert_by_voice", "parse_voice_unit_command",\n    "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
     "RigidTransform", "AxisAlignedBoundingBox", "Cylinder", "GeometryPoint",
     "GeometryVector", "LineSegment", "Plane", "Sphere", "FORCE", "MOMENT", "PRESSURE",
     "AirDensityResult", "DEFAULT_UNIT_REGISTRY", "MaterialLibrary",
