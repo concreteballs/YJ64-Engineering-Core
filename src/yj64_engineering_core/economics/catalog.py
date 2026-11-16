@@ -1,4 +1,4 @@
-""""Supplier catalog adapters with explicit provenance and no order execution."""
+"""Supplier catalog adapters with explicit provenance and no order execution."""
 from __future__ import annotations
 
 import json
@@ -72,7 +72,14 @@ class MouserSearchAdapter:
             raise ValueError("ambiguous dollar price; currency cannot be verified")
         if symbol_currency and symbol_currency != expected_currency:
             raise ValueError(f"price symbol indicates {symbol_currency}, expected {expected_currency}")
-        raw = raw.replace(" ", "").replace(",", ".")
+        raw = raw.replace(" ", "")
+        if "," in raw and "." in raw:
+            if raw.rfind(",") > raw.rfind("."):
+                raw = raw.replace(".", "").replace(",", ".")
+            else:
+                raw = raw.replace(",", "")
+        else:
+            raw = raw.replace(",", ".")
         raw = re.sub(r"[^0-9.]", "", raw)
         if not raw or raw.count(".") > 1:
             raise ValueError("price format is not supported")
@@ -105,10 +112,13 @@ class MouserSearchAdapter:
         currency: str,
         limit: int = 50,
         in_stock_only: bool = True,
+        tax_included: bool = False,
     ) -> CatalogSearchResult:
         for value, name in ((keyword, "keyword"), (item_id, "item_id"), (currency, "currency")):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(tax_included, bool):
+            raise TypeError("tax_included must be boolean")
         if len(currency) != 3 or currency != supplier_location.currency:
             raise ValueError("currency must be an ISO-4217 code matching supplier location currency")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
@@ -170,7 +180,6 @@ class MouserSearchAdapter:
             detail_url = str(part.get("ProductDetailUrl") or "").strip() or None
             description = str(part.get("Description") or product_id).strip()
             manufacturer = str(part.get("Manufacturer") or "").strip()
-            product_label = " ".join(x for x in (manufacturer, description) if x)
             warnings.append(
                 f"{product_id}: availability text is '{availability or 'not supplied'}'; "
                 "shipping, tax and delivery to the requested destination require separate quotes."
@@ -190,7 +199,7 @@ class MouserSearchAdapter:
                     stock_quantity=stock_quantity,
                     minimum_order_quantity=max(minimum_order, tier_quantity),
                     lead_time_days=lead_days,
-                    tax_included=False,
+                    tax_included=tax_included,
                     source_uri=detail_url or f"https://www.mouser.es/ProductDetail/{urllib.parse.quote(product_id)}",
                     observed_at=observed_at,
                 ))
