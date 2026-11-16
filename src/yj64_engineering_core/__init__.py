@@ -22,26 +22,32 @@ from .physics.rov_pressure_housing import ROVPressureHousingSolver
 from .physics.hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .physics.vessel_motion import VesselMotionKinematicsSolver
 from .physics.kernel import (
-    AirDensityResult, MaterialLibrary, MaterialPropertyEvidence, MaterialRecord,
-    SeawaterDensityResult, dry_air_density_ideal_kg_m3,
+    AirDensityResult, DEFAULT_UNIT_REGISTRY, MaterialLibrary,
+    MaterialPropertyEvidence, MaterialRecord, Quantity, SeawaterDensityResult,
+    UnitDefinition, UnitRegistry, dry_air_density_ideal_kg_m3,
     seawater_density_eos80_kg_m3,
 )
 
 __all__ = [
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
-    "ComponentCalculationRecord", "ComponentDependency", "ComponentInterface", "ComponentMassProperties", "EngineeringComponent", "EngineeringProjectGraph",
-    "EvidenceRecord", "ManufacturingConstraint", "stale_calculations", "stale_component_dependencies",
-    "ArtifactReference", "AxialMemberSolver", "CalculiXTrussSolver", "DispatchResult",
-    "EngineeringDispatcher", "EngineeringPipeline", "EngineeringRequest", "EngineeringResponse",
-    "FreeCADMacroBackend", "GeometrySpec", "HullStation", "YachtHull", "YachtHullCADBackend",
-    "HydrodynamicsSolver", "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
-    "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver", "HullMaterialScreeningSolver", "ROVPressureHousingSolver", "HydrostaticPanelLoadSolver", "VesselMotionKinematicsSolver",
-    "ImageAnnotation", "VisualObservation", "VisualReference", "apply_hull_changes",
-    "ingest_reference_image", "visual_changes", "LoadCase", "MaterialProperties",
-    "OpenSCADSourceBackend", "PipelineBranch", "PipelineResult", "Point3D",
-    "SVGDrawingBackend", "SolverProvenance", "AirDensityResult",
-    "MaterialLibrary", "MaterialPropertyEvidence", "MaterialRecord",
-    "SeawaterDensityResult", "dry_air_density_ideal_kg_m3",
-    "seawater_density_eos80_kg_m3",
+    "ComponentCalculationRecord", "ComponentDependency", "ComponentInterface",
+    "ComponentMassProperties", "EngineeringComponent", "EngineeringProjectGraph",
+    "EvidenceRecord", "ManufacturingConstraint", "stale_calculations",
+    "stale_component_dependencies", "ArtifactReference", "AxialMemberSolver",
+    "CalculiXTrussSolver", "DispatchResult", "EngineeringDispatcher",
+    "EngineeringPipeline", "EngineeringRequest", "EngineeringResponse",
+    "FreeCADMacroBackend", "GeometrySpec", "HullStation", "YachtHull",
+    "YachtHullCADBackend", "HydrodynamicsSolver", "SailAerodynamicsSolver",
+    "SailMaterialSolver", "ApparentWindSolver", "CatamaranHydrostaticsSolver",
+    "VesselMassBudgetSolver", "HullMaterialScreeningSolver",
+    "ROVPressureHousingSolver", "HydrostaticPanelLoadSolver",
+    "VesselMotionKinematicsSolver", "ImageAnnotation", "VisualObservation",
+    "VisualReference", "apply_hull_changes", "ingest_reference_image",
+    "visual_changes", "LoadCase", "MaterialProperties", "OpenSCADSourceBackend",
+    "PipelineBranch", "PipelineResult", "Point3D", "SVGDrawingBackend",
+    "SolverProvenance", "AirDensityResult", "DEFAULT_UNIT_REGISTRY",
+    "MaterialLibrary", "MaterialPropertyEvidence", "MaterialRecord", "Quantity",
+    "SeawaterDensityResult", "UnitDefinition", "UnitRegistry",
+    "dry_air_density_ideal_kg_m3", "seawater_density_eos80_kg_m3",
 ]
 __version__ = "0.1.0"
