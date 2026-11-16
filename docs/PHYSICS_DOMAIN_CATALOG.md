@@ -6,6 +6,8 @@
 
 Build one shared physics kernel with versioned units, coordinate frames, geometry, materials, boundary conditions, loads, environmental states, uncertainty, provenance and validation status. Add discipline-specific solver packs behind common contracts. A solver must declare its model class, assumptions, valid parameter range, numerical method, uncertainty and exclusions.
 
+Do not build dozens of disconnected calculators. Discipline packs are plugins over the same physical world model: they consume common geometry, material evidence, environmental state, coordinate frames and loads, then publish results and constraints back into the shared project model. A result from one discipline may create checks or boundary conditions for another. The kernel must make cross-discipline dependencies visible so an omitted physical effect can be identified rather than hidden.
+
 The same physics may be reused across applications, but domain-specific validity must remain explicit. For example, fluid mechanics is shared by a yacht, a hydroplane and an aircraft cooling duct; the models, boundary conditions and validation evidence are not interchangeable.
 
 ## A. Classical mechanics and applied mathematics
