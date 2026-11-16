@@ -32,7 +32,7 @@ class Nexscope1688AdapterTests(unittest.TestCase):
         def fake_post(url, payload, headers, timeout):
             self.calls.append((url, payload, headers, timeout))
             return response()
-        self.adapter = Nexscope1688SearchAdapter("test-api-key", post_json=fake_post)
+        self.adapter = Nexscope1688SearchAdapter("test-api-key", credit_budget_per_call=19, post_json=fake_post)
 
     def test_maps_chinese_marketplace_result_and_quantity_tiers(self):
         result = self.adapter.search(
@@ -64,13 +64,19 @@ class Nexscope1688AdapterTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.adapter.search("铝箔卷", item_id="foil")
 
+    def test_requires_explicit_credit_budget(self):
+        with self.assertRaises(TypeError):
+            Nexscope1688SearchAdapter("test-api-key")
+        with self.assertRaises(ValueError):
+            Nexscope1688SearchAdapter("test-api-key", credit_budget_per_call=18)
+
     def test_rejects_bad_page_size(self):
         with self.assertRaises(ValueError):
             self.adapter.search("铝箔卷", item_id="foil", tax_included=False, page_size=5)
 
     def test_rejects_api_business_error(self):
         adapter = Nexscope1688SearchAdapter(
-            "test-api-key",
+            "test-api-key", credit_budget_per_call=19,
             post_json=lambda *args: {"code": 123, "msg": "invalid request"},
         )
         with self.assertRaises(RuntimeError):
