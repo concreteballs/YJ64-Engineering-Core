@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from yj64_engineering_core.economics import (
     AssemblyCost, BillOfMaterialsLine, EconomicLocation, EconomicRequest,
@@ -110,6 +111,26 @@ class EconomicSourcingTests(unittest.TestCase):
     def test_destination_currency_must_be_iso_code(self):
         with self.assertRaises(ValueError):
             EconomicLocation("x", "Place", "ES", "EURO")
+
+    def test_supplier_distance_is_reported_and_used_as_tie_breaker(self):
+        near = replace(
+            offer("near", "part", "near-vendor", "Near", 10),
+            supplier_location=EconomicLocation("nearby", "Nearby", "ES", "EUR", 36.72, -4.42),
+        )
+        far = replace(
+            offer("far", "part", "far-vendor", "Far", 10),
+            supplier_location=EconomicLocation("faraway", "Faraway", "ES", "EUR", 40.42, -3.70),
+        )
+        destination = EconomicLocation("workshop", "Málaga", "ES", "EUR", 36.72, -4.42)
+        request = EconomicRequest("distance-test", destination)
+        quotes = (
+            ShippingQuote("near-vendor", "workshop", 3, "EUR", 1, service_type="pickup"),
+            ShippingQuote("far-vendor", "workshop", 3, "EUR", 1),
+        )
+        report = self.engine.evaluate(request, "part", (far, near), shipping_quotes=quotes)
+        self.assertEqual(report.cheapest.supplier_ids, ("near-vendor",))
+        self.assertAlmostEqual(report.cheapest.supplier_distances_km[0][1], 0.0)
+        self.assertEqual(report.cheapest.shipping_services, ("pickup",))
 
 
 if __name__ == "__main__":
