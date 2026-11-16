@@ -1,0 +1,64 @@
+name: CI completion webhook
+
+on:
+  workflow_run:
+    workflows: ["Python tests"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip when webhook is not configured
+        if: ${{ secrets.YJ64_CI_WEBHOOK_URL == '' || secrets.YJ64_CI_WEBHOOK_SECRET == '' }}
+        run: echo "::notice::CI webhook is not configured; set YJ64_CI_WEBHOOK_URL and YJ64_CI_WEBHOOK_SECRET repository secrets to enable delivery."
+
+      - name: Send CI completion event
+        if: ${{ secrets.YJ64_CI_WEBHOOK_URL != '' && secrets.YJ64_CI_WEBHOOK_SECRET != '' }}
+        env:
+          WEBHOOK_URL: ${{ secrets.YJ64_CI_WEBHOOK_URL }}
+          WEBHOOK_SECRET: ${{ secrets.YJ64_CI_WEBHOOK_SECRET }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          payload = {
+              "event": "yj64.ci.completed",
+              "repository": os.environ["REPOSITORY"],
+              "workflow": os.environ["WORKFLOW_NAME"],
+              "run_id": int(os.environ["WORKFLOW_ID"]),
+              "run_attempt": int(os.environ["WORKFLOW_ATTEMPT"]),
+              "conclusion": os.environ["CONCLUSION"],
+              "commit_sha": os.environ["HEAD_SHA"],
+              "branch": os.environ["HEAD_BRANCH"],
+              "run_url": os.environ["RUN_URL"],
+          }
+          request = urllib.request.Request(
+              os.environ["WEBHOOK_URL"],
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer " + os.environ["WEBHOOK_SECRET"],
+                  "User-Agent": "YJ64-CI-Webhook/1.0",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              if not 200 <= response.status < 300:
+                  raise SystemExit(f"Webhook returned HTTP {response.status}")
+              print(f"Webhook accepted CI event (HTTP {response.status}).")
+          PY
