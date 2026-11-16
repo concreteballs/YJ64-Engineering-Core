@@ -1,4 +1,4 @@
-"""PostgreSQL persistence for the YJ64 autonomous engineering cycle."""
+"""PostgreSQL persistence and leased task queue for the YJ64 cycle."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Callable
 
 
 class PostgresCycleStore:
-    """Persist CI events and enqueue one idempotent follow-up task per run attempt.
+    """Persist CI events and operate an idempotent PostgreSQL task queue.
 
     The schema is managed by the checked-in SQL migration. This class never
     creates tables implicitly and never executes repository code.
@@ -82,3 +82,119 @@ class PostgresCycleStore:
                     "event_id": event_id,
                     "task_enqueued": True,
                 }
+
+    def claim_next_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None:
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET state = 'failed',
+                        lock_owner = NULL,
+                        locked_at = NULL,
+                        last_error = COALESCE(last_error, 'Worker lease expired after final attempt'),
+                        updated_at = now()
+                    WHERE state = 'running'
+                      AND attempts >= max_attempts
+                      AND locked_at < now() - (%s * interval '1 second')
+                    """,
+                    (lease_seconds,),
+                )
+                cursor.execute(
+                    """
+                    WITH candidate AS (
+                        SELECT task_id
+                        FROM yj64_task_queue
+                        WHERE attempts < max_attempts
+                          AND (
+                              (state = 'pending' AND available_at <= now())
+                              OR
+                              (state = 'running' AND locked_at < now() - (%s * interval '1 second'))
+                          )
+                        ORDER BY available_at, task_id
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    )
+                    UPDATE yj64_task_queue AS task
+                    SET state = 'running',
+                        attempts = task.attempts + 1,
+                        locked_at = now(),
+                        lock_owner = %s,
+                        updated_at = now()
+                    FROM candidate
+                    WHERE task.task_id = candidate.task_id
+                    RETURNING task.task_id, task.task_type, task.payload,
+                              task.attempts, task.max_attempts
+                    """,
+                    (lease_seconds, worker_id),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "task_id": row[0],
+                    "task_type": row[1],
+                    "payload": row[2],
+                    "attempts": row[3],
+                    "max_attempts": row[4],
+                    "worker_id": worker_id,
+                }
+
+    def complete_task(self, task_id: int, worker_id: str) -> bool:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET state = 'completed', locked_at = NULL, lock_owner = NULL,
+                        updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    """,
+                    (task_id, worker_id),
+                )
+                return cursor.rowcount == 1
+
+    def fail_task(
+        self, task_id: int, worker_id: str, error: str, retry_delay_seconds: int = 60
+    ) -> str | None:
+        if not isinstance(retry_delay_seconds, int) or not 0 <= retry_delay_seconds <= 86400:
+            raise ValueError("retry_delay_seconds must be between 0 and 86400")
+        safe_error = str(error)[:2000]
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET state = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
+                        available_at = CASE
+                            WHEN attempts >= max_attempts THEN available_at
+                            ELSE now() + (%s * interval '1 second')
+                        END,
+                        locked_at = NULL, lock_owner = NULL, last_error = %s,
+                        updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    RETURNING state
+                    """,
+                    (retry_delay_seconds, safe_error, task_id, worker_id),
+                )
+                row = cursor.fetchone()
+                return row[0] if row else None
+
+    def block_task(self, task_id: int, worker_id: str, reason: str) -> bool:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET state = 'blocked', locked_at = NULL, lock_owner = NULL,
+                        last_error = %s, updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    """,
+                    (str(reason)[:2000], task_id, worker_id),
+                )
+                return cursor.rowcount == 1
