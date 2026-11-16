@@ -71,18 +71,28 @@ Related subtasks should be designed, implemented and tested together as coherent
 
 ### Package 1 — Universal kernel, project model and extension contracts
 
-Build together:
-- unit-aware physical quantities, dimension checking and extensible unit registry, with locale-independent canonical values, SI/metric/US/marine display profiles and per-field overrides;\n- document-import unit policy: preserve source, apply selected profile or ask; profile defaults never override explicit field-level engineering conventions;\n- voice-command intent interface for explicit, dimension-checked unit changes, with ambiguity resolution and user confirmation before persistent changes;\n- distinction between nominal standards designations (such as NPS/DN pipe sizes) and actual physical dimensions;\n- localization foundations: language-neutral identifiers and schemas, interface/document locale metadata, terminology/glossary contracts, and safe technical-document translation workflows;
-- coordinate frames, handedness conventions, transforms and frame-compatibility validation;
-- reusable geometry primitives, stable references and geometric validation;
-- typed loads, boundary conditions, operating states and environmental references;
-- versioned project/component/assembly/interface schemas;
-- persistent project/artifact/provenance model, dependency graph, revision pinning and stale-result handling;
-- solver/plugin manifests, capability declarations, compatibility/version rules, structured diagnostics and permissions.
+### Implemented foundations — extend and integrate; do not rebuild
+- Unit-aware quantities, dimension checking and extensible unit registry; canonical SI values; SI/metric/European metric/US customary/UK imperial/marine-hybrid display profiles; per-field overrides; document unit-policy values; explicit voice-conversion intent parsing; nominal NPS/DN designations kept distinct from physical dimensions.
+- Single-root coordinate-frame tree, handedness validation and rigid transforms.
+- Frame-aware geometry primitives with finite-value, degeneracy and frame-consistency checks.
+- Typed force/moment loads and boundary conditions for fixed, displacement, rotation, pressure and temperature cases.
+- Existing request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass properties, evidence and stale-result tracking.
+- UTF-8 Markdown/plain-text source intake with immutable source bytes, SHA-256 identity, language metadata and stable source spans.
 
-The kernel owns common representations and conventions, not every discipline's equations. Plugins declare input/output schemas, units, coordinate conventions, assumptions, applicability bounds, dependencies, version, licence and evidence level. External execution is isolated and resource-bounded. Arbitrary LLM-generated code is never executed inside the core process.
+These foundations have automated tests. They are not complete end-user workflows: speech recognition/UI, mesh-bound load mapping, full project persistence and broader document formats remain open.
 
-**Completion gate:** a test plugin consumes common typed quantities and project data, returns a traceable result, rejects incompatible units/frames/schema versions, and causes dependent outputs to become stale after upstream changes.
+### Remaining Package 1 work
+- Localization foundations: language-neutral identifiers and schemas, interface/document locale metadata, terminology/glossary contracts, and safe technical-document translation workflows.
+- Versioned persistent project/component/assembly/interface schemas and a durable project/artifact/provenance store.
+- Revision-pinned calculations and artifacts, dependency tracking, stale-result propagation across persisted project state and reproducible reload.
+- Solver/plugin manifests, capability declarations, input/output schema compatibility, unit/frame requirements, applicability bounds, licence/dependency declarations and structured diagnostics.
+- Connect shared coordinate frames, geometry, typed loads and boundary conditions to existing solver interfaces through explicit, validated adapters; reject unsupported mappings rather than silently dropping data.
+- Document ingestion beyond UTF-8 Markdown/plain text (PDF/DOCX/OCR), translation providers, glossary enforcement, protected-token integrity checks, review and translated export.
+- Actual speech recognition, ambiguity prompts and confirmation UI for voice-driven unit changes.
+
+The kernel owns common representations and conventions, not every discipline's equations. Plugins declare their capabilities and compatibility explicitly. External execution is isolated and resource-bounded. Arbitrary LLM-generated code is never executed inside the core process.
+
+**Completion gate:** a test plugin consumes persisted project data and shared typed inputs, returns a traceable result, rejects incompatible units/frames/schema versions, and causes dependent outputs to become stale after upstream changes; the project can be reloaded without losing provenance.
 
 ### Package 2 — Shared physics, materials, environments and evidence feedback
 
@@ -248,9 +258,9 @@ Software tests verify implementation behaviour. Reference benchmarks verify nume
 
 ## 9. Immediate execution order
 
-1. Finish Package 1: coordinate frames/transforms, geometry primitives/validation, typed loads and boundary conditions; connect types to existing solvers.
-2. Start Package 3 candidate inventory and licence/API review in parallel with kernel work, without adding premature runtime dependencies.
-3. Build first thin integration pilots only after relevant YJ64 contracts are stable.
-4. Continue Package 2 evidence/material/environment foundations, then application packages according to dependencies.
+1. Package 1: connect the implemented shared frames, geometry, loads and boundary-condition types to existing solver interfaces; build durable project/artifact/provenance persistence and plugin capability contracts.
+2. Package 3: review exact releases, licences/dependencies, APIs and workflows for selected external tools without adding premature runtime dependencies.
+3. Build thin integration pilots only after relevant YJ64 contracts are stable.
+4. Expand Package 2 evidence/material/environment foundations, then application packages according to dependencies.
 
 **Approval baseline:** this document and its companion roadmap define the approved target architecture. Implementation status remains separate and factual; approval does not imply planned capabilities are already built.
