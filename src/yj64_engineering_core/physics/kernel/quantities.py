@@ -90,8 +90,11 @@ def _build_default_registry() -> UnitRegistry:
         UnitDefinition("km", LENGTH, 1e3),
         UnitDefinition("m2", (0, 2, 0, 0, 0, 0, 0)),
         UnitDefinition("mm2", (0, 2, 0, 0, 0, 0, 0), 1e-6),
+        UnitDefinition("in2", (0, 2, 0, 0, 0, 0, 0), 0.00064516),
+        UnitDefinition("ft2", (0, 2, 0, 0, 0, 0, 0), 0.09290304),
         UnitDefinition("m3", (0, 3, 0, 0, 0, 0, 0)),
         UnitDefinition("L", (0, 3, 0, 0, 0, 0, 0), 1e-3),
+        UnitDefinition("ft3", (0, 3, 0, 0, 0, 0, 0), 0.028316846592),
         UnitDefinition("US_gal", (0, 3, 0, 0, 0, 0, 0), 0.003785411784),
         UnitDefinition("s", TIME),
         UnitDefinition("min", TIME, 60.0),
@@ -122,6 +125,7 @@ def _build_default_registry() -> UnitRegistry:
         UnitDefinition("ohm", (1, 2, -3, -2, 0, 0, 0)),
         UnitDefinition("kg/m3", (1, -3, 0, 0, 0, 0, 0)),
         UnitDefinition("m/s", (0, 1, -1, 0, 0, 0, 0)),
+        UnitDefinition("ft/s", (0, 1, -1, 0, 0, 0, 0), 0.3048),
         UnitDefinition("m/s2", (0, 1, -2, 0, 0, 0, 0)),
     ]
     return UnitRegistry(units)
