@@ -59,10 +59,10 @@ The registry can be extended by application or discipline packages. Any extensio
 
 ## Next kernel increments
 
-1. Coordinate frames, frame transforms and compatibility checks.
-2. Reusable geometry primitives and validation.
-3. Typed load, boundary-condition and operating-state schemas.
-4. Pressure-aware seawater thermodynamics, viscosity/conductivity, humid-air properties and atmospheric/ocean profiles, each with documented equations, limits and reference tests.
-5. Material dataset import/export with source licensing, revision history and batch/product-form traceability.
-6. Persistent project/artifact provenance and registry/schema version pinning.
+1. Connect the new coordinate-frame, geometry and typed load/condition records to existing solver interfaces without breaking legacy SI request payloads.
+2. Add mesh/entity references and explicit solver-specific load mapping, including sign conventions and supported boundary-condition capabilities.
+3. Add operating-state and environment-reference schemas.
+4. Implement pressure-aware seawater thermodynamics, viscosity/conductivity, humid-air properties and atmospheric/ocean profiles, each with documented equations, limits and reference tests.
+5. Add material dataset import/export with source licensing, revision history and batch/product-form traceability.
+6. Add persistent project/artifact provenance and registry/schema version pinning.
 7. Refactor discipline solvers incrementally to consume shared kernel records without breaking existing public operations.
