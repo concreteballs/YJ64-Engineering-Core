@@ -68,6 +68,104 @@ class MicrostructureDescriptor:
 
 
 @dataclass(frozen=True, slots=True)
+class MaterialPropertyDatum:
+    """Cross-pack property evidence; SI value and source context are explicit."""
+
+    property_name: str
+    value: float
+    unit: str
+    test_method: str
+    source: str
+    evidence_state: Literal["hypothesis", "predicted", "calculated", "literature", "measured"] = "hypothesis"
+    source_date: str | None = None
+    temperature_k: float | None = None
+    uncertainty_absolute: float | None = None
+    uncertainty_relative: float | None = None
+    orientation: str | None = None
+    product_direction: str | None = None
+    notes: str = ""
+
+    def __post_init__(self) -> None:
+        for name in ("property_name", "unit", "test_method", "source"):
+            _text(getattr(self, name), name)
+        _finite(self.value, "value")
+        if self.evidence_state not in {"hypothesis", "predicted", "calculated", "literature", "measured"}:
+            raise ValueError("unsupported property evidence_state")
+        for name in ("temperature_k", "uncertainty_absolute", "uncertainty_relative"):
+            value = getattr(self, name)
+            if value is not None:
+                _finite(value, name)
+                if name == "temperature_k" and value <= 0:
+                    raise ValueError("temperature_k must be positive")
+                if name != "temperature_k" and value < 0:
+                    raise ValueError(f"{name} cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class StimulusResponseDatum:
+    """Cross-pack field-response evidence for electric, magnetic or hybrid actuation."""
+
+    mode: Literal["electric", "magnetic", "hybrid"]
+    contraction_strain_fraction: float
+    blocked_stress_pa: float
+    electric_field_v_m: float | None = None
+    magnetic_flux_density_t: float | None = None
+    magnetic_field_strength_a_m: float | None = None
+    response_time_s: float | None = None
+    cycle_life: int | None = None
+    temperature_range_k: tuple[float, float] | None = None
+    reversible: bool = False
+    evidence_state: Literal["hypothesis", "predicted", "calculated", "literature", "measured"] = "hypothesis"
+    source_refs: tuple[str, ...] = ()
+    test_conditions: str = ""
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"electric", "magnetic", "hybrid"}:
+            raise ValueError("mode must be electric, magnetic or hybrid")
+        _finite(self.contraction_strain_fraction, "contraction_strain_fraction")
+        if not 0 <= self.contraction_strain_fraction <= 1:
+            raise ValueError("contraction_strain_fraction must be between 0 and 1")
+        _finite(self.blocked_stress_pa, "blocked_stress_pa")
+        if self.blocked_stress_pa < 0:
+            raise ValueError("blocked_stress_pa cannot be negative")
+        for name in ("electric_field_v_m", "magnetic_flux_density_t", "magnetic_field_strength_a_m", "response_time_s"):
+            value = getattr(self, name)
+            if value is not None:
+                _finite(value, name)
+                if value < 0:
+                    raise ValueError(f"{name} cannot be negative")
+        if self.mode == "electric" and self.electric_field_v_m is None:
+            raise ValueError("electric response requires electric_field_v_m")
+        if self.mode == "magnetic" and self.magnetic_flux_density_t is None and self.magnetic_field_strength_a_m is None:
+            raise ValueError("magnetic response requires magnetic field data")
+        if self.mode == "hybrid" and (
+            self.electric_field_v_m is None or
+            (self.magnetic_flux_density_t is None and self.magnetic_field_strength_a_m is None)
+        ):
+            raise ValueError("hybrid response requires electric and magnetic field data")
+        if self.cycle_life is not None and (
+            isinstance(self.cycle_life, bool) or not isinstance(self.cycle_life, int) or self.cycle_life < 0
+        ):
+            raise ValueError("cycle_life must be a non-negative integer")
+        if self.temperature_range_k is not None:
+            if len(self.temperature_range_k) != 2:
+                raise ValueError("temperature_range_k must contain two values")
+            low, high = self.temperature_range_k
+            _finite(low, "temperature_range_k[0]")
+            _finite(high, "temperature_range_k[1]")
+            if low <= 0 or high < low:
+                raise ValueError("temperature range must be positive and ordered")
+        if self.evidence_state not in {"hypothesis", "predicted", "calculated", "literature", "measured"}:
+            raise ValueError("unsupported stimulus evidence_state")
+        if not all(isinstance(ref, str) and ref.strip() for ref in self.source_refs):
+            raise ValueError("source_refs must contain non-empty strings")
+        if self.evidence_state != "hypothesis" and not self.source_refs:
+            raise ValueError("non-hypothesis stimulus evidence requires source_refs")
+        if not isinstance(self.reversible, bool) or not isinstance(self.test_conditions, str):
+            raise TypeError("reversible must be boolean and test_conditions must be a string")
+
+
+@dataclass(frozen=True, slots=True)
 class MaterialCandidate:
     """A versioned formulation linked to the shared evidence-aware material record."""
 
@@ -83,6 +181,8 @@ class MaterialCandidate:
     process_route: tuple[str, ...] = ()
     source_refs: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    property_evidence: tuple[MaterialPropertyDatum, ...] = ()
+    stimulus_responses: tuple[StimulusResponseDatum, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("candidate_id", "revision", "material_id"):
@@ -101,6 +201,10 @@ class MaterialCandidate:
             "experimentally_characterized", "qualified"
         }:
             raise ValueError("unsupported evidence_state")
+        if not all(isinstance(item, MaterialPropertyDatum) for item in self.property_evidence):
+            raise TypeError("property_evidence must contain MaterialPropertyDatum records")
+        if not all(isinstance(item, StimulusResponseDatum) for item in self.stimulus_responses):
+            raise TypeError("stimulus_responses must contain StimulusResponseDatum records")
         for collection in (self.process_route, self.source_refs, self.warnings):
             if not all(isinstance(item, str) and item.strip() for item in collection):
                 raise ValueError("process_route, source_refs and warnings must contain non-empty strings")
