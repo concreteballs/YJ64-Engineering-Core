@@ -144,11 +144,31 @@ The same physics may be reused across applications, but domain-specific validity
 - Design of experiments, parameter identification, calibration and test correlation.
 - Lifecycle, maintainability, inspection intervals, spares and total cost of ownership.
 
+## O. Spaceflight, launch vehicles and spacecraft engineering
+
+This is a first-class application domain, not merely an aerospace variant. It combines shared physics disciplines with space-specific environments, mission constraints and verification practices.
+
+- **Astrodynamics and mission analysis:** orbital mechanics, two-body and perturbed motion, transfers, rendezvous, proximity operations, attitude/orbit coupling, launch windows, trajectory optimization, re-entry and landing environments.
+- **Launch vehicle flight mechanics:** ascent trajectory, staging events, mass depletion, aerodynamic loads, stability and control, guidance/navigation/control interfaces, separation events and flight envelope analysis.
+- **Compressible and high-temperature gas dynamics:** thermochemical gas properties, compressible internal/external flow, shocks, expansions, boundary layers, high-enthalpy flow and plume/environment interactions, with model validity and test correlation made explicit.
+- **Propulsion-system engineering:** system-level performance models, feed-system networks, turbomachinery interfaces, pressurization, valves, regulators, injectors as a subsystem interface, ignition/transient behaviour and thrust-vector actuation. Detailed hazardous propellant/combustion hardware design must follow appropriate safety and regulatory controls and is not inferred from a generic flow solver.
+- **Cryogenic and high-pressure fluid systems:** storage, insulation, chilldown, boil-off, two-phase flow, slosh, pressurization, transfer, thermal contraction, leak detection and pressure-system integrity.
+- **Thermal engineering:** spacecraft thermal balance, radiators, multilayer insulation, heat pipes, cryogenic thermal management, thermal cycling, re-entry aerothermal loads and thermal protection systems.
+- **Space environment:** vacuum, outgassing, radiation, charged particles, atomic oxygen, micrometeoroids/debris, plasma charging, contamination, extreme thermal cycling and launch vibration/shock.
+- **Space structures and mechanisms:** lightweight tanks, pressure vessels, shells, interstages, deployable structures, separation systems, hinges, latches, docking interfaces, fatigue, buckling and coupled thermal-structural analysis.
+- **Avionics, power and autonomy:** fault-tolerant electrical distribution, energy storage, power conditioning, redundant sensors, timing, onboard computing, flight software interfaces, telemetry, command/data handling and autonomous fault response.
+- **Life support and crew systems:** atmosphere composition/pressure, ventilation, humidity, thermal comfort, water and waste management, fire detection/suppression interfaces, human factors and maintainability.
+- **Ground systems and test infrastructure:** fluid loading interfaces, test stands, instrumentation, high-speed data acquisition, calibration, acceptance testing, non-destructive inspection, process monitoring and launch-site environmental loads.
+- **Reliability and mission assurance:** fault trees, FMEA/FMECA, hazard analysis, redundancy, common-cause failures, qualification, acceptance, verification/validation, configuration control and post-flight data correlation.
+
+The platform must connect these analyses through shared component identity, geometry, mass properties, materials, environment, loads, requirements, interfaces and evidence. A trajectory change can alter aerodynamic/thermal loads; a material or manufacturing change can alter mass, fatigue and thermal response; an avionics change can alter power, thermal and fault-containment budgets.
+
 ## N. Engineering application packs
 
 Reusable physics is assembled into domain packs rather than duplicating equations:
 - Marine craft: hulls, hydrostatics, seakeeping, propulsion, foils, rigging, stability and marine systems.
 - Aircraft and seaplanes: airframe, aero, flight mechanics, propulsion, water takeoff/landing, floats/hull, corrosion and flight safety.
+- Space launch vehicles and spacecraft: launch systems, orbital/mission analysis, propulsion and fluid systems, structures, thermal protection, cryogenics, avionics, GNC, power, communications, life support, ground infrastructure, test and mission assurance.
 - Automotive/road vehicles: chassis, suspension, tyres, braking, powertrain, crash and thermal management.
 - Industrial machinery: frames, drives, shafts, bearings, gears, pumps, pressure systems and process equipment.
 - Energy systems: generation, storage, conversion, distribution and thermal management.
