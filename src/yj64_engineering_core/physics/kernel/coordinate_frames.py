@@ -146,6 +146,8 @@ class CoordinateFrameRegistry:
         if frame.parent_id is None:
             if self._frames:
                 raise ValueError("only one root coordinate frame is allowed")
+            if frame.rotation_to_parent != IDENTITY or frame.translation_to_parent_m != (0.0, 0.0, 0.0):
+                raise ValueError("root coordinate frame must define the identity world pose")
         elif frame.parent_id not in self._frames:
             raise ValueError(f"parent frame '{frame.parent_id}' is not registered")
         self._frames[frame.frame_id] = frame
