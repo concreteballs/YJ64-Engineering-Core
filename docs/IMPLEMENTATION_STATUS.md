@@ -141,3 +141,10 @@ Next: add condition-aware evidence selection and shared-registry unit normalizat
 **Implemented prototype:** `yj64_engineering_core.economics` defines destination/supplier locations, supplier offers, shipping quotes, BOM lines, assembly costs and a bounded economic comparison engine. It compares buying a finished item with assembling from supplied part offers, groups one shipping charge per supplier, estimates tax only for prices explicitly marked tax-exclusive, and ranks by total landed cost. Currency mismatches, unavailable stock and missing delivery quotes are not silently accepted. The first version uses caller-supplied commercial data; it does not discover suppliers or verify live prices.
 
 **Planned:** tax-jurisdiction rules, customs/import costs, timestamped exchange rates, radius/local-pickup filtering, supplier discovery/price refresh, reliability, warranty/returns, lifecycle cost and permission-gated trade-agent integration. See `ECONOMIC_AND_LOCAL_SOURCING_MODULE.md`.
+
+
+## Supplier catalog integration checkpoint
+
+**Implemented prototype — read-only catalog adapter.** `src/yj64_engineering_core/economics/catalog.py` provides `MouserSearchAdapter` for the documented Mouser Search API keyword endpoint. It maps product identifiers, source URLs, price tiers, availability text, explicitly stated stock counts, minimum quantities and recognized lead-time units into `SupplierOffer` records. Currency symbols/locale formatting are checked; ambiguous dollar pricing is rejected. Supplier location, currency and tax-inclusion treatment are explicit caller inputs. The adapter does not create carts or place orders, and a separate destination shipping quote remains mandatory for a landed-cost ranking.
+
+Automated tests use a fake transport and do not constitute a live API/account test. A deployment must inject the API key from a secret store; it must never be committed. Málaga discovery leads documented for manual quote capture are Comasur, Suminsur and Obramat Málaga. Their public catalogue/store pages are not treated as machine-readable APIs, and no live prices or stock are claimed. See ECONOMIC_AND_LOCAL_SOURCING_MODULE.md.
