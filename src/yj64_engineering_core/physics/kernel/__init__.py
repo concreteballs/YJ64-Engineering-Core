@@ -17,7 +17,7 @@ from .unit_profiles import (
     BUILTIN_UNIT_PROFILES, EUROPEAN_METRIC_PROFILE, MARINE_HYBRID_PROFILE,
     METRIC_ENGINEERING_PROFILE, SI_PROFILE, UK_IMPERIAL_PROFILE, US_CUSTOMARY_PROFILE,
     DocumentUnitPolicy, NominalSizeDesignation, UnitDisplayPreferences, UnitSystemProfile,
-    VoiceUnitCommand, convert_by_voice, parse_voice_unit_command,
+    VoiceUnitCommand, apply_voice_unit_command, convert_by_voice, parse_voice_unit_command,
 )
 from .quantities import (
     DEFAULT_UNIT_REGISTRY, FORCE, MOMENT, PRESSURE,
@@ -30,7 +30,7 @@ __all__ = [
     "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",
     "METRIC_ENGINEERING_PROFILE", "SI_PROFILE", "UK_IMPERIAL_PROFILE", "US_CUSTOMARY_PROFILE",
     "DocumentUnitPolicy", "NominalSizeDesignation", "UnitDisplayPreferences", "UnitSystemProfile",
-    "VoiceUnitCommand", "convert_by_voice", "parse_voice_unit_command",
+    "VoiceUnitCommand", "apply_voice_unit_command", "convert_by_voice", "parse_voice_unit_command",
     "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
     "RigidTransform", "AxisAlignedBoundingBox", "Cylinder", "GeometryPoint",
     "GeometryVector", "LineSegment", "Plane", "Sphere", "FORCE", "MOMENT", "PRESSURE",
