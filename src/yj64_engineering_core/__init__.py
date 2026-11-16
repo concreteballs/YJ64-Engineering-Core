@@ -21,7 +21,7 @@ from .physics.hull_material import HullMaterialScreeningSolver
 from .physics.rov_pressure_housing import ROVPressureHousingSolver
 from .physics.hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .physics.vessel_motion import VesselMotionKinematicsSolver
-from .physics.kernel import (\n    BUILTIN_UNIT_PROFILES, EUROPEAN_METRIC_PROFILE, MARINE_HYBRID_PROFILE,\n    METRIC_ENGINEERING_PROFILE, SI_PROFILE, US_CUSTOMARY_PROFILE,\n    DocumentUnitPolicy, NominalSizeDesignation, UnitDisplayPreferences, UnitSystemProfile,\n    VoiceUnitCommand, convert_by_voice, parse_voice_unit_command,
+from .physics.kernel import (\n    BUILTIN_UNIT_PROFILES, EUROPEAN_METRIC_PROFILE, MARINE_HYBRID_PROFILE,\n    METRIC_ENGINEERING_PROFILE, SI_PROFILE, UK_IMPERIAL_PROFILE, US_CUSTOMARY_PROFILE,\n    DocumentUnitPolicy, NominalSizeDesignation, UnitDisplayPreferences, UnitSystemProfile,\n    VoiceUnitCommand, convert_by_voice, parse_voice_unit_command,
     AppliedLoad, BoundaryCondition, CoordinateFrame, CoordinateFrameRegistry,
     RigidTransform, AxisAlignedBoundingBox, Cylinder, GeometryPoint,
     GeometryVector, LineSegment, Plane, Sphere, FORCE, MOMENT, PRESSURE,
@@ -32,7 +32,7 @@ from .physics.kernel import (\n    BUILTIN_UNIT_PROFILES, EUROPEAN_METRIC_PROFIL
 )
 
 __all__ = [
-    "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",\n    "METRIC_ENGINEERING_PROFILE", "SI_PROFILE", "US_CUSTOMARY_PROFILE",\n    "DocumentUnitPolicy", "NominalSizeDesignation", "UnitDisplayPreferences", "UnitSystemProfile",\n    "VoiceUnitCommand", "convert_by_voice", "parse_voice_unit_command",\n    "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
+    "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",\n    "METRIC_ENGINEERING_PROFILE", "SI_PROFILE", "UK_IMPERIAL_PROFILE", "US_CUSTOMARY_PROFILE",\n    "DocumentUnitPolicy", "NominalSizeDesignation", "UnitDisplayPreferences", "UnitSystemProfile",\n    "VoiceUnitCommand", "convert_by_voice", "parse_voice_unit_command",\n    "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
     "RigidTransform", "AxisAlignedBoundingBox", "Cylinder", "GeometryPoint",
     "GeometryVector", "LineSegment", "Plane", "Sphere", "FORCE", "MOMENT", "PRESSURE",
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
