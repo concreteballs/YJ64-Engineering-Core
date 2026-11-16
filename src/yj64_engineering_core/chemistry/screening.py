@@ -262,6 +262,10 @@ class ChemistryScreeningEngine:
             return "failed", f"{property_name}: {datum.value} {unit} is below {minimum} {unit}"
         if maximum is not None and datum.value > maximum:
             return "failed", f"{property_name}: {datum.value} {unit} exceeds {maximum} {unit}"
+        if datum.evidence_state == "hypothesis":
+            return "unresolved", f"{property_name}: value is only a hypothesis, not usable property evidence"
+        if datum.evidence_state != "measured":
+            return "provisional", f"{property_name}: value is {datum.evidence_state}, not experimentally measured"
         return "passed", None
 
     def screen(self, request: ActuatorMaterialRequest,
@@ -302,6 +306,10 @@ class ChemistryScreeningEngine:
                 label = f"{constraint.property_name} [{constraint.unit}]"
                 if outcome == "passed":
                     passed.append(label)
+                elif outcome == "provisional":
+                    passed.append(label)
+                    if detail:
+                        warnings.append(detail)
                 elif outcome == "failed":
                     failed.append(label)
                     if detail:
