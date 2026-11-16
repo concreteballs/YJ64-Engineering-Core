@@ -125,3 +125,11 @@ The supported model is deliberately narrow: one straight prismatic axial member,
 ## CI correction note — typed CalculiX adapter
 
 The first adapter CI attempt exposed a package-level circular import caused by eager re-export from `physics/__init__.py`. The adapter remains available through `yj64_engineering_core.TypedCalculiXAxialTrussSolver` and `yj64_engineering_core.physics.typed_calculix`; the eager physics-package re-export was removed. The corrected commit must pass the complete workflow before the adapter milestone is marked CI-verified.
+
+## Chemistry & Molecular Design — first executable capability
+
+**Implemented prototype — deterministic, evidence-aware screening.** `src/yj64_engineering_core/chemistry/screening.py` binds shared formulation contracts to shared `MaterialRecord` identities and explicit stimulus-response evidence. It screens supplied candidates against `ActuatorMaterialRequest` property limits and returns `candidate`, `rejected` or `unresolved` dispositions. Electric-field, magnetic-field and hybrid electric-plus-magnetic response are separate modes; hybrid requires both fields to be present in the same evidence record. SI field units are explicit (V/m, T and/or A/m). Missing, ambiguous or unit-mismatched property evidence remains unresolved; no implicit unit conversion or default material properties are invented.
+
+`tests/test_chemistry_screening.py` covers successful screening, rejected limits, missing evidence, hybrid-mode separation, unit mismatch, hypothesis labelling and contract conversion. This is not a molecular generator, reaction predictor, synthesis planner, polymerization simulator or quantum/molecular-dynamics solver. No external scientific adapter is claimed integrated. See `CHEMISTRY_MODULE_IMPLEMENTATION.md`.
+
+Next: add condition-aware evidence selection and shared-registry unit normalization, formulation authoring helpers, structure-file adapters and experiment-data intake before selecting scientific solver integrations.
