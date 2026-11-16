@@ -247,6 +247,7 @@ class Nexscope1688SearchAdapter:
         self,
         api_key: str,
         *,
+        credit_budget_per_call: int,
         timeout_seconds: float = 25.0,
         post_json: Callable[[str, dict, dict, float], dict] | None = None,
     ) -> None:
@@ -254,7 +255,10 @@ class Nexscope1688SearchAdapter:
             raise ValueError("Nexscope API key is required")
         if isinstance(timeout_seconds, bool) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+        if isinstance(credit_budget_per_call, bool) or not isinstance(credit_budget_per_call, int) or credit_budget_per_call < 19:
+            raise ValueError("credit_budget_per_call must explicitly authorize at least 19 credits")
         self._api_key = api_key.strip()
+        self._credit_budget_per_call = credit_budget_per_call
         self._timeout = float(timeout_seconds)
         self._post_json = post_json or self._default_post_json
 
