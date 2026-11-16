@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS yj64_task_queue (
     available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     locked_at TIMESTAMPTZ,
     lock_owner TEXT,
+    last_error TEXT,
     dedupe_key TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
