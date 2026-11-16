@@ -1,21 +1,23 @@
-"""Chemistry & Molecular Design discipline-pack public contracts.
+"""Chemistry & Molecular Design discipline-pack public API.
 
-This package currently exposes data contracts only; no molecular generator,
-reaction predictor or synthesis solver is claimed to be implemented.
+The current executable capability is evidence-aware formulation screening;
+it does not generate molecules or predict chemistry from first principles.
 """
 from ..discipline_contracts import (
-    CompositionComponent,
-    MaterialCandidate,
-    MaterialCandidateResponse,
-    MicrostructureDescriptor,
-    PropertyConstraint,
+    CompositionComponent, MaterialCandidate, MaterialCandidateResponse,
+    MicrostructureDescriptor, PropertyConstraint,
+)
+from .screening import (
+    CandidateScreeningResult, ChemistryCandidate, ChemistryScreeningEngine,
+    ChemistryScreeningReport, StimulusResponseEvidence,
 )
 
 CHEMISTRY_PACK_ID = "chemistry-molecular-design"
-CHEMISTRY_PACK_VERSION = "0.1.0"
+CHEMISTRY_PACK_VERSION = "0.2.0"
 
 __all__ = [
     "CHEMISTRY_PACK_ID", "CHEMISTRY_PACK_VERSION", "CompositionComponent",
     "MaterialCandidate", "MaterialCandidateResponse", "MicrostructureDescriptor",
-    "PropertyConstraint",
+    "PropertyConstraint", "CandidateScreeningResult", "ChemistryCandidate",
+    "ChemistryScreeningEngine", "ChemistryScreeningReport", "StimulusResponseEvidence",
 ]
