@@ -46,11 +46,14 @@ class MaterialPropertyEvidence:
     uncertainty_absolute: float | None = None
     uncertainty_relative: float | None = None
     notes: str = ""
+    evidence_state: str = "hypothesis"
 
     def __post_init__(self) -> None:
         for name in ("property_name", "unit", "test_method", "source"):
             _non_empty(getattr(self, name), name)
         _finite(self.value, "value")
+        if self.evidence_state not in {"hypothesis", "predicted", "calculated", "literature", "measured"}:
+            raise ValueError("unsupported evidence_state")
         if self.source_date is not None:
             try:
                 date.fromisoformat(self.source_date)
