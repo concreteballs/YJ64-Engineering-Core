@@ -49,7 +49,7 @@ Technical books and papers are planned as traceable reference sources. Their con
 
 ## Immediate implementation sequence
 
-1. Package 1: initial coordinate-frame, geometry and typed load/boundary-condition foundations are implemented with tests. Next connect these shared types to existing solver interfaces and add persistent project/artifact provenance.
+1. Package 1: initial coordinate-frame, geometry and typed load/boundary-condition foundations are implemented with tests. An additive SQLite ProjectStore and declarative ExtensionManifest/ExtensionRegistry now provide the first persistent snapshots, calculation/artifact provenance, stale-result propagation and capability compatibility checks. Remaining: richer schema migration policy, artifact content storage adapter, signed manifests/trust, runtime isolation, solver-specific typed adapters and mesh/entity mapping.
 2. Package 3 evaluation: review exact releases, licences/dependencies, APIs and workflows for OpenMDAO, SALOME, FreeCAD, OpenModelica/OMSimulator, OpenFOAM, MOOSE, FEM candidates and relevant NASA tools. Evaluation does not mean adoption.
 3. Package 3 pilots: after relevant YJ64 contracts stabilize, run small standalone benchmarks and implement the first thin, isolated adapter.
 4. Package 2: expand material/environment evidence and reproducible experiment feedback.
@@ -99,3 +99,10 @@ The following are implemented foundations and must not be recreated: unit/quanti
 ## Field assistance and offline deployment status
 
 **Planned — no medical, survival, field-chemistry or adaptive task-assembly module is currently claimed as implemented.** Operational content requires source traceability and domain review; medical/chemical workflows require additional safety review. Local LLM and solver deployment, offline bundles and update integrity are future capabilities. See FIELD_SURVIVAL_AND_EMERGENCY_ASSISTANCE.md and ADAPTIVE_TASK_ASSEMBLY_AND_OFFLINE_DEPLOYMENT.md.
+
+
+## Package 1 — persistent projects and extension capability registry
+
+**Implemented prototype — additive infrastructure, existing solver paths unchanged.** `src/yj64_engineering_core/persistence.py` provides a standard-library SQLite ProjectStore with append-only project snapshots, optimistic revision checks, canonical JSON/SHA-256 identity, calculation and artifact reference persistence, solver provenance, pinned component dependencies and stale propagation (including declared transitive component dependencies). Artifact bytes remain in caller-managed storage; SQLite stores references and metadata. `src/yj64_engineering_core/extensions.py` provides JSON-serializable extension manifests, semantic versions, API compatibility, declared dependencies and capability matching across schemas, units, coordinate frames and time scales. The registry is declarative only and does not load or execute plugin code.
+
+Automated tests cover persistence across reopen, revision conflicts, digest validation, calculation/artifact provenance, stale propagation, manifest round trips, API mismatch, dependency checks and capability compatibility. CI must be observed before claiming the full workflow passes. Remaining work includes explicit schema migration tooling, external artifact-store adapters, signed manifests and trust policy, runtime sandbox/workers, capability negotiation with actual solver adapters, and mapping shared loads/frames onto solver mesh entities.

@@ -79,3 +79,10 @@ The result is a mass/cost/maintenance comparison only. It does not prove structu
 ## Universal engineering, manufacturing and invention support
 
 The long-term architecture is defined in [UNIVERSAL_ENGINEERING_ROADMAP.md](UNIVERSAL_ENGINEERING_ROADMAP.md). It extends the core beyond yacht-specific calculations to general components and assemblies, materials and material condition, polymer and metal additive manufacturing, CNC machining, heat treatment, reverse engineering and TRIZ-based candidate generation. These are capability targets to be implemented incrementally through versioned contracts and isolated specialist workers, not claims about current solver coverage.
+
+
+## Persistent project store and declarative extension registry
+
+The additive `ProjectStore` persists append-only project snapshots, calculation records and artifact references in SQLite. Snapshot writes use expected-revision checks; calculation records preserve solver identity/version, input/result digests and pinned component revisions. A changed component revision marks dependent calculations and linked artifacts stale, including transitive dependencies declared in the snapshot. The store does not own large artifact bytes.
+
+The additive `ExtensionRegistry` stores declarative capability manifests: API and semantic versions, operations, input/output schema IDs, units, coordinate frames, time scales, dependencies, licence, permissions, safety class, network/offline support and resource metadata. It checks metadata compatibility only. It does not load or execute plugin code. Existing dispatcher, pipeline, CAD and physics implementations remain unchanged. See [PROJECT_PERSISTENCE_AND_EXTENSION_REGISTRY.md](PROJECT_PERSISTENCE_AND_EXTENSION_REGISTRY.md).

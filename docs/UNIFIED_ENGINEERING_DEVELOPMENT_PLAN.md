@@ -320,3 +320,8 @@ Connect mathematical expressions, multi-prover proof obligations, CAS/numerical 
 A task may span several discipline packs and operational modules. Adaptive Task Assembly resolves the objective, available resources, environment, constraints, required knowledge and risk class; selects compatible modules/tools; builds a reviewable workflow; and returns alternatives, assumptions, missing inputs, hazards and evidence. Modules remain separately versioned and replaceable. Local deployment supports selectable signed/offline knowledge bundles, cached reference datasets and optional local LLM/solver components. Offline packages must disclose age and coverage of data and cannot claim live weather, chart corrections, medical updates or current conditions without a verified source.
 
 Detailed requirements: ADAPTIVE_TASK_ASSEMBLY_AND_OFFLINE_DEPLOYMENT.md and FIELD_SURVIVAL_AND_EMERGENCY_ASSISTANCE.md.
+
+
+## Package 1 implementation checkpoint — persistence and extension declarations
+
+An additive implementation now provides SQLite project snapshot persistence with immutable revisions, optimistic concurrency, SHA-256 payload identity, calculation and artifact reference records, solver provenance and stale propagation through declared component dependencies. A declarative extension manifest/registry supports API/version declarations, dependencies, schema identifiers, units, coordinate frames, time scales, licence, permissions, safety class, resource needs and offline/network capability. The registry does not execute code. See PROJECT_PERSISTENCE_AND_EXTENSION_REGISTRY.md. This is a first tested prototype, not a complete PLM/database, artifact binary store, plugin runtime, sandbox or mesh-load adapter.
