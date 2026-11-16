@@ -45,6 +45,7 @@ class MouserAdapterTests(unittest.TestCase):
         self.assertEqual(result.offers[0].unit_price, 8.5)
         self.assertEqual(result.offers[1].unit_price, 7.9)
         self.assertEqual(result.offers[0].stock_quantity, 120)
+        self.assertEqual(result.offers[0].lead_time_days, 84)
         self.assertEqual(result.offers[0].supplier_id, "mouser")
         self.assertTrue(result.offers[0].source_uri.startswith("https://"))
 
@@ -58,6 +59,9 @@ class MouserAdapterTests(unittest.TestCase):
         self.assertIn("apiKey=test-key", url)
         self.assertEqual(payload["SearchByKeywordRequest"]["records"], 25)
         self.assertEqual(payload["SearchByKeywordRequest"]["searchOptions"], "InStock")
+
+    def test_parses_european_thousands_and_decimal_separators(self):
+        self.assertEqual(MouserSearchAdapter._price("€ 1.234,56", "EUR"), 1234.56)
 
     def test_rejects_ambiguous_dollar_price(self):
         class DollarAdapter(MouserSearchAdapter):
