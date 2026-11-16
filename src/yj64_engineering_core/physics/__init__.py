@@ -1,4 +1,4 @@
-"Physics solver interfaces and reference implementations."
+"""Physics solver interfaces and reference implementations."""
 
 from .aerodynamics import AerodynamicsSolver
 from .calculix import CalculiXTrussSolver
@@ -13,8 +13,9 @@ from .hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .hull_material import HullMaterialScreeningSolver
 from .vessel_motion import VesselMotionKinematicsSolver
 from .kernel import (
-    AirDensityResult, MaterialLibrary, MaterialPropertyEvidence, MaterialRecord,
-    SeawaterDensityResult, dry_air_density_ideal_kg_m3,
+    AirDensityResult, DEFAULT_UNIT_REGISTRY, MaterialLibrary,
+    MaterialPropertyEvidence, MaterialRecord, Quantity, SeawaterDensityResult,
+    UnitDefinition, UnitRegistry, dry_air_density_ideal_kg_m3,
     seawater_density_eos80_kg_m3,
 )
 
@@ -22,8 +23,10 @@ __all__ = [
     "AerodynamicsSolver", "CalculiXTrussSolver", "HydrodynamicsSolver",
     "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
     "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver",
-    "HullMaterialScreeningSolver", "ROVPressureHousingSolver", "HydrostaticPanelLoadSolver",
-    "VesselMotionKinematicsSolver", "AirDensityResult", "MaterialLibrary",
-    "MaterialPropertyEvidence", "MaterialRecord", "SeawaterDensityResult",
+    "HullMaterialScreeningSolver", "ROVPressureHousingSolver",
+    "HydrostaticPanelLoadSolver", "VesselMotionKinematicsSolver",
+    "AirDensityResult", "DEFAULT_UNIT_REGISTRY", "MaterialLibrary",
+    "MaterialPropertyEvidence", "MaterialRecord", "Quantity",
+    "SeawaterDensityResult", "UnitDefinition", "UnitRegistry",
     "dry_air_density_ideal_kg_m3", "seawater_density_eos80_kg_m3",
 ]
