@@ -74,3 +74,8 @@ The first source-document intake adapter is implemented and tested for UTF-8 Mar
 ## Package 1 execution boundary
 
 The following are implemented foundations and must not be recreated: unit/quantity registry and display profiles; explicit voice-unit intent parsing; nominal-size designation type; coordinate-frame tree and rigid transforms; validated geometry primitives; typed loads and boundary conditions. Their connection to solver-specific mesh/entity mappings, persistent project/artifact/provenance storage, plugin capability manifests and complete user-facing localization/voice/document workflows remains open.
+
+
+## Mathematical notation and symbolic workspace status
+
+**Planned — not yet integrated.** The target architecture is specified in MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md. LaTeX is selected as the primary human-readable mathematical notation. MathJax is the initial browser-rendering candidate; SymPy is the initial symbolic-computation candidate, both subject to exact-release, licence/dependency, API and benchmark review. The semantic expression contract, dimensional validation against the existing Quantity/unit registry, rendering adapter, parser and symbolic/numerical adapters are not yet implemented. Rendering, parsing, dimensional validity, mathematical correctness and physical validation must remain separate evidence states.

@@ -264,3 +264,10 @@ Software tests verify implementation behaviour. Reference benchmarks verify nume
 4. Expand Package 2 evidence/material/environment foundations, then application packages according to dependencies.
 
 **Approval baseline:** this document and its companion roadmap define the approved target architecture. Implementation status remains separate and factual; approval does not imply planned capabilities are already built.
+
+
+## 10. Cross-cutting capability — mathematical notation and symbolic workspace
+
+LaTeX-based mathematical notation, equation rendering, semantic expression contracts, dimensional validation and replaceable symbolic/numerical backends are platform-wide capabilities. Their architecture, candidate technologies, safety boundaries and acceptance criteria are defined in MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md.
+
+LaTeX is the primary human-readable notation, not the calculation engine. Rendering, parsing, semantic representation and computation remain separate layers. MathJax is the initial rendering candidate; SymPy is the initial symbolic-backend candidate subject to release/licence/API review and a bounded benchmark. The existing Quantity/unit system must participate in dimensional validation. No symbolic result is accepted as physically validated solely because it was rendered or computed.
