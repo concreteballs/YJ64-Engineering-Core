@@ -16,3 +16,8 @@ This file records implementation milestones, decisions, verification evidence an
 - Scope is intentionally one straight axial member; general mesh mapping, distributed loads, multi-member structures and other structural modes remain out of scope.
 - Automated tests use a controlled solver double for adapter mapping. The workflow's existing real CalculiX test separately checks execution of the installed external solver.
 - CI result for this new commit is pending verification; do not infer success from the preceding run.
+
+## 2026-11-16 — typed CalculiX adapter import correction
+- Initial CI run [43916042366](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43916042366) failed during test-module imports because eagerly re-exporting the adapter from the `physics` package created a cycle while `typed_solver` imported shared kernel types.
+- Correction: keep the typed adapter available from the top-level public package and its explicit module path, but do not import it eagerly from `physics/__init__.py`. This preserves the shared-kernel import direction.
+- Re-run required; no passing result is claimed until observed.

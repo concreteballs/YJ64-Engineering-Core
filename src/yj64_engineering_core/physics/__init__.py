@@ -2,7 +2,6 @@
 
 from .aerodynamics import AerodynamicsSolver
 from .calculix import CalculiXTrussSolver
-from .typed_calculix import TypedCalculiXAxialTrussSolver
 from .hydrodynamics import HydrodynamicsSolver
 from .sail import SailAerodynamicsSolver
 from .sail_material import SailMaterialSolver
@@ -35,7 +34,7 @@ __all__ = [
     "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
     "RigidTransform", "AxisAlignedBoundingBox", "Cylinder", "GeometryPoint",
     "GeometryVector", "LineSegment", "Plane", "Sphere", "FORCE", "MOMENT", "PRESSURE",
-    "AerodynamicsSolver", "CalculiXTrussSolver", "TypedCalculiXAxialTrussSolver", "HydrodynamicsSolver",
+    "AerodynamicsSolver", "CalculiXTrussSolver", "HydrodynamicsSolver",
     "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
     "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver",
     "HullMaterialScreeningSolver", "ROVPressureHousingSolver",

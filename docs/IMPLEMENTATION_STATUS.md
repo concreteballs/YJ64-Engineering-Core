@@ -120,3 +120,8 @@ Automated tests cover persistence across reopen, revision conflicts, digest vali
 **Implemented prototype.** `src/yj64_engineering_core/physics/typed_calculix.py` connects the typed YJ64 request/response boundary to the existing CalculiX T3D2 axial-truss runner. It checks dimensions and converts the member length, area, elastic modulus and applied force to SI; transforms the force vector and application point into the world frame; verifies the axial direction and explicit root/tip target mapping; and preserves both adapter identity and the detected external CalculiX version.
 
 The supported model is deliberately narrow: one straight prismatic axial member, one point force at its tip, and one fixed root. It is not a general CAD-to-mesh, distributed-load, multi-member, bending, buckling or solid-stress adapter. The existing CalculiX runner remains available unchanged. Automated adapter tests use a controlled solver double for boundary and mapping checks; the existing CI real-CalculiX test remains the external executable check. Numerical benchmark coverage and independent engineering validation remain separate follow-up work.
+
+
+## CI correction note — typed CalculiX adapter
+
+The first adapter CI attempt exposed a package-level circular import caused by eager re-export from `physics/__init__.py`. The adapter remains available through `yj64_engineering_core.TypedCalculiXAxialTrussSolver` and `yj64_engineering_core.physics.typed_calculix`; the eager physics-package re-export was removed. The corrected commit must pass the complete workflow before the adapter milestone is marked CI-verified.
