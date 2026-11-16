@@ -77,6 +77,10 @@ This is not a structural equivalence comparison: equal surface area does not mea
 
 The long-term capability plan for general engineering, materials, metal additive manufacturing, CNC machining, heat treatment, repair of unavailable components, solver integration and TRIZ-based invention support is maintained in [docs/UNIVERSAL_ENGINEERING_ROADMAP.md](docs/UNIVERSAL_ENGINEERING_ROADMAP.md). This is a roadmap and interface target; it does not imply that these capabilities are already implemented.
 
+## Chemistry and artificial muscle architecture
+
+The coordinated but independently versioned Chemistry & Molecular Design and Artificial Muscle Engineering discipline packs are specified in [docs/CHEMISTRY_AND_ARTIFICIAL_MUSCLE_MODULE_ARCHITECTURE.md](docs/CHEMISTRY_AND_ARTIFICIAL_MUSCLE_MODULE_ARCHITECTURE.md). This is target architecture, not a claim that the packs or their scientific solvers are implemented.
+
 ## Canonical engineering component model
 
 The shared component data contract is documented in [docs/COMPONENT_MODEL.md](docs/COMPONENT_MODEL.md). It gives each part or subsystem a stable ID and revision, stores geometry/material/mass properties and interfaces, pins dependencies to exact revisions, and fingerprints the serialized inputs. `stale_component_dependencies()` detects direct dependencies whose referenced revision changed or disappeared. Transitive invalidation and artifact regeneration remain responsibilities of the future project-graph manager; this data model does not certify component safety or manufacturability.
