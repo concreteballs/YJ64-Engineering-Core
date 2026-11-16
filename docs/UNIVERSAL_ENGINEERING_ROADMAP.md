@@ -36,11 +36,25 @@ The architecture should support independently installable and replaceable solver
 - acoustics, resonance and noise;
 - materials science, corrosion, wear, tribology and chemical compatibility;
 - optimization, sensitivity, uncertainty and reliability analysis;
-- control systems and system-level simulation.
+- control systems and system-level simulation;
+- astrodynamics, orbital mechanics, launch/flight dynamics and re-entry environments;
+- cryogenic/high-pressure fluid systems, compressible gas dynamics and propulsion-system interfaces;
+- spacecraft thermal control, thermal protection, vacuum/outgassing and radiation environments;
+- guidance/navigation/control, fault-tolerant avionics, telemetry and mission operations;
+- life-support and crew-environment engineering;
+- verification, qualification, test infrastructure, NDT, process control and mission assurance.
+
+Spaceflight is a first-class application pack. It must combine these disciplines through common project state rather than becoming a disconnected “rocket calculator”. The intended capability spans launch vehicles, spacecraft, orbital systems, ground support equipment and mission operations. Publicly visible SpaceX engineering roles and Starship updates illustrate the breadth of tightly coupled fluid, cryogenic, propulsion, structural, thermal, electrical, avionics, manufacturing and test work; NASA's technical-discipline taxonomy and systems-engineering guidance provide a broader cross-check. This is a target scope, not a claim that YJ64 currently implements or qualifies flight hardware.
 
 Use explicit operation names, typed SI-unit inputs and outputs, solver/version metadata, bounded execution and structured warnings. A solver result is not automatically validated merely because a solver completed successfully.
 
-## 3. Marine electronics, automation and moving-vessel environment
+## 3. Space systems engineering and integrated verification
+
+Space systems require system-level traceability in addition to individual physical solvers. The project model should link mission objectives, requirements, architecture, interfaces, mass/power/data/thermal budgets, operating modes, hazard controls, verification methods, test evidence and configuration revisions. Discipline results must be reintegrated into system trades rather than treated as isolated reports.
+
+Required cross-cutting workflows include requirements allocation and change impact, interface control, model-based systems engineering, trade studies, design reviews, failure/hazard analysis, manufacturing readiness, qualification/acceptance, integrated system tests, flight/mission readiness and post-operation data correlation. A numerical result, successful software test or successful component test does not by itself qualify a complete vehicle.
+
+## 4. Marine electronics, automation and moving-vessel environment
 
 Marine electronics is a vessel-wide subsystem shared by navigation, propulsion, safety, communications and onboard robotics. It is not limited to robot electronics.
 
