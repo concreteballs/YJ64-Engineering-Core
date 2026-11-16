@@ -112,6 +112,25 @@ class EconomicSourcingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             EconomicLocation("x", "Place", "ES", "EURO")
 
+    def test_maximum_supplier_radius_excludes_distant_supplier(self):
+        near = replace(
+            offer("near", "part", "near-vendor", "Near", 10),
+            supplier_location=EconomicLocation("nearby", "Nearby", "ES", "EUR", 36.72, -4.42),
+        )
+        far = replace(
+            offer("far", "part", "far-vendor", "Far", 5),
+            supplier_location=EconomicLocation("faraway", "Faraway", "ES", "EUR", 40.42, -3.70),
+        )
+        destination = EconomicLocation("workshop", "Málaga", "ES", "EUR", 36.72, -4.42)
+        request = EconomicRequest("radius-test", destination, maximum_supplier_distance_km=25)
+        quotes = (
+            ShippingQuote("near-vendor", "workshop", 3, "EUR", 1),
+            ShippingQuote("far-vendor", "workshop", 1, "EUR", 1),
+        )
+        report = self.engine.evaluate(request, "part", (far, near), shipping_quotes=quotes)
+        self.assertEqual(report.cheapest.supplier_ids, ("near-vendor",))
+        self.assertTrue(any("outside requested radius" in warning for warning in report.warnings))
+
     def test_supplier_distance_is_reported_and_used_as_tie_breaker(self):
         near = replace(
             offer("near", "part", "near-vendor", "Near", 10),
