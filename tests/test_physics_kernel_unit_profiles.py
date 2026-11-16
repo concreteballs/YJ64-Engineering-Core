@@ -4,7 +4,7 @@ from yj64_engineering_core.physics.kernel.quantities import Quantity
 from yj64_engineering_core.physics.kernel.unit_profiles import (
     BUILTIN_UNIT_PROFILES, DocumentUnitPolicy, UnitDisplayPreferences,
     US_CUSTOMARY_PROFILE, UK_IMPERIAL_PROFILE, MARINE_HYBRID_PROFILE, NominalSizeDesignation,
-    parse_voice_unit_command, convert_by_voice,
+    parse_voice_unit_command, convert_by_voice, apply_voice_unit_command,
 )
 
 
@@ -57,6 +57,18 @@ class UnitProfileTests(unittest.TestCase):
     def test_voice_command_can_target_a_specific_parameter(self):
         command = parse_voice_unit_command("переведи дюймы в миллиметры для диаметра отверстия")
         self.assertEqual(command.field_key, "диаметра.отверстия")
+
+    def test_voice_command_updates_only_field_display_preference(self):
+        original = Quantity(2, "in")
+        command = parse_voice_unit_command("переведи дюймы в сантиметры для диаметра отверстия")
+        updated = apply_voice_unit_command(
+            UnitDisplayPreferences(MARINE_HYBRID_PROFILE), command, original,
+            field_key="plumbing.hole_diameter",
+        )
+        self.assertEqual(original.value, 2)
+        self.assertEqual(original.unit, "in")
+        self.assertAlmostEqual(updated.display("plumbing.hole_diameter", original).value, 5.08)
+        self.assertEqual(updated.display("plumbing.hole_diameter", original).unit, "cm")
 
     def test_nominal_pipe_size_is_not_an_arithmetic_length(self):
         pipe = NominalSizeDesignation("NPS", "1", "ASME B36.10M", Quantity(33.4, "mm"))
