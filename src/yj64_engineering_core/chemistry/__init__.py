@@ -5,7 +5,8 @@ it does not generate molecules or predict chemistry from first principles.
 """
 from ..discipline_contracts import (
     CompositionComponent, MaterialCandidate, MaterialCandidateResponse,
-    MicrostructureDescriptor, PropertyConstraint,
+    MicrostructureDescriptor, PropertyConstraint, MaterialPropertyDatum,
+    StimulusResponseDatum,
 )
 from .screening import (
     CandidateScreeningResult, ChemistryCandidate, ChemistryScreeningEngine,
@@ -20,4 +21,5 @@ __all__ = [
     "MaterialCandidate", "MaterialCandidateResponse", "MicrostructureDescriptor",
     "PropertyConstraint", "CandidateScreeningResult", "ChemistryCandidate",
     "ChemistryScreeningEngine", "ChemistryScreeningReport", "StimulusResponseEvidence",
+    "MaterialPropertyDatum", "StimulusResponseDatum",
 ]
