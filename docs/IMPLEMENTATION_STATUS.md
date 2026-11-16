@@ -14,8 +14,8 @@ This document distinguishes executable code from architectural requirements reco
 | Area | Status | Implemented now | Still required |
 |---|---|---|---|
 | Universal engineering core | Partially implemented | Shared request/response contracts, solver interfaces, explicit dispatcher, pipeline, component/dependency graph, mass/CG/inertia records, evidence and stale-result tracking | Persistent project database, multi-user collaboration/locking, automatic dependency recomputation, richer geometry/material/load schemas and provenance |
-| Physics and engineering solvers | Partially implemented | Axial member screening, limited CalculiX axial truss adapter, coefficient-based aero/hydrodynamics, sail polar and apparent wind, catamaran hydrostatics, mass budget, hull material screening, ROV cylindrical pressure-housing screen, hull hydrostatic panel loads with polygon integration, six-DOF vessel point kinematics | General beam/plate/shell/solid FEM, hull scantlings and global strength, buckling/fatigue/vibration, seakeeping/RAOs, CFD, thermal, electrical, mechanisms, uncertainty and optimization; full cross-domain physics catalogue is now specified but most listed solvers are not implemented |
-| Materials and manufacturing | Partially implemented | Limited hull-material mass/cost/maintenance comparison | Traceable material database, anisotropic composites, process qualification, metal/polymer AM, CNC process planning, tolerances, inspection, validated STEP/STL/3MF/toolpaths/G-code workflows |
+| Physics and engineering solvers | Partially implemented | Shared physics-kernel package with evidence-aware material records, dry-air ideal-gas density and atmospheric-pressure seawater EOS-80 density; plus axial member screening, limited CalculiX axial truss adapter, coefficient-based aero/hydrodynamics, sail polar and apparent wind, catamaran hydrostatics, mass budget, hull material screening, ROV cylindrical pressure-housing screen, hull hydrostatic panel loads with polygon integration, six-DOF vessel point kinematics | General beam/plate/shell/solid FEM, hull scantlings and global strength, buckling/fatigue/vibration, seakeeping/RAOs, CFD, thermal, electrical, mechanisms, uncertainty and optimization; full cross-domain physics catalogue is now specified but most listed solvers are not implemented |
+| Materials and manufacturing | Partially implemented | Limited hull-material mass/cost/maintenance comparison; shared evidence-aware material identity/property records and in-memory registry | Persistent traceable material database, verified grade/product-form datasets, anisotropic composites, process qualification, metal/polymer AM, CNC process planning, tolerances, inspection and validated manufacturing workflows |
 | Electrical and energy systems | Planned | Requirements and architecture are documented | DC/AC network model, 12/24/48 V comparisons, loads/energy balance, battery/BMS, solar/alternators/generator/shore power, cable sizing, voltage drop, protection/selectivity, grounding/bonding, fault analysis and diagrams |
 | Complete yacht / marine engineering | Partially implemented | Parametric hull geometry/CAD, preliminary catamaran hydrostatics, mass budget, sail polar/apparent wind, material screening and hydrostatic pressure load generation | Integrated design of hull structure, crossbeams, foils, rig, propulsion, propellers, rudders, accommodation, tanks/plumbing, deck gear, stability/trim/damage, energy, systems integration and class/design validation |
 | Marine electronics and vessel automation | Planned | High-level requirements for sensors, navigation, communications, local control, remote supervision and fail-safe modes | Equipment/data model, sensor fusion, network architecture, control interfaces, alarm/health model, redundancy, COLREG-aware autonomy and verification |
@@ -33,16 +33,23 @@ This is **not** a wave-response or seakeeping predictor. A measured/prescribed v
 
 ## Immediate next implementation sequence
 
-1. Marine environment properties: seawater temperature/salinity-dependent density with explicit validity range and source equation; then viscosity/conductivity/pressure-depth profiles where validated models are available.
-2. Extend vessel motion from a single prescribed state to timestamped motion series and interpolation with frame/sensor conventions and uncertainty.
-3. Couple motion kinematics to a minimal robot link/joint model and evaluate base motion separately from robot articulation and contact.
-4. Begin electrical subsystem with traceable DC loads, voltage architecture comparison, cable sizing and protection inputs.
-5. Continue hull structural analysis only through validated analytical models and tests; do not label load generation or low-order screening as structural certification.
+1. Extend the shared environment kernel with pressure-aware seawater properties, viscosity/conductivity, humid-air properties and atmospheric/ocean profiles, each with source equations and bounded validity.
+2. Expand the material library with traceable metal, polymer, elastomer, ceramic, coating and composite records; add dataset import/export and property applicability filtering without inventing missing values.
+3. Add shared unit-aware quantities, coordinate frames, geometry primitives and common load/boundary-condition schemas; refactor existing discipline solvers to consume them incrementally.
+4. Extend vessel motion to timestamped motion series and interpolation, then connect the kinematics kernel to a minimal robot link/joint model.
+5. Begin the electrical discipline pack with traceable DC loads, voltage architecture comparison, cable sizing and protection inputs.
+6. Continue hull structural analysis only through validated analytical models and tests; do not label load generation or low-order screening as structural certification.
 
 ## Evidence policy
 
 Only source code with automated tests is counted as implemented. CI success confirms the tested software state, not engineering qualification or physical validation. A solver result marked screening-only is not a design approval, class approval or safe operating limit.
 
+
+## Shared physics kernel foundation (first executable slice)
+
+A shared kernel now lives under src/yj64_engineering_core/physics/kernel. It provides evidence-aware material identity/property records and an in-memory MaterialLibrary, plus dry-air density using the ideal-gas equation and atmospheric-pressure seawater density using UNESCO 1983 EOS-80. Property evidence preserves source, test method, date, temperature, orientation and uncertainty; conflicting evidence is retained rather than silently averaged. The two environment models expose explicit input ranges and assumptions.
+
+This is a first foundation slice, not a complete material database or environmental model. Humidity, pressure-corrected seawater, viscosity, conductivity, material dataset import/export, common geometry/loads and refactoring of existing solvers remain outstanding. See PHYSICS_KERNEL_FOUNDATION.md.
 
 ## Physics scope expansion (architecture delivered; solvers still outstanding)
 
