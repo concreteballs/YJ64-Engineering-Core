@@ -55,3 +55,35 @@ No supplier is considered nearby merely because its country matches. Distance an
 ## Safety and evidence boundary
 
 An inexpensive item is not automatically a valid engineering substitute. The economic engine does not relax material, dimensional, electrical, structural, safety or compatibility requirements. Engineering packs must first identify technically acceptable candidates; economics ranks only those candidates. Unknown costs remain unknown and are not silently set to zero.
+
+
+## First supplier catalog adapter — Mouser Search API
+
+An additive, read-only adapter is implemented in `src/yj64_engineering_core/economics/catalog.py`:
+
+- `MouserSearchAdapter` uses the documented Mouser Search API keyword endpoint and requires an API key supplied by the runtime. Never commit the key to the repository; store it in the deployment secret store and inject it at runtime.
+- The adapter maps Mouser part numbers, product URLs, availability text, stock quantity when the response explicitly states a number, lead time with recognized units, minimum order and price breaks into provenance-bearing `SupplierOffer` records.
+- Price tiers remain separate offers so the economic engine can compare the quantity threshold with the requested BOM quantity. European decimal/thousands separators are normalized. Ambiguous dollar symbols and currency mismatches are rejected rather than guessed.
+- Supplier location, expected currency and tax-inclusion treatment are explicit caller inputs. The adapter does not invent a warehouse address, infer delivery cost, convert currencies, or submit carts/orders. A valid destination shipping quote is still required before a complete landed-cost option can rank.
+- The adapter is tested with a deterministic fake HTTP transport; the tests do not claim that a live Mouser API key or account has been exercised.
+
+Official API information: [Mouser API Hub](https://www.mouser.es/es/api-hub/) and [Search API documentation](https://eu.mouser.com/en/api-search/). Mouser documents product availability and pricing access, API-key registration, and limits of up to 50 results per call, 30 calls per minute and 1,000 calls per day.
+
+## Málaga starter sourcing directory
+
+The following are discovery leads for local physical supply, not verified offers or guaranteed stock:
+
+| Supplier | Relevant channel | Data path in the first release |
+|---|---|---|
+| [Comasur](https://www.comasur.com/) | Industrial supplies; its official company page lists a Málaga branch in Polígono Industrial Guadalhorce | Public catalogue and direct quotation; manual offer capture until a supported data feed/API is confirmed |
+| [Suminsur](https://suminsur.net/) | Industrial hardware and supplies; company describes Málaga and Sevilla locations and an online catalogue | Public storefront and direct quotation; manual offer capture until a supported data feed/API is confirmed |
+| [Obramat Málaga](https://www.obramat.es/almacenes/obramat-malaga.html) | Building and construction materials; Málaga warehouse | Public product/store information and direct quotation; shipping or pickup quote must be captured separately |
+
+These local sources do not yet have an integrated machine-readable supplier API in YJ64. A displayed web price, a branch address, or a product listing is not enough to create a costed procurement option: the item identity, quantity, VAT treatment, current stock, pickup/delivery terms and observation time must be captured. Manual quotation entry is the current safe path for these suppliers.
+
+## Next adapter sequence
+
+1. Add a validated quote-import format for local supplier web listings and written quotations, including source URL/file, observation time, VAT treatment, delivery/pickup and quote validity.
+2. Add separate shipping quote adapters or structured manual capture; supplier catalog price is not a shipping price.
+3. Confirm actual supplier locations and delivery coverage before enabling local-radius ranking.
+4. Add other catalog APIs (for example, electronics distributors) only after their API terms, response currency and stock semantics are verified.
