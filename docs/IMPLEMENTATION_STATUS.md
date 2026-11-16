@@ -153,3 +153,8 @@ Automated tests use a fake transport and do not constitute a live API/account te
 ## Global sourcing location and discovery planner
 
 `economics/discovery.py` introduces `LocationSelection` with map, GPS and manual modes. GPS requires an explicit permission flag; map selection requires coordinates. `SupplierSearchPlanner` expands each selected product/material category into local-radius, domestic, international and China search tasks. The default category list distinguishes chemicals, polymers, metals, composites, electronics, mechanical parts, fasteners, actuators, sensors, cables, ceramics and manufacturing services. Tests validate consent rules and search-plan structure. The graphical map/GPS user interface and live supplier connectors are not yet implemented.
+
+
+## Destination picker UI prototype
+
+A root `index.html` now provides a mobile-friendly map/GPS destination picker. Map clicks select coordinates; GPS is requested only after an explicit button press. The page allows category and market-scope selection (local, domestic, international and China), local-radius configuration, and generation/copying of a versioned JSON discovery request. This is a static request composer only: reverse geocoding, backend submission and live supplier discovery are not yet connected. Country and currency are user-entered. No location is collected on page load and no purchasing is performed.
