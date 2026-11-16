@@ -55,3 +55,9 @@ A magnetorheological change in stiffness is not treated as contraction unless co
 This is a deterministic formulation/evidence screening engine, not a molecular structure generator, reaction predictor, quantum-chemistry engine, molecular-dynamics solver, polymerization simulator or multiphysics material predictor. It does not optimize chemistry or infer synthesis routes. It cannot establish whether a proposed formulation is safe, manufacturable, stable or experimentally real.
 
 The next increments are: explicit condition filtering and unit normalization through the shared quantity registry; candidate formulation authoring helpers; optional structure-file adapters; mechanism-specific chemistry/property adapters; and experiment-data ingestion with uncertainty handling. External scientific tools remain optional adapters and are not installed or claimed integrated.
+
+## Cross-discipline payload
+
+The shared MaterialCandidate contract now carries typed MaterialPropertyDatum and StimulusResponseDatum collections. ChemistryScreeningReport.to_contract_response() populates these fields from the shared material evidence record and the explicit stimulus-response records. The Artificial Muscle Engineering pack can therefore receive the formulation, property values, evidence state, source/test context, field mode, applied field strengths, contraction strain, blocked stress, reversibility and test conditions through the versioned contract instead of receiving only a formulation identifier.
+
+Property evidence state is explicit. Existing shared MaterialPropertyEvidence records default to hypothesis unless the producer explicitly sets predicted, calculated, literature or measured; missing provenance is never upgraded automatically.
