@@ -25,6 +25,9 @@ class FakeConnection:
     def makefile(self, mode, buffering=None):
         return self.input if "r" in mode else self.output
 
+    def sendall(self, data):
+        self.output.write(data)
+
     def close(self):
         pass
 
