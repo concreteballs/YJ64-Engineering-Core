@@ -163,3 +163,8 @@ A root `index.html` now provides a mobile-friendly map/GPS destination picker. M
 ## Agent-authored sourcing interface
 
 `economics/agent.py` defines `AgentSourcingRequest`, `TechnicalRequirement` and `plan_agent_request`. The engineering agent supplies categories/search terms, required quantity/unit, technical property bounds, budget/currency, delivery deadline, local radius and selected market scopes. The destination context comes from the user-selected map/GPS point; GPS requires explicit permission. The authenticated Vercel function `api/discovery.py` exposes `POST /api/discovery`, protected by `YJ64_AGENT_API_TOKEN`, and returns a validated category × market plan. The endpoint is planning-only: it does not run live supplier searches, persist a queue, verify prices/stock, or purchase. `docs/AGENT_SOURCING_API.md` contains the request contract. Tests cover agent control of parameters, budget currency, GPS consent, technical constraints and request parsing.
+
+
+## 1688 marketplace connector checkpoint
+
+`Nexscope1688SearchAdapter` is an optional read-only adapter for 1688 product search through Nexscope. It normalizes listing identity, supplier/shop identity, CNY price, MOQ and quantity-price tiers. It does not invent stock, delivery days, shipping, customs or freshness. The API documentation reports 10–19 credits per call; the adapter requires an API key and explicit `credit_budget_per_call >= 19`. No paid request has been executed. See `ECONOMIC_AND_LOCAL_SOURCING_MODULE.md`.
