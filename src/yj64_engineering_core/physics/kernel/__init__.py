@@ -1,8 +1,4 @@
-"""Shared physical-kernel primitives used by discipline-specific solver packs.
-
-The kernel owns reusable, evidence-aware material and environment data. It does
-not contain application-specific design rules or solver assumptions.
-"""
+"""Shared physical-kernel primitives used by discipline-specific solver packs."""
 
 from .environment import (
     AirDensityResult,
@@ -11,9 +7,16 @@ from .environment import (
     seawater_density_eos80_kg_m3,
 )
 from .materials import MaterialLibrary, MaterialPropertyEvidence, MaterialRecord
+from .quantities import (
+    DEFAULT_UNIT_REGISTRY,
+    Quantity,
+    UnitDefinition,
+    UnitRegistry,
+)
 
 __all__ = [
-    "AirDensityResult", "MaterialLibrary", "MaterialPropertyEvidence",
-    "MaterialRecord", "SeawaterDensityResult",
+    "AirDensityResult", "DEFAULT_UNIT_REGISTRY", "MaterialLibrary",
+    "MaterialPropertyEvidence", "MaterialRecord", "Quantity",
+    "SeawaterDensityResult", "UnitDefinition", "UnitRegistry",
     "dry_air_density_ideal_kg_m3", "seawater_density_eos80_kg_m3",
 ]
