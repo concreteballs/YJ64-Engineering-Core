@@ -11,8 +11,8 @@ import re
 from typing import Mapping
 
 from .quantities import (
-    DEFAULT_UNIT_REGISTRY, DIMENSIONLESS, LENGTH, MASS, TIME, TEMPERATURE,
-    FORCE, PRESSURE, Quantity, UnitRegistry,
+    DEFAULT_UNIT_REGISTRY, LENGTH, MASS, TIME, TEMPERATURE, FORCE, PRESSURE,
+    Quantity, UnitRegistry,
 )
 
 
@@ -85,27 +85,32 @@ class UnitDisplayPreferences:
 SI_PROFILE = UnitSystemProfile(
     "si", "International System (SI)",
     {LENGTH: "m", MASS: "kg", TIME: "s", TEMPERATURE: "K",
-     FORCE: "N", PRESSURE: "Pa"},
+     FORCE: "N", PRESSURE: "Pa", (0, 2, 0, 0, 0, 0, 0): "m2",
+     (0, 3, 0, 0, 0, 0, 0): "m3", (0, 1, -1, 0, 0, 0, 0): "m/s"},
 )
 METRIC_ENGINEERING_PROFILE = UnitSystemProfile(
     "metric_engineering", "Metric engineering",
     {LENGTH: "mm", MASS: "kg", TIME: "s", TEMPERATURE: "degC",
-     FORCE: "N", PRESSURE: "MPa"},
+     FORCE: "N", PRESSURE: "MPa", (0, 2, 0, 0, 0, 0, 0): "mm2",
+     (0, 3, 0, 0, 0, 0, 0): "L", (0, 1, -1, 0, 0, 0, 0): "m/s"},
 )
 US_CUSTOMARY_PROFILE = UnitSystemProfile(
     "us_customary", "US customary",
     {LENGTH: "in", MASS: "lb", TIME: "s", TEMPERATURE: "degF",
-     FORCE: "lbf", PRESSURE: "psi"},
+     FORCE: "lbf", PRESSURE: "psi", (0, 2, 0, 0, 0, 0, 0): "in2",
+     (0, 3, 0, 0, 0, 0, 0): "US_gal", (0, 1, -1, 0, 0, 0, 0): "ft/s"},
 )
 EUROPEAN_METRIC_PROFILE = UnitSystemProfile(
     "european_metric", "European metric",
     {LENGTH: "mm", MASS: "kg", TIME: "s", TEMPERATURE: "degC",
-     FORCE: "N", PRESSURE: "bar"},
+     FORCE: "N", PRESSURE: "bar", (0, 2, 0, 0, 0, 0, 0): "mm2",
+     (0, 3, 0, 0, 0, 0, 0): "L", (0, 1, -1, 0, 0, 0, 0): "m/s"},
 )
 MARINE_HYBRID_PROFILE = UnitSystemProfile(
     "marine_hybrid", "Marine hybrid",
     {LENGTH: "m", MASS: "kg", TIME: "s", TEMPERATURE: "degC",
-     FORCE: "N", PRESSURE: "bar"},
+     FORCE: "N", PRESSURE: "bar", (0, 2, 0, 0, 0, 0, 0): "m2",
+     (0, 3, 0, 0, 0, 0, 0): "L", (0, 1, -1, 0, 0, 0, 0): "m/s"},
 )
 
 BUILTIN_UNIT_PROFILES = {
@@ -150,6 +155,7 @@ def parse_voice_unit_command(transcript: str) -> VoiceUnitCommand:
     if not match:
         raise ValueError("could not understand unit conversion command")
     source_text, target_text = match.group(1).strip(), match.group(2).strip()
+    field_key = match.group(3).strip().replace(" ", ".") if match.group(3) else None
     source = _UNIT_ALIASES.get(source_text)
     target = _UNIT_ALIASES.get(target_text)
     if source is None or target is None:
@@ -158,7 +164,7 @@ def parse_voice_unit_command(transcript: str) -> VoiceUnitCommand:
     dst_def = DEFAULT_UNIT_REGISTRY.get(target)
     if src_def.dimension != dst_def.dimension:
         raise ValueError("source and target units have incompatible dimensions")
-    return VoiceUnitCommand(source, target)
+    return VoiceUnitCommand(source, target, field_key)
 
 
 def convert_by_voice(quantity: Quantity, command: VoiceUnitCommand) -> Quantity:
