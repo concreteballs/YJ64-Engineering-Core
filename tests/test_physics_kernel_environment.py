@@ -19,7 +19,7 @@ class EnvironmentKernelTests(unittest.TestCase):
 
     def test_pure_water_reference_state(self):
         result = seawater_density_eos80_kg_m3(15.0, 0.0)
-        self.assertAlmostEqual(result.density_kg_m3, 999.1026, places=3)
+        self.assertAlmostEqual(result.density_kg_m3, 999.1016, places=3)
 
     def test_rejects_out_of_range_inputs(self):
         with self.assertRaisesRegex(ValueError, "0..40"):
