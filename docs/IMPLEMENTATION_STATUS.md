@@ -140,7 +140,7 @@ Next: add condition-aware evidence selection and shared-registry unit normalizat
 
 **Implemented prototype:** `yj64_engineering_core.economics` defines destination/supplier locations, supplier offers, shipping quotes, BOM lines, assembly costs and a bounded economic comparison engine. It compares buying a finished item with assembling from supplied part offers, groups one shipping charge per supplier, estimates tax only for prices explicitly marked tax-exclusive, and ranks by total landed cost. Currency mismatches, unavailable stock and missing delivery quotes are not silently accepted. The first version uses caller-supplied commercial data; it does not discover suppliers or verify live prices.
 
-**Implemented prototype:** `economics/discovery.py` adds a user-selected destination contract for map, GPS (explicit permission required) or manual entry, a configurable local search radius, a category taxonomy (chemicals, polymers, metals, composites, electronics, mechanical parts and related groups), and a planner that emits separate local, domestic, worldwide and China search tasks. Automated tests cover the selection and task-planning contracts. This is not yet a graphical map/GPS app flow or a live multi-market supplier crawler; the tasks still need provider-specific connectors. See `ECONOMIC_AND_LOCAL_SOURCING_MODULE.md`.
+**Implemented prototype:** `economics/discovery.py` provides map/GPS/manual destination contracts and category-specific local, domestic, international and China search planning. `index.html` is now deliberately user-only: the user selects only the delivery point and copies its coordinate context. The user does not set engineering or procurement criteria.
 
 
 ## Supplier catalog integration checkpoint
@@ -157,4 +157,9 @@ Automated tests use a fake transport and do not constitute a live API/account te
 
 ## Destination picker UI prototype
 
-A root `index.html` now provides a mobile-friendly map/GPS destination picker. Map clicks select coordinates; GPS is requested only after an explicit button press. The page allows category and market-scope selection (local, domestic, international and China), local-radius configuration, and generation/copying of a versioned JSON discovery request. This is a static request composer only: reverse geocoding, backend submission and live supplier discovery are not yet connected. Country and currency are user-entered. No location is collected on page load and no purchasing is performed.
+A root `index.html` now provides a mobile-friendly map/GPS destination picker. Map clicks select coordinates; GPS is requested only after an explicit button press. The page now lets the user select a map point or explicitly request GPS and copy only a versioned destination context. Categories, search terms, technical limits, quantities, budget, delivery deadline and market scopes are agent-authored. The map page does not collect location on load.
+
+
+## Agent-authored sourcing interface
+
+`economics/agent.py` defines `AgentSourcingRequest`, `TechnicalRequirement` and `plan_agent_request`. The engineering agent supplies categories/search terms, required quantity/unit, technical property bounds, budget/currency, delivery deadline, local radius and selected market scopes. The destination context comes from the user-selected map/GPS point; GPS requires explicit permission. The authenticated Vercel function `api/discovery.py` exposes `POST /api/discovery`, protected by `YJ64_AGENT_API_TOKEN`, and returns a validated category × market plan. The endpoint is planning-only: it does not run live supplier searches, persist a queue, verify prices/stock, or purchase. `docs/AGENT_SOURCING_API.md` contains the request contract. Tests cover agent control of parameters, budget currency, GPS consent, technical constraints and request parsing.
