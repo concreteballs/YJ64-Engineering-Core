@@ -11,10 +11,16 @@ import hmac
 import json
 import os
 import re
+import sys
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 from urllib.parse import urlparse
 
-from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
+PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(PROJECT_SRC) not in sys.path:
+    sys.path.insert(0, str(PROJECT_SRC))
+
+from yj64_engineering_core.automation.postgres_store import PostgresCycleStore  # noqa: E402
 
 
 EXPECTED_REPOSITORY = "concreteballs/YJ64-Engineering-Core"
@@ -37,15 +43,16 @@ class handler(BaseHTTPRequestHandler):
         if urlparse(self.path).path != "/api":
             self._send_json(404, {"ok": False, "error": "not_found"})
             return
+        configured = bool(
+            os.environ.get("YJ64_DATABASE_URL") or os.environ.get("DATABASE_URL")
+        )
         self._send_json(
             200,
             {
                 "ok": True,
                 "service": "yj64-ci-webhook-ingress",
-                "mode": "postgres_persistent_queue",
-                "persistence_configured": bool(
-                    os.environ.get("YJ64_DATABASE_URL") or os.environ.get("DATABASE_URL")
-                ),
+                "mode": "postgres_persistent_queue" if configured else "not_configured",
+                "persistence_configured": configured,
             },
         )
 
@@ -116,10 +123,14 @@ class handler(BaseHTTPRequestHandler):
         ):
             self._send_json(422, {"ok": False, "error": "invalid_commit_sha"})
             return
-        if payload["conclusion"] not in {
+        valid_conclusions = {
             "success", "failure", "cancelled", "timed_out",
             "action_required", "neutral", "skipped", "stale",
-        }:
+        }
+        if (
+            not isinstance(payload["conclusion"], str)
+            or payload["conclusion"] not in valid_conclusions
+        ):
             self._send_json(422, {"ok": False, "error": "invalid_conclusion"})
             return
         run_url = payload["run_url"]
