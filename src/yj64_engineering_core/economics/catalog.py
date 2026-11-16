@@ -175,8 +175,22 @@ class MouserSearchAdapter:
             if stock_match:
                 stock_quantity = float(stock_match.group(1).replace(",", ""))
             lead_text = str(part.get("LeadTime") or "").strip()
-            lead_match = re.search(r"(\d+(?:\.\d+)?)", lead_text)
-            lead_days = float(lead_match.group(1)) if lead_match else None
+            lead_match = re.search(
+                r"(\d+(?:\.\d+)?)\s*(day|week|month|hour)s?",
+                lead_text,
+                re.IGNORECASE,
+            )
+            lead_days = None
+            if lead_match:
+                value = float(lead_match.group(1))
+                unit = lead_match.group(2).lower()
+                lead_days = value * {
+                    "hour": 1 / 24, "day": 1, "week": 7, "month": 30
+                }[unit]
+            elif lead_text:
+                warnings.append(
+                    f"{product_id}: lead time unit is unknown ('{lead_text}'); omitted"
+                )
             detail_url = str(part.get("ProductDetailUrl") or "").strip() or None
             description = str(part.get("Description") or product_id).strip()
             manufacturer = str(part.get("Manufacturer") or "").strip()
