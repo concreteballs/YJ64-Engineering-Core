@@ -12,10 +12,15 @@ API = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(API)
 
 
+class NonClosingBytesIO(io.BytesIO):
+    def close(self):
+        self.flush()
+
+
 class FakeConnection:
     def __init__(self, request_bytes):
         self.input = io.BytesIO(request_bytes)
-        self.output = io.BytesIO()
+        self.output = NonClosingBytesIO()
 
     def makefile(self, mode, buffering=None):
         return self.input if "r" in mode else self.output
