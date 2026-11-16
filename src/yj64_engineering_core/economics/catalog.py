@@ -112,13 +112,15 @@ class MouserSearchAdapter:
         currency: str,
         limit: int = 50,
         in_stock_only: bool = True,
-        tax_included: bool = False,
+        tax_included: bool,
     ) -> CatalogSearchResult:
         for value, name in ((keyword, "keyword"), (item_id, "item_id"), (currency, "currency")):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
         if not isinstance(tax_included, bool):
             raise TypeError("tax_included must be boolean")
+        if not isinstance(in_stock_only, bool):
+            raise TypeError("in_stock_only must be boolean")
         if len(currency) != 3 or currency != supplier_location.currency:
             raise ValueError("currency must be an ISO-4217 code matching supplier location currency")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 50:
@@ -163,12 +165,16 @@ class MouserSearchAdapter:
             if not parsed_breaks:
                 continue
             parsed_breaks.sort(key=lambda entry: (entry[0], entry[1]))
-            minimum_order = part.get("Min") or part.get("Moq") or 1
-            try:
-                minimum_order = float(minimum_order)
-            except (TypeError, ValueError):
+            raw_minimum_order = part.get("Min") or part.get("Moq")
+            if raw_minimum_order is None:
                 minimum_order = 1.0
-                warnings.append(f"{product_id}: MOQ unavailable; provisional minimum of 1 used")
+                warnings.append(f"{product_id}: MOQ not supplied; provisional minimum of 1 used")
+            else:
+                try:
+                    minimum_order = float(raw_minimum_order)
+                except (TypeError, ValueError):
+                    minimum_order = 1.0
+                    warnings.append(f"{product_id}: MOQ is invalid; provisional minimum of 1 used")
             availability = str(part.get("Availability") or "").strip()
             stock_quantity = None
             stock_match = re.search(r"(\d[\d,]*)\s+in stock", availability, re.IGNORECASE)
