@@ -229,3 +229,211 @@ class MouserSearchAdapter:
             warnings=tuple(warnings),
             observed_at=observed_at,
         )
+
+
+class Nexscope1688SearchAdapter:
+    """Read-only 1688 product-search adapter through Nexscope's paid API.
+
+    This is an optional connector. Each call consumes Nexscope credits. It
+    returns catalogue offers only; it does not verify stock, import charges or
+    shipping to the destination, and it never places orders.
+    """
+
+    supplier_id = "1688"
+    supplier_name = "1688 marketplace"
+    endpoint = "https://api.nexscope.ai/dl/productSearch"
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        timeout_seconds: float = 25.0,
+        post_json: Callable[[str, dict, dict, float], dict] | None = None,
+    ) -> None:
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValueError("Nexscope API key is required")
+        if isinstance(timeout_seconds, bool) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        self._api_key = api_key.strip()
+        self._timeout = float(timeout_seconds)
+        self._post_json = post_json or self._default_post_json
+
+    @staticmethod
+    def _default_post_json(url: str, payload: dict, headers: dict, timeout: float) -> dict:
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                **headers,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    @staticmethod
+    def _currency(value: object) -> str:
+        raw = str(value or "").strip().upper()
+        if raw in {"¥", "CN¥", "RMB", "CNY"}:
+            return "CNY"
+        if re.fullmatch(r"[A-Z]{3}", raw):
+            return raw
+        raise ValueError("1688 result has no unambiguous ISO currency")
+
+    @staticmethod
+    def _quantity_tiers(raw: object, base_moq: float, fallback_price: object):
+        tiers: list[tuple[float, float]] = []
+        if isinstance(raw, str) and raw.strip():
+            try:
+                entries = json.loads(raw)
+            except json.JSONDecodeError:
+                entries = []
+            if isinstance(entries, list):
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    quantity_text = str(entry.get("quantity") or "")
+                    quantity_match = re.search(r"\d+(?:\.\d+)?", quantity_text.replace(",", ""))
+                    try:
+                        minimum = float(quantity_match.group(0)) if quantity_match else base_moq
+                        price = float(entry.get("value"))
+                    except (TypeError, ValueError):
+                        continue
+                    if minimum > 0 and price >= 0:
+                        tiers.append((max(base_moq, minimum), price))
+        if not tiers:
+            try:
+                price = float(fallback_price)
+            except (TypeError, ValueError):
+                return []
+            if price < 0:
+                return []
+            tiers.append((base_moq, price))
+        return sorted(set(tiers), key=lambda pair: (pair[0], pair[1]))
+
+    def search(
+        self,
+        keyword: str,
+        *,
+        item_id: str,
+        tax_included: bool,
+        page_index: int = 1,
+        page_size: int = 20,
+        company_type: int | None = None,
+    ) -> CatalogSearchResult:
+        for value, name in ((keyword, "keyword"), (item_id, "item_id")):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(tax_included, bool):
+            raise TypeError("tax_included must be explicitly set to boolean")
+        if isinstance(page_index, bool) or not isinstance(page_index, int) or page_index < 1:
+            raise ValueError("page_index must be a positive integer")
+        if isinstance(page_size, bool) or not isinstance(page_size, int) or not 10 <= page_size <= 100:
+            raise ValueError("page_size must be between 10 and 100")
+        if company_type is not None and company_type not in {0, 1, 2}:
+            raise ValueError("company_type must be 0 (any), 1 (shop) or 2 (factory)")
+        payload = {
+            "keyWord": keyword.strip(),
+            "pageIndex": page_index,
+            "pageSize": page_size,
+            "searchType": 1,
+            "sortField": "price",
+            "sortType": "asc",
+        }
+        if company_type is not None:
+            payload["companyType"] = company_type
+        response = self._post_json(
+            self.endpoint,
+            payload,
+            {"Authorization": f"Bearer {self._api_key}"},
+            self._timeout,
+        )
+        if not isinstance(response, dict):
+            raise ValueError("Nexscope response must be a JSON object")
+        if response.get("code") != 0:
+            raise RuntimeError(
+                f"Nexscope 1688 search failed with code {response.get('code')}: "
+                f"{response.get('msg') or 'no message'}"
+            )
+        data = response.get("data") or {}
+        products = data.get("products") or []
+        if not isinstance(products, list):
+            raise ValueError("Nexscope response data.products must be a list")
+        observed_at = str(response.get("time") or datetime.now(timezone.utc).isoformat())
+        offers: list[SupplierOffer] = []
+        product_ids: list[str] = []
+        warnings: list[str] = []
+        for index, product in enumerate(products):
+            if not isinstance(product, dict):
+                warnings.append(f"Result {index + 1}: product record is not an object; skipped")
+                continue
+            product_id = str(product.get("offerId") or product.get("asin") or "").strip()
+            if not product_id:
+                warnings.append(f"Result {index + 1}: missing 1688 offer ID; skipped")
+                continue
+            product_ids.append(product_id)
+            try:
+                currency = self._currency(product.get("currency"))
+                base_moq = float(product.get("quantityBegin") or 1)
+                if base_moq <= 0:
+                    raise ValueError("minimum batch size must be positive")
+                tiers = self._quantity_tiers(
+                    product.get("quantityPrices"), base_moq, product.get("price")
+                )
+                if not tiers:
+                    raise ValueError("no usable wholesale price or quantity price tiers")
+            except (TypeError, ValueError) as exc:
+                warnings.append(f"{product_id}: skipped ({exc})")
+                continue
+            company = str(product.get("company") or "").strip()
+            shop_id = str(product.get("shopId") or "").strip()
+            supplier_name = company or shop_id or f"1688 seller {product_id}"
+            supplier_id = f"1688:shop:{shop_id}" if shop_id else f"1688:company:{company}" if company else f"1688:offer:{product_id}"
+            supplier_location = EconomicLocation(
+                location_id=supplier_id,
+                name=supplier_name,
+                country_code="CN",
+                currency=currency,
+            )
+            unit = str(product.get("unit") or "").strip()
+            if not unit:
+                warnings.append(f"{product_id}: unit not supplied; provisional unit 'piece' used")
+                unit = "piece"
+            source_uri = str(product.get("asinUrl") or "").strip() or None
+            if not source_uri and product_id.isdigit():
+                source_uri = f"https://detail.1688.com/offer/{product_id}.html"
+            if product.get("deliveryTime"):
+                warnings.append(
+                    f"{product_id}: marketplace deliveryTime '{product.get('deliveryTime')}' "
+                    "has no documented unit; not converted to days"
+                )
+            warnings.append(
+                f"{product_id}: 1688 search does not provide verified live stock or destination "
+                "shipping/customs; obtain separate supplier and freight confirmation."
+            )
+            for tier_index, (minimum_quantity, unit_price) in enumerate(tiers):
+                offers.append(SupplierOffer(
+                    offer_id=f"1688:{product_id}:tier:{tier_index + 1}",
+                    item_id=item_id,
+                    supplier_id=supplier_id,
+                    supplier_name=supplier_name,
+                    supplier_location=supplier_location,
+                    unit_price=unit_price,
+                    currency=currency,
+                    unit=unit,
+                    stock_quantity=None,
+                    minimum_order_quantity=minimum_quantity,
+                    lead_time_days=None,
+                    tax_included=tax_included,
+                    source_uri=source_uri,
+                    observed_at=observed_at,
+                ))
+        return CatalogSearchResult(
+            offers=tuple(offers),
+            supplier_product_ids=tuple(product_ids),
+            warnings=tuple(warnings),
+            observed_at=observed_at,
+        )
