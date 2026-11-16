@@ -70,7 +70,7 @@ Glossaries can be shared across projects, but project-specific overrides must be
 - Treat unit symbols as invariant technical tokens by default; localize explanatory names separately. Locale decimal formatting is a rendering choice, not a change to stored values.
 - Record source units, target units, conversion rule/registry version and rounding policy in exported artifacts.
 
-The kernel now includes common SI/metric/US customary named units, built-in SI, metric engineering, European metric, US customary and marine-hybrid display profiles, field-level unit overrides, document unit-policy choices, explicit voice-command intent parsing and a nominal-size designation type. It still does not provide a complete standards catalogue, automatic NPS/DN conversion tables, arbitrary compound-unit parsing, speech recognition, UI prompts, locale-aware rendering or document-wide conversion.
+The kernel now includes common SI/metric/US customary named units, built-in SI, metric engineering, European metric, US customary, UK imperial and marine-hybrid display profiles, field-level unit overrides, document unit-policy choices, explicit voice-command intent parsing and a nominal-size designation type. It still does not provide a complete standards catalogue, automatic NPS/DN conversion tables, arbitrary compound-unit parsing, speech recognition, UI prompts, locale-aware rendering or document-wide conversion.
 
 ## Unit-system selection at document import
 
@@ -79,7 +79,7 @@ When a technical document is imported or translated, the workflow must explicitl
 - preserve all source units and designations;
 - apply SI;
 - apply metric engineering / European metric;
-- apply US customary;
+- apply US customary;\n- apply UK imperial;
 - apply the marine hybrid profile;
 - use a project or user-defined profile.
 
