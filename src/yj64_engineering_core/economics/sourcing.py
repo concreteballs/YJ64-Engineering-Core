@@ -225,11 +225,9 @@ class EconomicScreeningEngine:
             if issue:
                 warnings.append(issue)
                 continue
-            if offer.stock_quantity is not None and offer.stock_quantity < request.quantity:
-                warnings.append(f"{offer.offer_id}: insufficient stock for requested quantity")
-                continue
-            if offer.minimum_order_quantity > request.quantity:
-                warnings.append(f"{offer.offer_id}: quantity is below supplier minimum order")
+            order_quantity = max(request.quantity, offer.minimum_order_quantity)
+            if offer.stock_quantity is not None and offer.stock_quantity < order_quantity:
+                warnings.append(f"{offer.offer_id}: insufficient stock for required order quantity {order_quantity}")
                 continue
             quote = self._quote_for(offer.supplier_id, request.destination.location_id, shipping_quotes)
             if quote is None:
@@ -242,7 +240,7 @@ class EconomicScreeningEngine:
             if quote.maximum_shipment_mass_kg is not None and mass > quote.maximum_shipment_mass_kg:
                 warnings.append(f"{offer.offer_id}: shipment exceeds quoted mass capacity")
                 continue
-            items = offer.unit_price * request.quantity
+            items = offer.unit_price * order_quantity
             tax = 0.0 if offer.tax_included else items * request.tax_rate_fraction
             shipping = quote.cost
             lead = max(offer.lead_time_days or 0.0, quote.delivery_days)
@@ -253,7 +251,13 @@ class EconomicScreeningEngine:
                 total_landed_cost=items + tax + shipping, supplier_ids=(offer.supplier_id,),
                 supplier_names=(offer.supplier_name,), delivery_days_estimate=lead,
                 source_uris=tuple(x for x in (offer.source_uri, quote.source_uri) if x),
-                warnings=("Supplier price/tax treatment and shipping quote are supplied inputs, not live-verified market data.",),
+                warnings=(
+                    "Supplier price/tax treatment and shipping quote are supplied inputs, not live-verified market data.",
+                    *(
+                        (f"Minimum order requires purchasing {order_quantity} units; {order_quantity - request.quantity} are surplus.")
+                        if order_quantity > request.quantity else ()
+                    ),
+                ),
             ))
 
         if bill_of_materials:
@@ -269,9 +273,8 @@ class EconomicScreeningEngine:
                         warnings.append(issue)
                         continue
                     required = line.quantity * request.quantity
-                    if offer.stock_quantity is not None and offer.stock_quantity < required:
-                        continue
-                    if offer.minimum_order_quantity > required:
+                    order_quantity = max(required, offer.minimum_order_quantity)
+                    if offer.stock_quantity is not None and offer.stock_quantity < order_quantity:
                         continue
                     line_offers.append(offer)
                 if not line_offers:
@@ -308,10 +311,11 @@ class EconomicScreeningEngine:
                         sources: list[str] = []
                         for line, offer in zip(bill_of_materials, selected):
                             required = line.quantity * request.quantity
-                            item_cost += required * offer.unit_price
+                            order_quantity = max(required, offer.minimum_order_quantity)
+                            item_cost += order_quantity * offer.unit_price
                             if not offer.tax_included:
-                                tax += required * offer.unit_price * request.tax_rate_fraction
-                            supplier_mass[offer.supplier_id] = supplier_mass.get(offer.supplier_id, 0.0) + required * line.mass_per_unit_kg
+                                tax += order_quantity * offer.unit_price * request.tax_rate_fraction
+                            supplier_mass[offer.supplier_id] = supplier_mass.get(offer.supplier_id, 0.0) + order_quantity * line.mass_per_unit_kg
                             if offer.lead_time_days is not None:
                                 lead_days.append(offer.lead_time_days)
                             if offer.source_uri:
@@ -340,7 +344,14 @@ class EconomicScreeningEngine:
                             supplier_ids=supplier_ids, supplier_names=supplier_names,
                             delivery_days_estimate=max(lead_days) if lead_days else None,
                             source_uris=tuple(dict.fromkeys(sources)),
-                            warnings=("BOM and assembly inputs are caller-supplied; verify compatibility, tooling, labour and taxes.",),
+                            warnings=(
+                                "BOM and assembly inputs are caller-supplied; verify compatibility, tooling, labour and taxes.",
+                                *tuple(
+                                    f"{line.item_id}: supplier minimum order creates {max(line.quantity * request.quantity, offer.minimum_order_quantity) - line.quantity * request.quantity} surplus units"
+                                    for line, offer in zip(bill_of_materials, selected)
+                                    if offer.minimum_order_quantity > line.quantity * request.quantity
+                                ),
+                            ),
                         ))
 
         options.sort(key=lambda item: (item.total_landed_cost, item.delivery_days_estimate or float("inf"), item.option_id))
