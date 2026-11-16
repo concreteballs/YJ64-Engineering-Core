@@ -48,6 +48,11 @@ class AgentSourcingContractTests(unittest.TestCase):
         request = self.make_request(location_mode=LocationSelectionMode.GPS, gps_permission_granted=True)
         self.assertEqual(request.location_mode, LocationSelectionMode.GPS)
 
+    def test_local_scope_requires_destination_coordinates(self):
+        destination = EconomicLocation("remote", "Unknown", "ES", "EUR")
+        with self.assertRaises(ValueError):
+            self.make_request(destination=destination)
+
     def test_technical_requirement_needs_bound(self):
         with self.assertRaises(ValueError):
             TechnicalRequirement("strength", "MPa")
