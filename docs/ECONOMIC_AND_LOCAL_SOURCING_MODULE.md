@@ -104,4 +104,11 @@ China is not automatically excluded for distance. It is compared as a separate s
 
 The repository root now contains `index.html`, a mobile-friendly static destination-selection page. It provides an OpenStreetMap/Leaflet map click picker and an explicit GPS button; the browser location prompt is requested only after the user presses that button. It lets the user choose sourcing categories and local/domestic/international/China market scopes, set a local radius, and generate/copy a versioned JSON discovery request. No GPS location is collected automatically and no purchase action is enabled.
 
-The page is a request composer, not yet a connected supplier-search dashboard: it does not submit the request to a search backend, perform reverse geocoding, or fetch live supplier prices. Country ISO code and destination currency are currently entered by the user. The Python planner and this page share the same intended categories and market scopes; wiring the page to a backend and adding supplier connectors are the next integration steps.
+The page is deliberately limited to destination selection. It outputs only coordinates and selection provenance; it does not ask the user to choose categories, budget, technical limits or search markets. Those parameters belong to the engineering agent.
+
+
+## Agent-authored sourcing contract and API
+
+The engineering agent owns sourcing decisions. `economics/agent.py` accepts an agent ID and task description plus agent-authored category labels/search terms, market scopes, required quantity and unit, typed technical property bounds, maximum total budget and currency, local search radius and maximum delivery time. Budget currency must match the destination currency; explicit FX conversion is required before comparison. Local-radius searches require destination coordinates. GPS origin is accepted only with an explicit permission flag.
+
+The Vercel function `api/discovery.py` exposes authenticated `POST /api/discovery`. Configure `YJ64_AGENT_API_TOKEN` in Vercel Environment Variables; do not put it in browser code or commit it. The endpoint validates the JSON schema and returns a typed category × market plan. It is currently planning-only: it does not query suppliers, store a durable job, or place orders. See [AGENT_SOURCING_API.md](AGENT_SOURCING_API.md) for the full contract and example. The destination page outputs only the location context for the agent; it no longer asks the user to set procurement parameters.
