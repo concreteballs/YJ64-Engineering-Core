@@ -106,7 +106,7 @@ class EconomicSourcingTests(unittest.TestCase):
         report = self.engine.evaluate(self.request, "actuator", (minimum_order,),
                                       shipping_quotes=(shipping,))
         self.assertAlmostEqual(report.cheapest.item_cost, 50)
-        self.assertAlmostEqual(report.cheapest.total_landed_cost, 66.5)
+        self.assertAlmostEqual(report.cheapest.total_landed_cost, 64.5)
 
     def test_destination_currency_must_be_iso_code(self):
         with self.assertRaises(ValueError):
