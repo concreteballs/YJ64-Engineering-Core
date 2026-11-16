@@ -1,3 +1,5 @@
+import math
+import shutil
 import tempfile
 import unittest
 
@@ -100,8 +102,6 @@ class TypedCalculiXAdapterTests(unittest.TestCase):
         self.assertIsNone(fake.request)
 
     def test_rejects_wrong_tip_application_point(self):
-        frames = CoordinateFrameRegistry()
-        frames.add(CoordinateFrame("world"))
         request = make_request()
         load = AppliedLoad(
             load_id="load.tip",
@@ -114,7 +114,7 @@ class TypedCalculiXAdapterTests(unittest.TestCase):
         request = TypedSolverRequest(
             request_id=request.request_id,
             operation=request.operation,
-            frame_registry=frames,
+            frame_registry=request.frame_registry,
             loads=(load,),
             boundary_conditions=request.boundary_conditions,
             quantities=request.quantities,
@@ -125,6 +125,28 @@ class TypedCalculiXAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "application point"):
                 adapter.solve(request)
         self.assertIsNone(fake.request)
+
+
+@unittest.skipUnless(shutil.which("ccx"), "CalculiX executable is not installed")
+class TypedCalculiXRealIntegrationTests(unittest.TestCase):
+    def test_typed_request_runs_real_calculix_and_matches_analytical_solution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = TypedCalculiXAxialTrussSolver(directory, timeout_seconds=30)
+            dispatcher = TypedSolverDispatcher()
+            dispatcher.register(adapter)
+            response = dispatcher.dispatch(make_request())
+
+        force_n = 100.0 * 4.4482216152605
+        expected_displacement_m = force_n * 2.0 / (0.001 * 200e9)
+        self.assertEqual(response.status, "completed")
+        self.assertTrue(response.values["external_solver_version"])
+        self.assertAlmostEqual(
+            response.values["tip_displacement_z_m"],
+            expected_displacement_m,
+            delta=expected_displacement_m * 1e-5,
+        )
+        self.assertEqual(response.units["tip_displacement_z_m"], "m")
+        self.assertEqual(len(response.input_digest_sha256), 64)
 
 
 if __name__ == "__main__":
