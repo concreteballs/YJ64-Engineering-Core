@@ -178,13 +178,13 @@ def parse_voice_unit_command(transcript: str) -> VoiceUnitCommand:
     """Parse explicit 'convert X to Y' / 'переведи X в Y' speech transcripts."""
     normalized = " ".join(transcript.lower().strip().replace("ё", "е").split())
     patterns = (
-        r"(?:переведи|перевести|измени|преобразуй)\s+(.+?)\s+(?:в|на)\s+(.+?)(?:\s+для\s+(.+))?",
-        r"(?:convert|change)\s+(.+?)\s+(?:to|into)\s+(.+?)(?:\s+for\s+(.+))?",
+        r"^(?:переведи|перевести|измени|преобразуй)\s+(.+?)\s+(?:в|на)\s+(.+?)(?:\s+для\s+(.+))?$",
+        r"^(?:convert|change)\s+(.+?)\s+(?:to|into)\s+(.+?)(?:\s+for\s+(.+))?$",
     )
     match = next((re.search(pattern, normalized) for pattern in patterns if re.search(pattern, normalized)), None)
     if not match:
         raise ValueError("could not understand unit conversion command")
-    source_text, target_text = match.group(1).strip(), match.group(2).strip()
+    source_text, target_text = match.group(1).strip(" .,!?:;"), match.group(2).strip(" .,!?:;")
     field_key = match.group(3).strip().replace(" ", ".") if match.group(3) else None
     source = _UNIT_ALIASES.get(source_text)
     target = _UNIT_ALIASES.get(target_text)
