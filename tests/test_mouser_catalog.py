@@ -38,7 +38,7 @@ class MouserAdapterTests(unittest.TestCase):
     def test_maps_search_results_to_supplier_offers(self):
         result = self.adapter.search(
             "STM32", item_id="controller", supplier_location=self.location,
-            currency="EUR",
+            currency="EUR", tax_included=False,
         )
         self.assertEqual(len(result.offers), 2)
         self.assertEqual(result.offers[0].item_id, "controller")
@@ -52,7 +52,7 @@ class MouserAdapterTests(unittest.TestCase):
     def test_uses_read_only_keyword_search_and_caps_limit(self):
         self.adapter.search(
             "motor driver", item_id="driver", supplier_location=self.location,
-            currency="EUR", limit=25,
+            currency="EUR", limit=25, tax_included=False,
         )
         url, payload, timeout = self.calls[0]
         self.assertIn("/api/v1/search/keyword?", url)
@@ -75,14 +75,14 @@ class MouserAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.adapter.search(
                 "STM32", item_id="controller", supplier_location=self.location,
-                currency="USD",
+                currency="USD", tax_included=False,
             )
 
     def test_rejects_invalid_limit(self):
         with self.assertRaises(ValueError):
             self.adapter.search(
                 "STM32", item_id="controller", supplier_location=self.location,
-                currency="EUR", limit=51,
+                currency="EUR", limit=51, tax_included=False,
             )
 
 
