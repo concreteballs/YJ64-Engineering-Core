@@ -34,7 +34,7 @@ def make_candidate(*, mode="electric", evidence_state="measured", reversible=Tru
         material_id="material-001",
         name="Test formulation",
         family="polymer_composite",
-        properties=tuple(properties or (
+        properties=tuple((
             MaterialPropertyEvidence(
                 property_name="density",
                 value=1200.0,
@@ -43,7 +43,7 @@ def make_candidate(*, mode="electric", evidence_state="measured", reversible=Tru
                 source="test dataset",
                 evidence_state="measured",
             ),
-        )),
+        ) if properties is None else properties),
     )
     response = StimulusResponseEvidence(
         mode=mode,
