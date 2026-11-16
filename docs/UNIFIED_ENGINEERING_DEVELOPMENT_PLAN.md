@@ -31,6 +31,10 @@ YJ64 remains independent:
 
 No external tool owns or silently changes canonical YJ64 project state. Native tool files may be retained as source artifacts, with explicit import/export mappings and recorded fidelity limitations.
 
+## 2A. Cross-cutting capability — multilingual engineering workspace
+
+Internationalization, technical-document translation and localized unit presentation are platform-wide capabilities, not yacht-specific features. Their requirements and staged design are defined in MULTILINGUAL_ENGINEERING_WORKSPACE.md. The project model must preserve language-independent engineering data and source documents while allowing user-selected interface/document languages and display-unit profiles. Translation must never silently alter numeric values, symbols, equations, identifiers, standard references or engineering meaning. Unit conversion is dimension-checked and independent from language translation.
+
 ## 3. Delivery principles
 
 1. Build common foundations once.
@@ -68,7 +72,7 @@ Related subtasks should be designed, implemented and tested together as coherent
 ### Package 1 — Universal kernel, project model and extension contracts
 
 Build together:
-- unit-aware physical quantities, dimension checking and extensible unit registry;
+- unit-aware physical quantities, dimension checking and extensible unit registry, with locale-independent canonical values and user/project display-unit profiles;\n- localization foundations: language-neutral identifiers and schemas, interface/document locale metadata, terminology/glossary contracts, and safe technical-document translation workflows;
 - coordinate frames, handedness conventions, transforms and frame-compatibility validation;
 - reusable geometry primitives, stable references and geometric validation;
 - typed loads, boundary conditions, operating states and environmental references;
