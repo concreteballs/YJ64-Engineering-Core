@@ -61,3 +61,16 @@ The candidate shortlist and required review gates are maintained in EXTERNAL_ENG
 Automated tests verify software behaviour. Reference benchmarks verify numerical implementation. Experimental comparisons support physical validation. Independent engineering review, qualification and certification are separate levels. No prototype or screening result is a design approval or safe operating limit.
 
 A model update retains old versions, exact provenance, test evidence and applicability limits. New experimental data never silently overwrites a released model.
+
+
+## Latest verified CI checkpoint
+
+Commit `69daf7b106e3b3d5e09796ee3c9f8b248a676740` (`fix: exclude source text from document metadata`) completed GitHub Actions run [43893156103](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43893156103) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
+
+## Document intake prototype
+
+The first source-document intake adapter is implemented and tested for UTF-8 Markdown/plain text. It retains immutable raw bytes, SHA-256 identity, language metadata and stable heading/paragraph/table/code segment spans. Extracted segment text is available as source content but is excluded from metadata serialization. PDF, DOCX, OCR, translation and reviewed export remain planned.
+
+## Package 1 execution boundary
+
+The following are implemented foundations and must not be recreated: unit/quantity registry and display profiles; explicit voice-unit intent parsing; nominal-size designation type; coordinate-frame tree and rigid transforms; validated geometry primitives; typed loads and boundary conditions. Their connection to solver-specific mesh/entity mappings, persistent project/artifact/provenance storage, plugin capability manifests and complete user-facing localization/voice/document workflows remains open.
