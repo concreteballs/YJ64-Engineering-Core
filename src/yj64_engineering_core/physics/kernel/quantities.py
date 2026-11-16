@@ -96,6 +96,7 @@ def _build_default_registry() -> UnitRegistry:
         UnitDefinition("L", (0, 3, 0, 0, 0, 0, 0), 1e-3),
         UnitDefinition("ft3", (0, 3, 0, 0, 0, 0, 0), 0.028316846592),
         UnitDefinition("US_gal", (0, 3, 0, 0, 0, 0, 0), 0.003785411784),
+        UnitDefinition("Imp_gal", (0, 3, 0, 0, 0, 0, 0), 0.00454609),
         UnitDefinition("s", TIME),
         UnitDefinition("min", TIME, 60.0),
         UnitDefinition("h", TIME, 3600.0),
