@@ -271,3 +271,8 @@ Software tests verify implementation behaviour. Reference benchmarks verify nume
 LaTeX-based mathematical notation, equation rendering, semantic expression contracts, dimensional validation and replaceable symbolic/numerical backends are platform-wide capabilities. Their architecture, candidate technologies, safety boundaries and acceptance criteria are defined in MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md.
 
 LaTeX is the primary human-readable notation, not the calculation engine. Rendering, parsing, semantic representation and computation remain separate layers. MathJax is the initial rendering candidate; SymPy is the initial symbolic-backend candidate subject to release/licence/API review and a bounded benchmark. The existing Quantity/unit system must participate in dimensional validation. No symbolic result is accepted as physically validated solely because it was rendered or computed.
+
+
+### Mathematical formalization and proof-assistant ecosystem
+
+The mathematical workspace includes a multi-prover formal verification layer. Lean 4 + Mathlib is the first pilot candidate, while the architecture permits independent adapters for Rocq/Coq, Isabelle/HOL, Agda, Metamath, HOL Light, HOL4, PVS and ACL2. SAT/SMT engines such as Z3 and cvc5 are a separate optional category. The common contract preserves each prover's logic, assumptions, axioms, libraries, native proof artifacts and trusted checker; it must never imply that a formal proof validates physical assumptions or real-world performance. See MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md.

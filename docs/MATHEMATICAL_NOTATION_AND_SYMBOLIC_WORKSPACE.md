@@ -17,6 +17,48 @@ Keep four responsibilities distinct:
 
 LaTeX, MathML, the semantic expression model and solver-native representations are related but not interchangeable. MathML may be used as an interchange/rendering representation where useful; retain the original LaTeX and the semantic model separately.
 
+## Formal proof assistants and theorem-prover ecosystem
+
+Formal mathematical proof is separate from formula rendering and computer algebra. YJ64 must provide a common, versioned integration contract for multiple proof assistants and automated reasoning engines rather than hard-coding one prover.
+
+### Proof-assistant candidates
+
+- **Lean 4 + Mathlib** — first candidate for the initial formal-mathematics pilot; interactive theorem proving, dependent type theory, extensive mathematical library and a small proof-checking kernel.
+- **Rocq (formerly Coq)** — proof assistant based on the Calculus of Inductive Constructions; retain awareness of legacy Coq naming in projects and package metadata.
+- **Isabelle/HOL** — higher-order-logic theorem proving and a mature mathematical library ecosystem.
+- **Agda** — dependently typed programming and constructive formalization.
+- **Metamath** — compact formal proof language and independently checkable proof corpus.
+- **HOL Light and HOL4** — theorem-proving systems based on higher-order logic.
+- **PVS** — specification and verification environment with a rich type system and proof support.
+- **ACL2** — logic and theorem-proving environment with support for executable models and verification.
+
+This is an extensible candidate list, not a claim that every system is integrated or that their logical foundations are interchangeable.
+
+### Adjacent automated reasoning engines
+
+Keep automated theorem provers, SAT/SMT solvers and computer-algebra systems as distinct adapter categories. Evaluate candidates such as Z3 and cvc5 for bounded proof obligations and constraint solving. Their output must not be mislabeled as a proof checked by a proof assistant's trusted kernel unless a verifiable proof certificate is produced and checked by an explicitly trusted checker.
+
+### Common YJ64 proof integration contract
+
+Each adapter declares engine identity and exact version/build; formal foundation and supported theories; input language and translation limitations; imported libraries and revisions; dependencies and licences; axioms, assumptions, hypotheses and admitted goals/placeholders; proof/checker result and diagnostics; resource limits and reproducibility metadata; proof artifact/certificate and validating checker/kernel; links to source equation/specification revisions, engineering model, variables, units, coordinate frames and provenance.
+
+A result distinguishes: not attempted; translation failed; proof search incomplete/timeout; counterexample or failed obligation; proof term generated; proof checked by the named kernel; externally certified result; and engineering validation still outstanding.
+
+Never merge distinct logics or silently translate between them. Cross-prover exchange requires explicit, reviewable translations or independently checkable certificates, with assumptions and lost semantics reported. Preserve original source and native proof artifacts.
+
+### Engineering use cases and trust limits
+
+Formal proof assistants can verify mathematical lemmas, algebraic identities, invariants, bounds, control/software properties, selected model properties and proof obligations generated from engineering specifications. They do not automatically prove that a physical model matches reality, that measurements are accurate, or that a manufactured object is safe. Physical validity still requires model applicability review, numerical verification, experiments and engineering qualification.
+
+### Integration sequence additions
+
+- Define a prover-neutral proof-obligation and result schema with explicit logic/foundation metadata.
+- Implement Lean 4 as the first bounded pilot; do not make it mandatory for the core.
+- Add adapter conformance tests and evaluate Rocq/Coq, Isabelle/HOL, Agda, Metamath, HOL Light/HOL4, PVS and ACL2 as independent integrations.
+- Add optional SAT/SMT adapters as a separate category, including certificate-checking rules.
+- Test negative cases: missing assumptions, untrusted axioms, admitted goals/placeholders, timeouts, failed translation, mismatched units and stale source revisions must never be reported as proved.
+- Preserve native artifacts and allow multiple engines to independently check related obligations.
+
 ## Core capabilities
 
 - Render equations consistently in project views, technical documents, reports, calculation sheets, logs and generated documentation.
@@ -46,6 +88,9 @@ LaTeX, MathML, the semantic expression model and solver-native representations a
 
 - **MathJax 4:** preferred initial browser-rendering candidate for TeX/LaTeX, MathML and AsciiMath. It is a display engine, not a CAS. Its TeX input implements a supported subset rather than the complete LaTeX distribution; define and test the supported macro profile.
 - **SymPy:** preferred first candidate for a Python symbolic mathematics adapter. Evaluate exact supported release, licence/dependencies, parsing boundary, operation coverage, performance and reproducibility before adoption. Keep it behind an adapter so other engines can be added or substituted.
+- **Lean 4 + Mathlib:** preferred first proof-assistant pilot candidate, not an exclusive platform dependency.
+- **Rocq/Coq, Isabelle/HOL, Agda, Metamath, HOL Light, HOL4, PVS and ACL2:** extensible proof-assistant evaluation catalogue; each requires its own adapter and conformance review.
+- **Z3, cvc5 and related SAT/SMT engines:** optional automated-reasoning adapters, separate from proof assistants; proof claims require certificate validation by a trusted checker.
 - **MathML:** optional structured interchange/rendering format. Do not treat presentation-oriented MathML as a complete semantic engineering model.
 - **NumPy/SciPy and specialist solvers:** remain candidates for numerical computation where appropriate; symbolic algebra should not be forced into numerical workloads or vice versa.
 
@@ -65,7 +110,8 @@ Official references:
 5. **Symbolic adapter pilot:** evaluate and, if approved, connect SymPy for a narrow set of deterministic operations with isolated execution, resource limits and structured diagnostics.
 6. **Numerical hand-off:** route numerical problems to appropriate numerical or discipline-specific solvers through existing solver contracts; record solver configuration and evidence.
 7. **Engineering integration:** connect equations to discipline models, reports, project revisions, source documents and traceable calculation results.
-8. **Expanded notation and domain packs:** add specialist notation/macros only with tests and documented support; preserve portability and graceful fallback when a renderer lacks a macro.
+8. **Proof-assistant framework:** define a prover-neutral proof-obligation/result contract; pilot Lean 4; then add independently versioned adapters for other proof assistants and SAT/SMT engines after conformance, trust and reproducibility checks.
+9. **Expanded notation and domain packs:** add specialist notation/macros only with tests and documented support; preserve portability and graceful fallback when a renderer lacks a macro.
 
 ## Acceptance criteria
 
@@ -80,4 +126,4 @@ Official references:
 
 ## Current status
 
-Planned architectural capability. This document defines the target and candidate technologies; it does not claim that MathJax, a LaTeX parser, a symbolic engine or a mathematical editor is already integrated into YJ64.
+Planned architectural capability. This document defines the target and candidate technologies; it does not claim that MathJax, a LaTeX parser, a symbolic engine, a proof assistant adapter or a mathematical editor is already integrated into YJ64.

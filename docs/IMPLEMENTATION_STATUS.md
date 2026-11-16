@@ -79,3 +79,8 @@ The following are implemented foundations and must not be recreated: unit/quanti
 ## Mathematical notation and symbolic workspace status
 
 **Planned — not yet integrated.** The target architecture is specified in MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md. LaTeX is selected as the primary human-readable mathematical notation. MathJax is the initial browser-rendering candidate; SymPy is the initial symbolic-computation candidate, both subject to exact-release, licence/dependency, API and benchmark review. The semantic expression contract, dimensional validation against the existing Quantity/unit registry, rendering adapter, parser and symbolic/numerical adapters are not yet implemented. Rendering, parsing, dimensional validity, mathematical correctness and physical validation must remain separate evidence states.
+
+
+## Formal proof and theorem-prover ecosystem status
+
+**Planned — no proof assistant or SAT/SMT adapter is currently claimed as integrated.** Lean 4 + Mathlib is the first pilot candidate. The target compatibility catalogue includes Rocq/Coq, Isabelle/HOL, Agda, Metamath, HOL Light, HOL4, PVS and ACL2, with Z3/cvc5 and similar automated reasoning tools treated separately. The prover-neutral proof-obligation/result contract, native artifact preservation, axiom/assumption audit, proof-certificate validation and adapter conformance tests remain unimplemented. A checked mathematical proof does not establish physical model validity or engineering qualification.
