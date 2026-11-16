@@ -2,53 +2,68 @@
 
 ## Current implementation
 
-The repository has an optional GitHub Actions completion webhook:
+The repository has:
+- .github/workflows/tests.yml — Python/FEM/CAD test workflow.
+- .github/workflows/notify-ci-completion.yml — completion-event sender for pushes to main.
+- api/index.py — authenticated Vercel ingress for GitHub Actions completion events.
+- migrations/0001_autonomous_cycle.sql — PostgreSQL schema for durable CI events and queued tasks.
+- src/yj64_engineering_core/automation/postgres_store.py — idempotent event persistence, queue insertion, leased task claiming, bounded retry, completion and blocking primitives.
 
-- Workflow: `.github/workflows/notify-ci-completion.yml`
-- Trigger: completion of the `Python tests` workflow.
-- Scope: pushes to `main` only.
-- Payload: repository, workflow/run identifiers, attempt, conclusion, commit SHA, branch, and run URL.
-- Authentication: HTTPS POST with a bearer token stored as a GitHub Actions secret.
-- If secrets are absent, the workflow reports a notice and exits without failing the engineering CI.
+The ingress validates repository, branch, workflow, event type, run identity, commit SHA, conclusion and run URL. It then stores the event in PostgreSQL and creates one process_ci_event task. A uniqueness constraint on repository + run_id + run_attempt deduplicates webhook retries.
+
+The queue supports atomic claims with FOR UPDATE SKIP LOCKED, worker leases, retry limits, completion and blocked states. This is a software foundation; it is not yet a deployed autonomous worker.
 
 ## GitHub configuration
 
 Add these repository Actions secrets under Settings -> Secrets and variables -> Actions:
+- YJ64_CI_WEBHOOK_URL: canonical HTTPS Vercel production endpoint, currently intended to be https://yj-64-engineering-core-kakq.vercel.app/api.
+- YJ64_CI_WEBHOOK_SECRET: high-entropy random secret shared with the Vercel receiver.
 
-- `YJ64_CI_WEBHOOK_URL`: HTTPS endpoint of the user's chosen receiver.
-- `YJ64_CI_WEBHOOK_SECRET`: high-entropy random secret shared with that receiver.
+Never put either value in source files, workflow YAML, issues, logs or chat messages.
 
-Never put either value in source files, workflow YAML, issues, or chat messages.
+## Vercel configuration
 
-The receiver must:
-1. Accept HTTPS POST requests.
-2. Validate the bearer secret using constant-time comparison.
-3. Validate the repository name, branch, event type, and payload schema.
-4. Deduplicate by repository + run_id + run_attempt.
-5. Treat all payload fields as untrusted data.
-6. Record the result and notify the configured destination.
-7. Never execute repository code or grant write access merely because a webhook arrived.
+The Vercel deployment needs:
+- YJ64_CI_WEBHOOK_SECRET: same value as the GitHub Actions secret.
+- YJ64_DATABASE_URL: PostgreSQL connection string for the dedicated YJ64 database.
 
-## Important ChatGPT conversation limitation
+Do not expose the database URL to browser/client code. Use a server-side secret and a provider-supported pooled connection string where appropriate.
 
-A GitHub webhook can notify an external receiver, start a separate agent, or send a message to an external destination. It cannot, by itself, resume this exact ChatGPT conversation.
+The SQL migration in migrations/0001_autonomous_cycle.sql must be applied once to the database before the receiver can persist events. The API intentionally returns a configuration/service error if the database or schema is unavailable; it does not silently downgrade to an in-memory queue.
 
-Resuming this conversation requires a supported ChatGPT background-task/event integration that can deliver a model-visible notification to the parent conversation. The internal conversation notification capability is not a public webhook URL and must not be guessed, copied into GitHub secrets, or exposed as a credential.
+## Receiver behaviour
 
-Therefore the repository workflow is the event-emitter foundation, not a claim that automatic continuation inside this chat is already active. A receiver-to-ChatGPT bridge must be connected through a supported product integration before the end-to-end loop can be considered operational.
+- GET /api reports service identity and whether a database URL is configured; it does not reveal secrets.
+- POST /api requires the bearer secret, validates the event and persists it.
+- A successful response is HTTP 202 and reports whether the event was a duplicate and whether a processing task was enqueued.
+- Duplicate webhook deliveries do not create duplicate CI events or duplicate processing tasks.
+- The endpoint does not run model inference, execute repository code, modify GitHub or resume this ChatGPT conversation.
 
 ## Safe development loop
 
 1. GitHub Actions reports completion.
-2. Receiver verifies and deduplicates the event.
-3. The result is made available to the authorized engineering agent.
-4. The agent checks the commit, complete job results, logs on failure, and the current plan.
-5. On success, it selects the next incomplete plan step.
-6. On failure, it diagnoses and proposes/fixes only within the authorized repository and branch.
+2. The receiver authenticates, validates, deduplicates and persists the event.
+3. A durable queue task becomes available to a cloud worker.
+4. The worker checks the exact commit, workflow result, job summaries and failure logs.
+5. On success, it selects the next incomplete roadmap task.
+6. On failure, it diagnoses and permits only bounded repair attempts.
 7. Every code change triggers CI again.
-8. Stop on ambiguous requirements, destructive changes, permission requests, security-sensitive changes, or a failure that cannot be safely diagnosed.
-9. Preserve the plan history and record commit/run references; never claim success without a completed successful run.
+8. Stop on ambiguous requirements, destructive changes, permission requests, paid external calls, purchases, physical actuation or safety-critical decisions.
+9. Preserve task history and record commit/run references; never claim success without a completed successful run.
 
-## Current activation status
+## Remaining activation and worker work
 
-The GitHub workflow is committed, but webhook delivery remains inactive until both repository secrets are configured and a receiver endpoint is deployed. Automatic wake-up of this exact ChatGPT conversation is not yet configured.
+Not yet complete:
+- Apply the PostgreSQL migration to a real database.
+- Configure and verify the GitHub and Vercel secrets without exposing their values.
+- Verify the production deployment and test an authenticated webhook end to end.
+- Deploy a separate cloud worker that claims queue tasks, reads the roadmap, checks CI details and advances tasks.
+- Configure a model provider through server-side secrets and bounded budgets.
+- Add worker scheduling/wakeup, pause/resume/kill switch, monitoring and external notifications.
+- Demonstrate that the worker continues after the user's phone is offline and recovers after restart.
+
+## Important ChatGPT conversation limitation
+
+A GitHub webhook can notify an external receiver or start a separate cloud agent. It cannot, by itself, resume this exact ChatGPT conversation. A supported ChatGPT background-task/event integration must be connected before automatic continuation inside this chat can be claimed.
+
+The system is therefore currently a partially implemented cloud-cycle foundation, not a fully autonomous loop.
