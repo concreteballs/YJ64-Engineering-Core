@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>YJ64 — место снабжения</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background:#0b1220; color:#eef2ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:16px; max-width:900px; margin-inline:auto; }
+    h1 { font-size:1.35rem; margin:.2rem 0 .5rem; }
+    p, .hint { color:#aab7ce; line-height:1.45; }
+    section { background:#131e30; border:1px solid #26364e; border-radius:14px; padding:14px; margin:12px 0; }
+    button, input { font:inherit; }
+    button { border:0; border-radius:10px; padding:12px 14px; background:#2563eb; color:white; font-weight:650; cursor:pointer; }
+    button.secondary { background:#334155; }
+    button:disabled { opacity:.5; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .row > * { flex:1; }
+    #map { height:340px; border-radius:12px; overflow:hidden; background:#26364e; }
+    label { display:block; margin:9px 0 5px; color:#dbeafe; }
+    input[type=text], input[type=number] { width:100%; padding:11px; border-radius:9px; border:1px solid #42536c; background:#0b1220; color:#fff; }
+    .categories { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:8px; }
+    .categories label { display:flex; gap:8px; align-items:flex-start; margin:3px 0; color:#e2e8f0; }
+    .market { display:flex; gap:12px; flex-wrap:wrap; }
+    .market label { margin:4px 0; }
+    pre { white-space:pre-wrap; overflow-wrap:anywhere; background:#080e18; padding:12px; border-radius:10px; max-height:300px; overflow:auto; }
+    .status { font-size:.95rem; color:#cbd5e1; }
+    .small { font-size:.82rem; color:#94a3b8; }
+    @media(max-width:520px){ body{padding:10px} #map{height:300px} }
+  </style>
+</head>
+<body>
+  <h1>YJ64 — выбор места снабжения</h1>
+  <p>Укажи точку, куда должны доставлять материалы и детали. Поиск будет разделён на местный, внутренний, международный и китайский рынки.</p>
+
+  <section>
+    <h2>1. Место назначения</h2>
+    <div class="row">
+      <button id="gps" type="button">Определить по GPS</button>
+      <button id="clear" class="secondary" type="button">Сбросить точку</button>
+    </div>
+    <p class="hint">Или коснись карты, чтобы поставить метку вручную. GPS не запрашивается автоматически — только после нажатия кнопки.</p>
+    <div id="map" role="application" aria-label="Карта выбора места доставки"></div>
+    <div class="status" id="locationStatus" aria-live="polite">Точка ещё не выбрана.</div>
+    <div class="row">
+      <div><label for="placeName">Название места / мастерской</label><input id="placeName" type="text" placeholder="Например, мастерская"></div>
+      <div><label for="country">Код страны (ISO-2)</label><input id="country" type="text" maxlength="2" placeholder="Например, ES"></div>
+      <div><label for="currency">Валюта назначения (ISO-4217)</label><input id="currency" type="text" maxlength="3" placeholder="Например, EUR"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Что ищем</h2>
+    <div class="categories" id="categories">
+      <label><input type="checkbox" value="chemicals" checked> Химические вещества и реагенты</label>
+      <label><input type="checkbox" value="polymers" checked> Полимеры, эластомеры, смолы</label>
+      <label><input type="checkbox" value="metals" checked> Металлы и сплавы</label>
+      <label><input type="checkbox" value="composites" checked> Композиты и волокна</label>
+      <label><input type="checkbox" value="electronics" checked> Электронные компоненты</label>
+      <label><input type="checkbox" value="mechanical_parts" checked> Механические детали</label>
+      <label><input type="checkbox" value="fasteners" checked> Крепёж и метизы</label>
+      <label><input type="checkbox" value="motors_actuators" checked> Моторы и актуаторы</label>
+      <label><input type="checkbox" value="sensors_control" checked> Датчики и управление</label>
+      <label><input type="checkbox" value="cables_power" checked> Кабели и электрика</label>
+      <label><input type="checkbox" value="ceramics_thermal" checked> Керамика и теплоизоляция</label>
+      <label><input type="checkbox" value="manufacturing" checked> Производственные услуги и оборудование</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. География поиска</h2>
+    <div class="market">
+      <label><input type="checkbox" value="local" checked> Рядом с точкой</label>
+      <label><input type="checkbox" value="domestic" checked> По всей стране</label>
+      <label><input type="checkbox" value="international" checked> Международный рынок</label>
+      <label><input type="checkbox" value="china" checked> Китайские поставщики</label>
+    </div>
+    <label for="radius">Радиус местного поиска, км</label>
+    <input id="radius" type="number" min="1" max="5000" value="150">
+    <p class="small">Китайский поиск выполняется отдельно, а не отсекается из-за расстояния. Сравнивается полная стоимость доставки с налогами и таможней.</p>
+  </section>
+
+  <section>
+    <h2>4. Запрос на поиск</h2>
+    <button id="build" type="button">Сформировать план поиска</button>
+    <button id="copy" class="secondary" type="button" disabled>Скопировать JSON</button>
+    <p class="status" id="planStatus" aria-live="polite">Сначала выбери место назначения и категории.</p>
+    <pre id="output" aria-label="Сформированный запрос">{}</pre>
+    <p class="small">Это пока интерфейс выбора места и формирования задания. Он не утверждает, что поставщики уже найдены или цены проверены: для этого должны быть подключены поисковые адаптеры соответствующих площадок.</p>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    (function () {
+      const map = L.map('map').setView([20, 0], 2);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      let marker = null;
+      let coords = null;
+      let mode = null;
+      let latestJson = '';
+
+      const status = document.getElementById('locationStatus');
+      const setPoint = (lat, lon, source) => {
+        coords = { latitude: Number(lat), longitude: Number(lon) };
+        mode = source;
+        if (marker) marker.remove();
+        marker = L.marker([coords.latitude, coords.longitude]).addTo(map);
+        map.setView([coords.latitude, coords.longitude], 12);
+        status.textContent = (source === 'gps' ? 'GPS: ' : 'Карта: ') +
+          coords.latitude.toFixed(6) + ', ' + coords.longitude.toFixed(6);
+      };
+
+      map.on('click', event => setPoint(event.latlng.lat, event.latlng.lng, 'map'));
+
+      document.getElementById('gps').addEventListener('click', () => {
+        if (!navigator.geolocation) {
+          status.textContent = 'Геолокация не поддерживается этим браузером.';
+          return;
+        }
+        status.textContent = 'Ожидаю разрешение GPS…';
+        navigator.geolocation.getCurrentPosition(
+          position => setPoint(position.coords.latitude, position.coords.longitude, 'gps'),
+          error => {
+            const messages = {
+              1: 'Доступ к GPS запрещён. Можно выбрать точку на карте.',
+              2: 'Координаты сейчас недоступны. Попробуй выбрать точку на карте.',
+              3: 'Истекло время ожидания GPS. Попробуй ещё раз.'
+            };
+            status.textContent = messages[error.code] || 'Не удалось получить координаты.';
+          },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+        );
+      });
+
+      document.getElementById('clear').addEventListener('click', () => {
+        if (marker) marker.remove();
+        marker = null; coords = null; mode = null;
+        status.textContent = 'Точка сброшена.';
+      });
+
+      document.getElementById('build').addEventListener('click', () => {
+        if (!coords) { status.textContent = 'Сначала выбери точку на карте или нажми GPS.'; return; }
+        const country = document.getElementById('country').value.trim().toUpperCase();
+        const currency = document.getElementById('currency').value.trim().toUpperCase();
+        const name = document.getElementById('placeName').value.trim();
+        const radius = Number(document.getElementById('radius').value);
+        if (!/^[A-Z]{2}$/.test(country) || !/^[A-Z]{3}$/.test(currency)) {
+          document.getElementById('planStatus').textContent = 'Укажи корректные ISO-код страны (2 буквы) и валюты (3 буквы).';
+          return;
+        }
+        if (!Number.isFinite(radius) || radius < 1 || radius > 5000) {
+          document.getElementById('planStatus').textContent = 'Радиус должен быть от 1 до 5000 км.';
+          return;
+        }
+        const categories = Array.from(document.querySelectorAll('#categories input:checked')).map(x => x.value);
+        const markets = Array.from(document.querySelectorAll('.market input:checked')).map(x => x.value);
+        if (!categories.length || !markets.length) {
+          document.getElementById('planStatus').textContent = 'Выбери хотя бы одну категорию и один рынок.';
+          return;
+        }
+        const payload = {
+          schema: 'yj64.supplier-discovery-request.v1',
+          destination: {
+            name: name || 'Selected destination',
+            selection_mode: mode,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            country_code: country,
+            currency: currency
+          },
+          categories: categories,
+          market_scopes: markets,
+          local_radius_km: radius,
+          comparison: {
+            objective: 'minimum_technically_acceptable_landed_cost',
+            include_shipping: true,
+            include_tax: true,
+            include_customs_for_imports: true,
+            require_source_and_observation_timestamp: true,
+            do_not_assume_missing_cost_is_zero: true
+          },
+          purchasing_enabled: false
+        };
+        latestJson = JSON.stringify(payload, null, 2);
+        document.getElementById('output').textContent = latestJson;
+        document.getElementById('copy').disabled = false;
+        document.getElementById('planStatus').textContent =
+          'План создан: ' + categories.length + ' категорий × ' + markets.length + ' рынков = ' +
+          (categories.length * markets.length) + ' поисковых задач.';
+      });
+
+      document.getElementById('copy').addEventListener('click', async () => {
+        if (!latestJson) return;
+        try {
+          await navigator.clipboard.writeText(latestJson);
+          document.getElementById('planStatus').textContent = 'JSON скопирован.';
+        } catch (_) {
+          document.getElementById('planStatus').textContent = 'Копирование недоступно. Выдели и скопируй JSON вручную.';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
