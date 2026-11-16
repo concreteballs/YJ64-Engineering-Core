@@ -7,7 +7,10 @@ The physics platform is one shared kernel with independently versioned disciplin
 Current shared-kernel foundations:
 - **Material evidence library:** material identity plus multiple traceable property records. A property datum retains SI value/unit, test method, source, source date, temperature, orientation/product direction and uncertainty.
 - **Environmental property models:** dry-air density from the ideal-gas equation and atmospheric-pressure seawater density from UNESCO 1983 EOS-80.
-- **Physical quantities and unit registry:** finite numeric quantities, seven-base-dimension SI exponent vectors, explicit named-unit conversions, offset temperature conversion and an extensible registry.
+- **Physical quantities and unit registry:** finite numeric quantities, seven-base-dimension SI exponent vectors, explicit named-unit conversions, offset temperature conversion and an extensible registry. Force, moment and pressure dimensions are exposed for typed engineering conditions.
+- **Coordinate frames:** a single-root frame tree, right-handed orthonormal rigid transforms, point/vector mapping, inverse transforms and frame-to-frame composition.
+- **Geometry primitives:** frame-aware points/vectors, segments, planes, axis-aligned bounding boxes, spheres and cylinders with finite-value, degeneracy and frame-consistency validation.
+- **Loads and boundary conditions:** force/moment vectors and fixed, displacement, rotation, pressure and temperature conditions with unit-dimension and frame checks. These are input contracts, not a structural or multiphysics solver.
 
 The library does not invent missing properties, average incompatible test results, infer a material grade from a generic family, or silently select a direction/temperature. Solvers must request evidence appropriate to their own model and operating conditions.
 
@@ -15,7 +18,10 @@ The library does not invent missing properties, average incompatible test result
 
 - `physics/kernel/materials.py`: material identities, property evidence and in-memory library.
 - `physics/kernel/environment.py`: shared air and seawater density models.
-- `physics/kernel/quantities.py`: `Quantity`, `UnitDefinition`, `UnitRegistry` and `DEFAULT_UNIT_REGISTRY`.
+- `physics/kernel/quantities.py`: `Quantity`, `UnitDefinition`, `UnitRegistry`, physical dimension constants and `DEFAULT_UNIT_REGISTRY`.
+- `physics/kernel/coordinate_frames.py`: `CoordinateFrame`, `CoordinateFrameRegistry` and `RigidTransform`.
+- `physics/kernel/geometry.py`: reusable frame-aware geometry primitives.
+- `physics/kernel/conditions.py`: `AppliedLoad` and `BoundaryCondition` contracts.
 - `physics/<discipline>.py`: specialist solver packs that consume shared kernel data.
 
 The initial material registry is in-memory, not yet a persistent database or an automatically populated commercial-material catalogue. The quantity registry uses explicit named units; arbitrary unit-expression parsing and quantity algebra are not implemented.
@@ -31,7 +37,7 @@ Conversion is allowed only between units with identical dimension vectors. Unkno
 
 The registry can be extended by application or discipline packages. Any extension must use unambiguous symbols and correct dimension/scale/offset definitions. Persisted project schemas must eventually pin the registry/schema version used by each artifact.
 
-## Environmental models and limits
+## Coordinate, geometry and load model limits\n\nCoordinate frames form a single-root tree. Each child pose maps local coordinates into its parent using a proper right-handed orthonormal rotation and metre translation. Arbitrary affine transforms, scale, reflection, deformable frames and moving-frame time histories are not implemented. Geometry primitives are basic validated references, not a CAD topology kernel or mesh representation. Loads and boundary conditions validate target identifiers, frames, unit dimensions and component counts; they are not automatically mapped onto mesh entities and do not establish solver-specific sign conventions.\n\n## Environmental models and limits
 
 ### Dry air
 
