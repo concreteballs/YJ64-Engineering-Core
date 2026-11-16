@@ -151,6 +151,7 @@ class EconomicRequest:
     tax_rate_fraction: float = 0.0
     assembly: AssemblyCost = AssemblyCost()
     maximum_combinations: int = 4096
+    maximum_supplier_distance_km: float | None = None
 
     def __post_init__(self) -> None:
         _text(self.request_id, "request_id")
@@ -160,6 +161,8 @@ class EconomicRequest:
             raise ValueError("tax_rate_fraction must be between 0 and 1")
         if isinstance(self.maximum_combinations, bool) or not isinstance(self.maximum_combinations, int) or self.maximum_combinations < 1:
             raise ValueError("maximum_combinations must be a positive integer")
+        if self.maximum_supplier_distance_km is not None:
+            _number(self.maximum_supplier_distance_km, "maximum_supplier_distance_km")
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +246,14 @@ class EconomicScreeningEngine:
             if issue:
                 warnings.append(issue)
                 continue
+            distance = _distance_km(offer.supplier_location, request.destination)
+            if request.maximum_supplier_distance_km is not None:
+                if distance is None:
+                    warnings.append(f"{offer.offer_id}: supplier distance cannot be checked without coordinates")
+                    continue
+                if distance > request.maximum_supplier_distance_km:
+                    warnings.append(f"{offer.offer_id}: supplier is {distance:.1f} km away, outside requested radius")
+                    continue
             order_quantity = max(request.quantity, offer.minimum_order_quantity)
             if offer.stock_quantity is not None and offer.stock_quantity < order_quantity:
                 warnings.append(f"{offer.offer_id}: insufficient stock for required order quantity {order_quantity}")
@@ -296,6 +307,14 @@ class EconomicScreeningEngine:
                     if issue:
                         warnings.append(issue)
                         continue
+                    distance = _distance_km(offer.supplier_location, request.destination)
+                    if request.maximum_supplier_distance_km is not None:
+                        if distance is None:
+                            warnings.append(f"{offer.offer_id}: supplier distance cannot be checked without coordinates")
+                            continue
+                        if distance > request.maximum_supplier_distance_km:
+                            warnings.append(f"{offer.offer_id}: supplier is {distance:.1f} km away, outside requested radius")
+                            continue
                     required = line.quantity * request.quantity
                     order_quantity = max(required, offer.minimum_order_quantity)
                     if offer.stock_quantity is not None and offer.stock_quantity < order_quantity:
