@@ -133,3 +133,5 @@ The first adapter CI attempt exposed a package-level circular import caused by e
 `tests/test_chemistry_screening.py` covers successful screening, rejected limits, missing evidence, hybrid-mode separation, unit mismatch, hypothesis labelling and contract conversion. This is not a molecular generator, reaction predictor, synthesis planner, polymerization simulator or quantum/molecular-dynamics solver. No external scientific adapter is claimed integrated. See `CHEMISTRY_MODULE_IMPLEMENTATION.md`.
 
 Next: add condition-aware evidence selection and shared-registry unit normalization, formulation authoring helpers, structure-file adapters and experiment-data intake before selecting scientific solver integrations.
+
+**Cross-pack payload extension.** The shared MaterialCandidate contract now transports typed property evidence and electric/magnetic/hybrid stimulus-response evidence. Property records retain explicit evidence state, source, method, temperature and uncertainty. Chemistry screening converts its candidate records into this enriched response so the Artificial Muscle Engineering pack can consume actual evidence rather than only a material identifier.
