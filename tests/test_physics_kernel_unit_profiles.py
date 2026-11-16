@@ -3,7 +3,7 @@ import unittest
 from yj64_engineering_core.physics.kernel.quantities import Quantity
 from yj64_engineering_core.physics.kernel.unit_profiles import (
     BUILTIN_UNIT_PROFILES, DocumentUnitPolicy, UnitDisplayPreferences,
-    US_CUSTOMARY_PROFILE, MARINE_HYBRID_PROFILE, NominalSizeDesignation,
+    US_CUSTOMARY_PROFILE, UK_IMPERIAL_PROFILE, MARINE_HYBRID_PROFILE, NominalSizeDesignation,
     parse_voice_unit_command, convert_by_voice,
 )
 
@@ -12,6 +12,8 @@ class UnitProfileTests(unittest.TestCase):
     def test_builtin_profiles_exist(self):
         self.assertIn("us_customary", BUILTIN_UNIT_PROFILES)
         self.assertIn("european_metric", BUILTIN_UNIT_PROFILES)
+        self.assertIn("uk_imperial", BUILTIN_UNIT_PROFILES)
+        self.assertEqual(UK_IMPERIAL_PROFILE.defaults[(0, 3, 0, 0, 0, 0, 0)], "Imp_gal")
         self.assertEqual(DocumentUnitPolicy.ASK.value, "ask")
 
     def test_field_override_supports_hybrid_units(self):
