@@ -12,11 +12,18 @@ from .rov_pressure_housing import ROVPressureHousingSolver
 from .hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .hull_material import HullMaterialScreeningSolver
 from .vessel_motion import VesselMotionKinematicsSolver
+from .kernel import (
+    AirDensityResult, MaterialLibrary, MaterialPropertyEvidence, MaterialRecord,
+    SeawaterDensityResult, dry_air_density_ideal_kg_m3,
+    seawater_density_eos80_kg_m3,
+)
 
 __all__ = [
     "AerodynamicsSolver", "CalculiXTrussSolver", "HydrodynamicsSolver",
     "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
     "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver",
     "HullMaterialScreeningSolver", "ROVPressureHousingSolver", "HydrostaticPanelLoadSolver",
-    "VesselMotionKinematicsSolver",
+    "VesselMotionKinematicsSolver", "AirDensityResult", "MaterialLibrary",
+    "MaterialPropertyEvidence", "MaterialRecord", "SeawaterDensityResult",
+    "dry_air_density_ideal_kg_m3", "seawater_density_eos80_kg_m3",
 ]
