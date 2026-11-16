@@ -21,6 +21,9 @@ CURRENT: Dimension = (0, 0, 0, 1, 0, 0, 0)
 TEMPERATURE: Dimension = (0, 0, 0, 0, 1, 0, 0)
 AMOUNT: Dimension = (0, 0, 0, 0, 0, 1, 0)
 LUMINOUS_INTENSITY: Dimension = (0, 0, 0, 0, 0, 0, 1)
+FORCE: Dimension = (1, 1, -2, 0, 0, 0, 0)
+MOMENT: Dimension = (1, 2, -2, 0, 0, 0, 0)
+PRESSURE: Dimension = (1, -1, -2, 0, 0, 0, 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,9 +97,10 @@ def _build_default_registry() -> UnitRegistry:
         UnitDefinition("rad", DIMENSIONLESS),
         UnitDefinition("deg", DIMENSIONLESS, math.pi / 180.0),
         UnitDefinition("Hz", (0, 0, -1, 0, 0, 0, 0)),
-        UnitDefinition("N", (1, 1, -2, 0, 0, 0, 0)),
+        UnitDefinition("N", FORCE),
+        UnitDefinition("N*m", MOMENT),
         UnitDefinition("kN", (1, 1, -2, 0, 0, 0, 0), 1e3),
-        UnitDefinition("Pa", (1, -1, -2, 0, 0, 0, 0)),
+        UnitDefinition("Pa", PRESSURE),
         UnitDefinition("kPa", (1, -1, -2, 0, 0, 0, 0), 1e3),
         UnitDefinition("MPa", (1, -1, -2, 0, 0, 0, 0), 1e6),
         UnitDefinition("bar", (1, -1, -2, 0, 0, 0, 0), 1e5),
