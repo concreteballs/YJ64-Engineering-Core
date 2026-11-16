@@ -31,12 +31,12 @@ The system covers metallic and non-metallic materials. Casting/moulding, forging
 - Material-specific flow stress, temperature and strain-rate windows, friction, die contact, heat transfer, reheating, cooling, deformation path, grain flow, recrystallization, texture, anisotropy, residual stress, laps, cracks and other defects.
 - Maintain distinct validated data for steels, cast/wrought aluminium alloys, copper alloys, nickel alloys, titanium alloys and other families. A generic "metal forging" recipe is not acceptable.
 
-#### Titanium-specific research track
-Titanium processing is not treated as ordinary steel forging. The process definition identifies the exact alloy, initial microstructure/product form, section size, phase-region constraints, temperature history, strain rate, deformation sequence, inter-pass time, reheating and cooling conditions.
+#### Material-specific forging methods and source observations
+Titanium processing is not treated as ordinary steel forging. A process definition identifies the exact alloy, initial microstructure/product form, section size, phase-region constraints, temperature history, strain rate, deformation sequence, inter-pass time, reheating and cooling conditions.
 
-The proposed route—progressively reducing the workpiece from several sides to a thin intermediate section, then flattening it—is recorded as a research hypothesis. It must be compared against established titanium forging/rolling practice and evaluated for the specified alloy, geometry and process window. It is not a universal instruction or a validated procedure.
+The user cited an informal forge demonstration in which a titanium workpiece was progressively worked from several sides and later flattened. This was an example of how dramatically craft methods can differ between materials—not a proposed industrial titanium route, nor a claim of expertise in titanium production. Preserve such observations with their source/context as examples for comparative study, not as a process recipe or a special hypothesis attributed to the user.
 
-The comparison with bulat steel is retained as an idea about staged deformation and structure development, not as a claim that bulat metallurgy and titanium metallurgy are equivalent. The system must identify analogous features and material differences.
+Likewise, the user's comparison of square-section steel forging, slip/cone-related deformation behaviour, titanium and bulat steel should be recorded as a question about material-dependent deformation methods. The underlying metallurgical explanation and the applicability of each technique must be checked against authoritative sources. The platform must not turn an informal analogy into a universal rule. Bulat/pattern-welded steels, conventional steels and titanium alloys need separate material/process descriptions.
 
 ### 2.3 Heat treatment and surface engineering
 

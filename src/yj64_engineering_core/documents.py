@@ -80,7 +80,16 @@ class SourceDocument:
             "sha256": self.sha256,
             "byte_length": self.byte_length,
             "source_language": self.source_language,
-            "segments": [asdict(item) for item in self.segments],
+            # Keep the navigable span map, not extracted source text. The full
+            # text remains available on the document object/source artifact.
+            "segments": [
+                {
+                    key: value
+                    for key, value in asdict(item).items()
+                    if key != "text"
+                }
+                for item in self.segments
+            ],
         }
         return json.dumps(payload, ensure_ascii=False, sort_keys=True, allow_nan=False)
 

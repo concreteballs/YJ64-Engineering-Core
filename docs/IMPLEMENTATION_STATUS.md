@@ -28,7 +28,7 @@ Architecture and acceptance requirements are documented in MULTILINGUAL_ENGINEER
 
 ## Package 4 scope clarification
 
-Casting of metals, polymer injection/moulding and other applicable material-forming routes; forging of ferrous and non-ferrous alloys including titanium; and alloy-specific heat treatment are documented target capabilities. No general casting, polymer moulding, forging, titanium-forging or heat-treatment simulation engine is currently claimed as implemented. The proposed staged titanium deformation sequence is a research hypothesis requiring alloy-specific literature review, process modelling and experimental validation.
+Casting of metals, polymer injection/moulding and other applicable material-forming routes; forging of ferrous and non-ferrous alloys including titanium; and alloy-specific heat treatment are documented target capabilities. No general casting, polymer moulding, forging, titanium-forging or heat-treatment simulation engine is currently claimed as implemented. The user's observed forge demonstration is an illustrative example of material-dependent technique, not a proposed titanium production route. Such sequences are source-attributed observations until independently verified for a specified material and process.
 
 Technical books and papers are planned as traceable reference sources. Their content must not be confused with validated executable models.
 

@@ -44,6 +44,9 @@ class DocumentIngestionTests(unittest.TestCase):
         self.assertIn(document.sha256, metadata)
         self.assertNotIn("Keep source unchanged.", metadata)
         self.assertNotIn("raw_bytes", metadata)
+        self.assertNotIn('"text"', metadata)
+        self.assertIn('"char_start": 0', metadata)
+        self.assertIn('"char_end": 22', metadata)
 
     def test_unsupported_format_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "supported document formats"):
