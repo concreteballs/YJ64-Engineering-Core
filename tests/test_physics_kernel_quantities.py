@@ -49,6 +49,10 @@ class QuantityKernelTests(unittest.TestCase):
             registry.register(UnitDefinition("widget", DIMENSIONLESS))
         self.assertIn("kg/m3", DEFAULT_UNIT_REGISTRY.symbols())
 
+    def test_rejects_boolean_dimension_exponents(self):
+        with self.assertRaisesRegex(ValueError, "seven integer"):
+            UnitDefinition("bad", (True, 0, 0, 0, 0, 0, 0))
+
     def test_serialization_retains_unit_and_dimension(self):
         data = Quantity(1025.0, "kg/m3").to_dict()
         self.assertEqual(data["unit"], "kg/m3")
