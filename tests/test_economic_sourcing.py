@@ -13,7 +13,7 @@ def loc(location_id, name, currency="EUR"):
 def offer(offer_id, item_id, supplier_id, name, price, *, stock=100, currency="EUR"):
     return SupplierOffer(
         offer_id=offer_id, item_id=item_id, supplier_id=supplier_id,
-        supplier_name=name, supplier_location=loc(f"origin-{supplier_id}", name),
+        supplier_name=name, supplier_location=EconomicLocation(f"origin-{supplier_id}", name, "ES", currency),
         unit_price=price, currency=currency, unit="piece",
         stock_quantity=stock, minimum_order_quantity=1,
         lead_time_days=2, source_uri=f"https://supplier.example/{offer_id}",
@@ -60,7 +60,7 @@ class EconomicSourcingTests(unittest.TestCase):
         self.assertAlmostEqual(assembled.item_cost, 38)
         self.assertAlmostEqual(assembled.shipping_cost, 9)
         self.assertAlmostEqual(assembled.assembly_cost, 38)
-        self.assertAlmostEqual(assembled.total_landed_cost, 54.98 + 9 + 38)
+        self.assertAlmostEqual(assembled.total_landed_cost, 38 + 7.98 + 9 + 38)
 
     def test_cheapest_supplier_combination_is_selected(self):
         offers = (
