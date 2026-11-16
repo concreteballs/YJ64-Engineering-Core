@@ -1,58 +1,48 @@
 # YJ64 Engineering Core — implementation status
 
-This document distinguishes executable code from architectural requirements recorded in the development plan. A documented or planned capability is not considered implemented.
+This is the factual implementation ledger for `UNIFIED_ENGINEERING_DEVELOPMENT_PLAN.md`. A catalogue entry or design document is not an implemented solver.
 
-## Status key
+## Status definitions
 
-- **Implemented prototype** — executable code and automated tests exist, but scope may be limited.
-- **Partially implemented** — useful executable foundation exists; major functions remain.
-- **Planned** — requirements are documented, but no corresponding functional subsystem is yet implemented.
-- **Not started** — no meaningful implementation identified in the current core.
+- **Implemented prototype** — executable code and automated tests exist; capability may be deliberately limited.
+- **Partially implemented** — an executable foundation exists, but major parts of the intended capability remain.
+- **Planned** — requirements are documented; no meaningful executable subsystem is present.
+- **Not started** — no implementation identified.
 
-## Package status
+## Consolidated work-package status
 
-| Area | Status | Implemented now | Still required |
+| Work package | Status | Existing implementation | Main remaining work |
 |---|---|---|---|
-| Universal engineering core | Partially implemented | Shared request/response contracts, solver interfaces, explicit dispatcher, pipeline, component/dependency graph, mass/CG/inertia records, evidence and stale-result tracking | Persistent project database, multi-user collaboration/locking, automatic dependency recomputation, richer geometry/material/load schemas and provenance |
-| Physics and engineering solvers | Partially implemented | Shared physics-kernel package with evidence-aware material records, dry-air ideal-gas density and atmospheric-pressure seawater EOS-80 density; plus axial member screening, limited CalculiX axial truss adapter, coefficient-based aero/hydrodynamics, sail polar and apparent wind, catamaran hydrostatics, mass budget, hull material screening, ROV cylindrical pressure-housing screen, hull hydrostatic panel loads with polygon integration, six-DOF vessel point kinematics | General beam/plate/shell/solid FEM, hull scantlings and global strength, buckling/fatigue/vibration, seakeeping/RAOs, CFD, thermal, electrical, mechanisms, uncertainty and optimization; full cross-domain physics catalogue, including a first-class spaceflight/launch-vehicle/spacecraft domain, is now specified but most listed solvers are not implemented |
-| Materials and manufacturing | Partially implemented | Limited hull-material mass/cost/maintenance comparison; shared evidence-aware material identity/property records and in-memory registry | Persistent traceable material database, verified grade/product-form datasets, anisotropic composites, process qualification, metal/polymer AM, CNC process planning, tolerances, inspection and validated manufacturing workflows |
-| Electrical and energy systems | Planned | Requirements and architecture are documented | DC/AC network model, 12/24/48 V comparisons, loads/energy balance, battery/BMS, solar/alternators/generator/shore power, cable sizing, voltage drop, protection/selectivity, grounding/bonding, fault analysis and diagrams |
-| Complete yacht / marine engineering | Partially implemented | Parametric hull geometry/CAD, preliminary catamaran hydrostatics, mass budget, sail polar/apparent wind, material screening and hydrostatic pressure load generation | Integrated design of hull structure, crossbeams, foils, rig, propulsion, propellers, rudders, accommodation, tanks/plumbing, deck gear, stability/trim/damage, energy, systems integration and class/design validation |
-| Marine electronics and vessel automation | Planned | High-level requirements for sensors, navigation, communications, local control, remote supervision and fail-safe modes | Equipment/data model, sensor fusion, network architecture, control interfaces, alarm/health model, redundancy, COLREG-aware autonomy and verification |
-| Robotics, mechanisms and autonomous vehicles | Planned | Architecture requirements for marine robots, UAVs, human-scale robots, mechanisms and motion compensation; vessel six-DOF base-point kinematics is now available | Robot link/joint model, multibody dynamics, actuators, balance/contact on moving decks, manipulators, winches/hoists, propeller sizing, ROV/AUV/UAV performance and safety controllers |
-| Invention methods and engineering knowledge | Planned | TRIZ, USIT, SIT/ASIT, morphology, biomimicry, QFD, FMEA/HAZOP and related methods are listed in the plan | Structured knowledge base, method workflows, source/licensing metadata, contradiction/problem representations, idea generation and engineering validation pipeline |
-| Reverse engineering, repair and lifecycle | Planned | Visual reference intake stores image metadata/hash and structured human annotations | Measurement/scan geometry reconstruction, tolerance analysis, component identification, repair plans, lifecycle/maintenance and qualification evidence |
-| Visualization and simulation presentation | Partially implemented | SVG drawings, OpenSCAD/FreeCAD generation adapters, parametric hull outputs and image-reference annotations | Integrated accurate renderings, section/exploded views, actual kinematic animations, simulation post-processing and distinction between CAD-grounded and concept imagery |
-| Website, publishing and commercial workflows | Not started | Requirements only | Content pipeline, website, product/service catalogue, marketing, sales and commercial analytics |
+| 1. Universal kernel, project model and extension contracts | Partially implemented | Request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass/CG/inertia, evidence/stale-result tracking; evidence-aware material/environment foundation; unit-aware Quantity and extensible UnitRegistry added in the current pass | Coordinate frames, geometry primitives, typed loads/boundary conditions, persistent project/artifact store, complete provenance/version compatibility and plugin capability contracts |
+| 2. Shared physics, materials, environments and evidence feedback | Partially implemented | Material identity/property evidence and in-memory registry; dry-air ideal-gas density; atmospheric-pressure seawater EOS-80; several bounded marine/aero calculations | Persistent verified datasets, humid air, pressure-aware seawater, viscosity/conductivity, cryogenic/plasma and other specialist models, experiment intake, discrepancy analysis, research-data collector and reviewed adaptive model updates |
+| 3. Solver ecosystem and coupled multiphysics | Planned | Limited CalculiX truss adapter; CAD adapters exist but are not general solver adapters | Isolated solver workers, adapter contracts, OpenMDAO/OpenModelica/OpenFOAM/MOOSE/CEA/FEM integrations, coupled analysis orchestration, benchmarks and license/version management |
+| 4. Materials, manufacturing, reverse engineering and invention | Partially implemented | Hull material screening; material evidence records; visual-reference metadata and annotations; some CAD generation | Persistent process-aware material datasets, additive/CNC/joining/heat-treatment workflows, tolerances, inspection, scan reconstruction, repair/lifecycle, structured TRIZ/USIT/SIT and other invention workflows |
+| 5. Electrical power, electronics, instrumentation and communications | Planned | Requirements only | DC/AC networks, 12/24/48 V comparison, load/energy balance, batteries/BMS, generation/charging, cables/protection/faults, controls, sensors, navigation, communications and fail-safe behaviour |
+| 6. Integrated marine application | Partially implemented | Parametric hull geometry/CAD; preliminary catamaran hydrostatics; mass budget; sail polar/apparent wind; coefficient-based aero/hydrodynamics; hull-material screening; hydrostatic panel pressure loads with polygon integration; ROV pressure-housing screen; prescribed six-DOF vessel point kinematics | Complete hull/global structure, stability/trim/damage, seakeeping, foils/rig/propulsion/propellers, electrical/electronics, accommodation/tanks/plumbing, integrated budgets and design validation |
+| 7. Robotics, mechanisms and autonomous vehicles | Planned | Vessel base-point six-DOF kinematics is reusable groundwork; architecture requirements documented | Link/joint and multibody models, actuators, contact/balance on moving decks, manipulators, winches/hoists, ROV/AUV/UAV performance and local safety controllers |
+| 8. Cross-domain application packs and open ecosystem | Planned | Physics domain catalogue and spaceflight target scope documented | Full aviation/space/industrial solvers, cryogenics/plasma where applicable, application packs, public module registry, contributor tooling and ecosystem integrations |
 
-## Latest delivered block: vessel motion kinematics
+## Existing executable foundations
 
-VesselMotionKinematicsSolver (marine.vessel_motion_point_kinematics) transforms a body-fixed equipment or robot-base point into earth-frame position, velocity and acceleration from a supplied rigid-body six-DOF state. It includes roll/pitch/yaw orientation, translational motion, angular velocity, angular acceleration and centripetal acceleration.
+- **Core:** shared request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass properties, evidence and stale-result tracking.
+- **Physics kernel:** evidence-aware material records and in-memory registry; dry-air ideal-gas density; atmospheric-pressure seawater density using UNESCO 1983 EOS-80.
+- **New in current first-package pass:** `Quantity`, `UnitDefinition`, `UnitRegistry` and `DEFAULT_UNIT_REGISTRY` in `physics/kernel/quantities.py`. Includes explicit SI dimension vectors, named-unit conversion, offset temperature conversion, finite-value checks and extensible registration. Automated tests have been added; CI outcome is not yet confirmed.
+- **Marine/aero:** preliminary catamaran hydrostatics, mass budget, sail polar from supplied data, apparent wind, coefficient-based aero/hydrodynamics, hull material screening.
+- **Structures/ROV:** axial member screening, limited CalculiX axial truss adapter, ROV cylindrical pressure-housing screen, hydrostatic panel pressure-load generation including polygon integration.
+- **Motion:** six-DOF rigid-body point kinematics for a supplied/prescribed vessel state. This is not wave-response prediction, seakeeping, sensor fusion or robot stabilization.
+- **Geometry/visualization:** parametric hull geometry, limited SVG/OpenSCAD/FreeCAD generation adapters, image metadata/hash intake and structured human annotations.
 
-This is **not** a wave-response or seakeeping predictor. A measured/prescribed vessel motion signal is an input. Sea-state modelling, hydrodynamic response, sensor fusion, time-series processing, deck contact and robot balance remain future work. See [VESSEL_MOTION_KINEMATICS.md](VESSEL_MOTION_KINEMATICS.md).
+## Immediate implementation sequence — Package 1
 
-## Immediate next implementation sequence
+1. **Delivered in code; CI pending:** unit-aware quantities and extensible named-unit registry.
+2. Coordinate frames, transforms and explicit frame-compatibility checks.
+3. Reusable geometry primitives and validation.
+4. Typed loads, boundary conditions and operating/environmental states.
+5. Versioned plugin/solver capability declarations and compatibility rules.
+6. Connect the common types to existing solvers incrementally without breaking public operations.
 
-1. Extend the shared environment kernel with pressure-aware seawater properties, viscosity/conductivity, humid-air properties and atmospheric/ocean profiles, each with source equations and bounded validity.
-2. Expand the material library with traceable metal, polymer, elastomer, ceramic, coating and composite records; add dataset import/export and property applicability filtering without inventing missing values.
-3. Add shared unit-aware quantities, coordinate frames, geometry primitives and common load/boundary-condition schemas; refactor existing discipline solvers to consume them incrementally.
-4. Extend vessel motion to timestamped motion series and interpolation, then connect the kinematics kernel to a minimal robot link/joint model.
-5. Begin the electrical discipline pack with traceable DC loads, voltage architecture comparison, cable sizing and protection inputs.
-6. Continue hull structural analysis only through validated analytical models and tests; do not label load generation or low-order screening as structural certification.
+## Evidence and release policy
 
-## Evidence policy
+Automated tests verify software behaviour. Reference benchmarks verify numerical implementation. Experimental comparisons support physical validation. Independent engineering review, qualification and certification are separate levels. No prototype or screening result is a design approval or safe operating limit.
 
-Only source code with automated tests is counted as implemented. CI success confirms the tested software state, not engineering qualification or physical validation. A solver result marked screening-only is not a design approval, class approval or safe operating limit.
-
-
-## Shared physics kernel foundation (first executable slice)
-
-A shared kernel now lives under src/yj64_engineering_core/physics/kernel. It provides evidence-aware material identity/property records and an in-memory MaterialLibrary, plus dry-air density using the ideal-gas equation and atmospheric-pressure seawater density using UNESCO 1983 EOS-80. Property evidence preserves source, test method, date, temperature, orientation and uncertainty; conflicting evidence is retained rather than silently averaged. The two environment models expose explicit input ranges and assumptions.
-
-This is a first foundation slice, not a complete material database or environmental model. Humidity, pressure-corrected seawater, viscosity, conductivity, material dataset import/export, common geometry/loads and refactoring of existing solvers remain outstanding. See PHYSICS_KERNEL_FOUNDATION.md.
-
-## Physics scope expansion (architecture delivered; solvers still outstanding)
-
-The target is now a universal cross-domain physics platform, not a yacht-only solver collection. `docs/PHYSICS_DOMAIN_CATALOG.md` defines the intended disciplines: mechanics, strength of materials, structural FEM, fluid mechanics, full aerodynamics and flight mechanics, general trajectory/ballistics mechanics, thermodynamics, heat transfer, electricity/electronics, electromagnetics, materials science/chemistry, corrosion/tribology, acoustics/vibration/waves, optics/photonics, controls, robotics, environmental physics, reliability and optimization. It also defines reusable application packs including marine craft, aircraft/seaplanes, space launch vehicles and spacecraft, vehicles, industrial machinery, energy systems, robotics and repair engineering. The spaceflight domain explicitly includes astrodynamics, launch/flight dynamics, compressible and high-temperature gas dynamics, propulsion-system interfaces, cryogenic/high-pressure fluids, thermal protection, space environment, structures/mechanisms, avionics/GNC, power, life support, ground systems, test infrastructure and mission assurance.
-
-**Important status:** this is a requirements/catalogue expansion, not implementation of those solvers. Spaceflight is now an explicit first-class target domain; none of its advanced launch-vehicle or spacecraft disciplines should be interpreted as implemented merely because they are listed. Current aerodynamics remains limited; full aircraft aerodynamics/flight mechanics, general ballistics/trajectory tools, comprehensive materials science, FEM, CFD, thermal, electrical and other domain solvers remain to be built and verified. The yacht is the first integrated application, not the boundary of the platform.
+A model update must retain old versions, exact provenance, test evidence and applicability limits. New experimental data never silently overwrites a released model.
