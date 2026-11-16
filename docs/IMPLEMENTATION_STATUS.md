@@ -135,3 +135,9 @@ The first adapter CI attempt exposed a package-level circular import caused by e
 Next: add condition-aware evidence selection and shared-registry unit normalization, formulation authoring helpers, structure-file adapters and experiment-data intake before selecting scientific solver integrations.
 
 **Cross-pack payload extension.** The shared MaterialCandidate contract now transports typed property evidence and electric/magnetic/hybrid stimulus-response evidence. Property records retain explicit evidence state, source, method, temperature and uncertainty. Chemistry screening converts its candidate records into this enriched response so the Artificial Muscle Engineering pack can consume actual evidence rather than only a material identifier.
+
+## Cross-cutting Economic & Local Sourcing Module
+
+**Implemented prototype:** `yj64_engineering_core.economics` defines destination/supplier locations, supplier offers, shipping quotes, BOM lines, assembly costs and a bounded economic comparison engine. It compares buying a finished item with assembling from supplied part offers, groups one shipping charge per supplier, estimates tax only for prices explicitly marked tax-exclusive, and ranks by total landed cost. Currency mismatches, unavailable stock and missing delivery quotes are not silently accepted. The first version uses caller-supplied commercial data; it does not discover suppliers or verify live prices.
+
+**Planned:** tax-jurisdiction rules, customs/import costs, timestamped exchange rates, radius/local-pickup filtering, supplier discovery/price refresh, reliability, warranty/returns, lifecycle cost and permission-gated trade-agent integration. See `ECONOMIC_AND_LOCAL_SOURCING_MODULE.md`.
