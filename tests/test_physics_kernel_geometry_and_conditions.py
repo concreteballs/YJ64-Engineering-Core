@@ -1,4 +1,3 @@
-import math
 import unittest
 
 from yj64_engineering_core.physics.kernel.coordinate_frames import (
@@ -23,7 +22,7 @@ class CoordinateFrameTests(unittest.TestCase):
         self.assertAlmostEqual(recovered[0], 1.0)
         self.assertAlmostEqual(recovered[1], 0.0)
 
-    def test_registry_transforms_between_siblings(self):
+    def test_registry_transforms_between_nested_frames(self):
         registry = CoordinateFrameRegistry()
         registry.add(CoordinateFrame("world"))
         registry.add(CoordinateFrame("deck", "world", translation_to_parent_m=(2, 0, 0)))
@@ -72,30 +71,40 @@ class GeometryPrimitiveTests(unittest.TestCase):
 
 class TypedLoadAndBoundaryTests(unittest.TestCase):
     def test_force_and_moment_loads(self):
-        force = AppliedLoad("L1", "hull.panel.1", "force",
-                            (Quantity(1,"N"), Quantity(2,"N"), Quantity(3,"kN")),
-                            "world", application_point=GeometryPoint(0,0,0))
+        force = AppliedLoad(
+            "L1", "hull.panel.1", "force",
+            (Quantity(1,"N"), Quantity(2,"N"), Quantity(3,"kN")),
+            "world", application_point=GeometryPoint(0,0,0),
+        )
         self.assertEqual(force.kind, "force")
-        moment = AppliedLoad("L2", "mast.base", "moment",
-                             (Quantity(1,"N*m"), Quantity(0,"N*m"), Quantity(0,"N*m")),
-                             "world")
+        moment = AppliedLoad(
+            "L2", "mast.base", "moment",
+            (Quantity(1,"N*m"), Quantity(0,"N*m"), Quantity(0,"N*m")),
+            "world",
+        )
         self.assertEqual(moment.components[0].si_value, 1.0)
 
     def test_rejects_wrong_load_dimension_and_frame(self):
         with self.assertRaisesRegex(ValueError, "dimension"):
-            AppliedLoad("L", "part", "force",
-                        (Quantity(1,"Pa"), Quantity(0,"N"), Quantity(0,"N")), "world")
+            AppliedLoad(
+                "L", "part", "force",
+                (Quantity(1,"Pa"), Quantity(0,"N"), Quantity(0,"N")), "world",
+            )
         with self.assertRaisesRegex(ValueError, "load coordinate frame"):
-            AppliedLoad("L", "part", "force",
-                        (Quantity(1,"N"), Quantity(0,"N"), Quantity(0,"N")), "world",
-                        application_point=GeometryPoint(0,0,0,"deck"))
+            AppliedLoad(
+                "L", "part", "force",
+                (Quantity(1,"N"), Quantity(0,"N"), Quantity(0,"N")), "world",
+                application_point=GeometryPoint(0,0,0,"deck"),
+            )
 
     def test_boundary_conditions_validate_physical_dimensions(self):
         fixed = BoundaryCondition("B1", "mount", "fixed")
         self.assertEqual(fixed.kind, "fixed")
-        displacement = BoundaryCondition("B2", "node-1", "displacement",
-                                         (Quantity(0,"mm"), Quantity(0,"mm"), Quantity(1,"mm")))
-        self.assertEqual(displacement.components[2].to("m").value, 0.001)
+        displacement = BoundaryCondition(
+            "B2", "node-1", "displacement",
+            (Quantity(0,"mm"), Quantity(0,"mm"), Quantity(1,"mm")),
+        )
+        self.assertAlmostEqual(displacement.components[2].to("m").value, 0.001)
         pressure = BoundaryCondition("B3", "panel-1", "pressure", (Quantity(20,"kPa"),))
         self.assertEqual(pressure.components[0].to("Pa").value, 20000)
 
@@ -106,4 +115,5 @@ class TypedLoadAndBoundaryTests(unittest.TestCase):
             BoundaryCondition("B", "panel", "pressure", (Quantity(20,"m"),))
 
 
-if __(!)
+if __name__ == "__main__":
+    unittest.main()
