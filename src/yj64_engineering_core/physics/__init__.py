@@ -13,6 +13,9 @@ from .hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .hull_material import HullMaterialScreeningSolver
 from .vessel_motion import VesselMotionKinematicsSolver
 from .kernel import (
+    AppliedLoad, BoundaryCondition, CoordinateFrame, CoordinateFrameRegistry,
+    RigidTransform, AxisAlignedBoundingBox, Cylinder, GeometryPoint,
+    GeometryVector, LineSegment, Plane, Sphere, FORCE, MOMENT, PRESSURE,
     AirDensityResult, DEFAULT_UNIT_REGISTRY, MaterialLibrary,
     MaterialPropertyEvidence, MaterialRecord, Quantity, SeawaterDensityResult,
     UnitDefinition, UnitRegistry, dry_air_density_ideal_kg_m3,
@@ -20,6 +23,9 @@ from .kernel import (
 )
 
 __all__ = [
+    "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
+    "RigidTransform", "AxisAlignedBoundingBox", "Cylinder", "GeometryPoint",
+    "GeometryVector", "LineSegment", "Plane", "Sphere", "FORCE", "MOMENT", "PRESSURE",
     "AerodynamicsSolver", "CalculiXTrussSolver", "HydrodynamicsSolver",
     "SailAerodynamicsSolver", "SailMaterialSolver", "ApparentWindSolver",
     "CatamaranHydrostaticsSolver", "VesselMassBudgetSolver",
