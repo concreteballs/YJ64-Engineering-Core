@@ -98,3 +98,10 @@ China is not automatically excluded for distance. It is compared as a separate s
 2. Add separate shipping quote adapters or structured manual capture; supplier catalog price is not a shipping price.
 3. Confirm actual supplier locations and delivery coverage before enabling local-radius ranking.
 4. Add other catalog APIs (for example, electronics distributors) only after their API terms, response currency and stock semantics are verified.
+
+
+## Destination picker prototype
+
+The repository root now contains `index.html`, a mobile-friendly static destination-selection page. It provides an OpenStreetMap/Leaflet map click picker and an explicit GPS button; the browser location prompt is requested only after the user presses that button. It lets the user choose sourcing categories and local/domestic/international/China market scopes, set a local radius, and generate/copy a versioned JSON discovery request. No GPS location is collected automatically and no purchase action is enabled.
+
+The page is a request composer, not yet a connected supplier-search dashboard: it does not submit the request to a search backend, perform reverse geocoding, or fetch live supplier prices. Country ISO code and destination currency are currently entered by the user. The Python planner and this page share the same intended categories and market scopes; wiring the page to a backend and adding supplier connectors are the next integration steps.
