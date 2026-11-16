@@ -117,6 +117,7 @@ def _build_default_registry() -> UnitRegistry:
         UnitDefinition("kPa", (1, -1, -2, 0, 0, 0, 0), 1e3),
         UnitDefinition("MPa", (1, -1, -2, 0, 0, 0, 0), 1e6),
         UnitDefinition("bar", (1, -1, -2, 0, 0, 0, 0), 1e5),
+        UnitDefinition("psi", PRESSURE, 6894.757293168),
         UnitDefinition("J", (1, 2, -2, 0, 0, 0, 0)),
         UnitDefinition("kJ", (1, 2, -2, 0, 0, 0, 0), 1e3),
         UnitDefinition("W", (1, 2, -3, 0, 0, 0, 0)),
