@@ -106,6 +106,12 @@ EUROPEAN_METRIC_PROFILE = UnitSystemProfile(
      FORCE: "N", PRESSURE: "bar", (0, 2, 0, 0, 0, 0, 0): "mm2",
      (0, 3, 0, 0, 0, 0, 0): "L", (0, 1, -1, 0, 0, 0, 0): "m/s"},
 )
+UK_IMPERIAL_PROFILE = UnitSystemProfile(
+    "uk_imperial", "UK imperial",
+    {LENGTH: "ft", MASS: "lb", TIME: "s", TEMPERATURE: "degF",
+     FORCE: "lbf", PRESSURE: "psi", (0, 2, 0, 0, 0, 0, 0): "ft2",
+     (0, 3, 0, 0, 0, 0, 0): "Imp_gal", (0, 1, -1, 0, 0, 0, 0): "ft/s"},
+)
 MARINE_HYBRID_PROFILE = UnitSystemProfile(
     "marine_hybrid", "Marine hybrid",
     {LENGTH: "m", MASS: "kg", TIME: "s", TEMPERATURE: "degC",
@@ -116,7 +122,7 @@ MARINE_HYBRID_PROFILE = UnitSystemProfile(
 BUILTIN_UNIT_PROFILES = {
     profile.profile_id: profile for profile in (
         SI_PROFILE, METRIC_ENGINEERING_PROFILE, US_CUSTOMARY_PROFILE,
-        EUROPEAN_METRIC_PROFILE, MARINE_HYBRID_PROFILE,
+        EUROPEAN_METRIC_PROFILE, UK_IMPERIAL_PROFILE, MARINE_HYBRID_PROFILE,
     )
 }
 
@@ -161,9 +167,9 @@ _UNIT_ALIASES = {
     "килограмм": "kg", "килограмма": "kg", "килограммы": "kg", "килограммов": "kg", "килограм": "kg", "kilogram": "kg", "kilograms": "kg",
     "фунт": "lb", "фунта": "lb", "фунты": "lb", "фунтов": "lb", "pound": "lb", "pounds": "lb",
     "литр": "L", "литра": "L", "литры": "L", "литров": "L", "литрa": "L", "liter": "L", "liters": "L", "litre": "L", "litres": "L",
-    "галлон": "US_gal", "галлона": "US_gal", "галлоны": "US_gal", "галлонов": "US_gal", "gallon": "US_gal", "gallons": "US_gal",
-    "градус цельсия": "degC", "градусов цельсия": "degC", "цельсия": "degC", "celsius": "degC",
-    "градус фаренгейта": "degF", "фаренгейта": "degF", "fahrenheit": "degF",
+    "галлон": "US_gal", "галлона": "US_gal", "галлоны": "US_gal", "галлонов": "US_gal", "gallon": "US_gal", "gallons": "US_gal",\n    "имперский галлон": "Imp_gal", "имперских галлонов": "Imp_gal", "imperial gallon": "Imp_gal", "imperial gallons": "Imp_gal",
+    "градус цельсия": "degC", "градусов цельсия": "degC", "градусы цельсия": "degC", "цельсия": "degC", "celsius": "degC",
+    "градус фаренгейта": "degF", "градусов фаренгейта": "degF", "градусы фаренгейта": "degF", "фаренгейта": "degF", "fahrenheit": "degF",
 }
 
 
