@@ -94,6 +94,19 @@ class EconomicSourcingTests(unittest.TestCase):
                                       shipping_quotes=(ShippingQuote("vendor-a", "workshop", 4, "EUR", 1),))
         self.assertIsNone(report.cheapest)
 
+    def test_minimum_order_quantity_is_included_in_cost(self):
+        minimum_order = SupplierOffer(
+            offer_id="min-order", item_id="actuator", supplier_id="vendor-a",
+            supplier_name="Supplier", supplier_location=loc("origin-a", "Supplier"),
+            unit_price=10, currency="EUR", unit="piece", stock_quantity=10,
+            minimum_order_quantity=5,
+        )
+        shipping = ShippingQuote("vendor-a", "workshop", 4, "EUR", 1)
+        report = self.engine.evaluate(self.request, "actuator", (minimum_order,),
+                                      shipping_quotes=(shipping,))
+        self.assertAlmostEqual(report.cheapest.item_cost, 50)
+        self.assertTrue(any("surplus" in warning for warning in report.cheapest.warnings))
+
     def test_destination_currency_must_be_iso_code(self):
         with self.assertRaises(ValueError):
             EconomicLocation("x", "Place", "ES", "EURO")
