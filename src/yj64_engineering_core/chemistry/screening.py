@@ -6,13 +6,15 @@ reaction predictor or multiphysics solver. It only evaluates supplied evidence.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Sequence
 
 from ..discipline_contracts import (
     ActuatorMaterialRequest,
     MaterialCandidate,
     MaterialCandidateResponse,
+    MaterialPropertyDatum,
+    StimulusResponseDatum,
 )
 from ..physics.kernel.materials import MaterialRecord
 
@@ -151,8 +153,53 @@ class ChemistryScreeningReport:
         return tuple(item for item in self.results if item.disposition == "unresolved")
 
     def to_contract_response(self, formulations: Sequence[ChemistryCandidate]) -> MaterialCandidateResponse:
-        by_id = {item.formulation.candidate_id: item.formulation for item in formulations}
-        accepted = tuple(by_id[item.candidate_id] for item in self.candidates)
+        by_id = {item.formulation.candidate_id: item for item in formulations}
+
+        def enriched(candidate_id: str) -> MaterialCandidate:
+            source = by_id[candidate_id]
+            property_evidence = tuple(
+                MaterialPropertyDatum(
+                    property_name=item.property_name,
+                    value=item.value,
+                    unit=item.unit,
+                    test_method=item.test_method,
+                    source=item.source,
+                    evidence_state=item.evidence_state,
+                    source_date=item.source_date,
+                    temperature_k=item.temperature_k,
+                    uncertainty_absolute=item.uncertainty_absolute,
+                    uncertainty_relative=item.uncertainty_relative,
+                    orientation=item.orientation,
+                    product_direction=item.product_direction,
+                    notes=item.notes,
+                )
+                for item in source.material_record.properties
+            )
+            stimulus_responses = tuple(
+                StimulusResponseDatum(
+                    mode=item.mode,
+                    contraction_strain_fraction=item.contraction_strain_fraction,
+                    blocked_stress_pa=item.blocked_stress_pa,
+                    electric_field_v_m=item.electric_field_v_m,
+                    magnetic_flux_density_t=item.magnetic_flux_density_t,
+                    magnetic_field_strength_a_m=item.magnetic_field_strength_a_m,
+                    response_time_s=item.response_time_s,
+                    cycle_life=item.cycle_life,
+                    temperature_range_k=item.temperature_range_k,
+                    reversible=item.reversible,
+                    evidence_state=item.evidence_state,
+                    source_refs=item.source_refs,
+                    test_conditions=item.test_conditions,
+                )
+                for item in source.stimulus_responses
+            )
+            return replace(
+                source.formulation,
+                property_evidence=property_evidence,
+                stimulus_responses=stimulus_responses,
+            )
+
+        accepted = tuple(enriched(item.candidate_id) for item in self.candidates)
         rejected_ids = tuple(item.candidate_id for item in self.rejected)
         unresolved = tuple(
             f"{item.candidate_id}: {reason}"
