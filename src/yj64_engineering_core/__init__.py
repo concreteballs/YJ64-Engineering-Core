@@ -22,6 +22,9 @@ from .physics.rov_pressure_housing import ROVPressureHousingSolver
 from .physics.hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .physics.vessel_motion import VesselMotionKinematicsSolver
 from .physics.kernel import (
+    AppliedLoad, BoundaryCondition, CoordinateFrame, CoordinateFrameRegistry,
+    RigidTransform, AxisAlignedBoundingBox, Cylinder, GeometryPoint,
+    GeometryVector, LineSegment, Plane, Sphere, FORCE, MOMENT, PRESSURE,
     AirDensityResult, DEFAULT_UNIT_REGISTRY, MaterialLibrary,
     MaterialPropertyEvidence, MaterialRecord, Quantity, SeawaterDensityResult,
     UnitDefinition, UnitRegistry, dry_air_density_ideal_kg_m3,
@@ -29,6 +32,9 @@ from .physics.kernel import (
 )
 
 __all__ = [
+    "AppliedLoad", "BoundaryCondition", "CoordinateFrame", "CoordinateFrameRegistry",
+    "RigidTransform", "AxisAlignedBoundingBox", "Cylinder", "GeometryPoint",
+    "GeometryVector", "LineSegment", "Plane", "Sphere", "FORCE", "MOMENT", "PRESSURE",
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
     "ComponentCalculationRecord", "ComponentDependency", "ComponentInterface",
     "ComponentMassProperties", "EngineeringComponent", "EngineeringProjectGraph",
