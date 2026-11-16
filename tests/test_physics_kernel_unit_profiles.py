@@ -16,6 +16,14 @@ class UnitProfileTests(unittest.TestCase):
         self.assertEqual(UK_IMPERIAL_PROFILE.defaults[(0, 3, 0, 0, 0, 0, 0)], "Imp_gal")
         self.assertEqual(DocumentUnitPolicy.ASK.value, "ask")
 
+    def test_us_customary_profile_converts_multiple_dimensions(self):
+        prefs = UnitDisplayPreferences(US_CUSTOMARY_PROFILE)
+        self.assertAlmostEqual(prefs.display("hull.length", Quantity(1, "m")).value, 39.37007874, places=6)
+        self.assertAlmostEqual(prefs.display("payload.mass", Quantity(1, "kg")).value, 2.20462262, places=6)
+        self.assertAlmostEqual(prefs.display("tank.volume", Quantity(1, "L")).value, 0.26417205, places=6)
+        self.assertAlmostEqual(prefs.display("system.pressure", Quantity(1, "bar")).value, 14.5037738, places=6)
+        self.assertAlmostEqual(prefs.display("environment.temperature", Quantity(20, "degC")).value, 68.0, places=6)
+
     def test_field_override_supports_hybrid_units(self):
         prefs = UnitDisplayPreferences(
             MARINE_HYBRID_PROFILE,
