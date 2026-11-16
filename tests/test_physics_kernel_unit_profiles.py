@@ -3,7 +3,7 @@ import unittest
 from yj64_engineering_core.physics.kernel.quantities import Quantity
 from yj64_engineering_core.physics.kernel.unit_profiles import (
     BUILTIN_UNIT_PROFILES, DocumentUnitPolicy, UnitDisplayPreferences,
-    US_CUSTOMARY_PROFILE, MARINE_HYBRID_PROFILE,
+    US_CUSTOMARY_PROFILE, MARINE_HYBRID_PROFILE, NominalSizeDesignation,
     parse_voice_unit_command, convert_by_voice,
 )
 
@@ -43,6 +43,17 @@ class UnitProfileTests(unittest.TestCase):
         command = parse_voice_unit_command("convert kilograms to pounds")
         result = convert_by_voice(Quantity(10, "kg"), command)
         self.assertAlmostEqual(result.value, 22.0462262185, places=6)
+
+    def test_voice_command_can_target_a_specific_parameter(self):
+        command = parse_voice_unit_command("переведи дюймы в миллиметры для диаметра отверстия")
+        self.assertEqual(command.field_key, "диаметра.отверстия")
+
+    def test_nominal_pipe_size_is_not_an_arithmetic_length(self):
+        pipe = NominalSizeDesignation("NPS", "1", "ASME B36.10M", Quantity(33.4, "mm"))
+        self.assertEqual(pipe.designation, "1")
+        self.assertAlmostEqual(pipe.actual_outside_diameter.to("in").value, 1.3149606299)
+        with self.assertRaisesRegex(ValueError, "length dimension"):
+            NominalSizeDesignation("NPS", "1", "ASME B36.10M", Quantity(2, "kg"))
 
     def test_voice_rejects_dimension_mismatch(self):
         with self.assertRaisesRegex(ValueError, "incompatible dimensions"):
