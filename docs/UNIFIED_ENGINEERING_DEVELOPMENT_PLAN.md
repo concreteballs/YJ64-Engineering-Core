@@ -348,3 +348,8 @@ A first read-only supplier catalog adapter is implemented for the documented Mou
 ## Agent-directed economic sourcing checkpoint
 
 The agent-facing contract and API are now implemented. The engineering agent, not the user, authors category-specific search terms, quantity/units, technical requirements, budget, delivery deadline, local radius and target markets. The user supplies only destination context through the map/GPS picker. `POST /api/discovery` authenticates with `YJ64_AGENT_API_TOKEN`, validates the request and expands it into typed supplier search tasks. This endpoint does not yet execute supplier searches or persist jobs. Next: add reverse-geocoding/currency resolution, durable task queueing and provider adapters for local distributors, global catalogues and Chinese marketplaces.
+
+
+## China sourcing connector checkpoint
+
+A read-only 1688 product-search adapter has been added through the third-party Nexscope API. It maps supplier/listing data, CNY pricing, MOQ and price tiers, but does not claim live stock or shipping. Each search costs a documented 10–19 Nexscope credits; calls are gated by an explicit per-call credit budget and API key. No paid API calls have been made. Next: add supplier identity/technical match review, landed-import cost adapters and approved official marketplace/distributor APIs. Alibaba official Open Platform access is permissioned and must not be treated as unrestricted public search.
