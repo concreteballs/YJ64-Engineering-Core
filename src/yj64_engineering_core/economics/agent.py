@@ -73,6 +73,8 @@ class AgentSourcingRequest:
             raise ValueError("category IDs must be unique")
         if not self.market_scopes:
             raise ValueError("agent must specify at least one market scope")
+        if MarketScope.LOCAL in self.market_scopes and self.destination.latitude is None:
+            raise ValueError("local-radius sourcing requires destination coordinates")
         if len(set(self.market_scopes)) != len(self.market_scopes):
             raise ValueError("market scopes must be unique")
         if self.maximum_total_budget is not None:
@@ -123,17 +125,19 @@ class AgentSourcingRequest:
         category_data = payload.get("categories")
         if not isinstance(category_data, list):
             raise ValueError("categories must be a list")
-        categories = tuple(
-            SourcingCategory(
+        if any(not isinstance(item, dict) for item in category_data):
+            raise ValueError("each category must be an object")
+        categories_list = []
+        for item in category_data:
+            terms = item.get("search_terms")
+            if not isinstance(terms, list) or not all(isinstance(term, str) for term in terms):
+                raise ValueError("category search_terms must be a list of strings")
+            categories_list.append(SourcingCategory(
                 category_id=item["category_id"],
                 label=item["label"],
-                search_terms=tuple(item["search_terms"]),
-            )
-            for item in category_data
-            if isinstance(item, dict)
-        )
-        if len(categories) != len(category_data):
-            raise ValueError("each category must be an object")
+                search_terms=tuple(terms),
+            ))
+        categories = tuple(categories_list)
         requirement_data = payload.get("technical_requirements", [])
         if not isinstance(requirement_data, list):
             raise ValueError("technical_requirements must be a list")
