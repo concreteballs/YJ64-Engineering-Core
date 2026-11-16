@@ -101,6 +101,32 @@ The same physics may be reused across applications, but domain-specific validity
 - Diffusion, oxidation, chemical compatibility, solvent/fuel resistance and environmental degradation.
 - Material/process databases must distinguish grade, product form, condition, direction, temperature, test method, source and statistical scatter.
 
+## H1. Manufacturing processes, solidification and thermomechanical metallurgy
+
+This cross-cutting domain connects materials science, heat transfer, fluid mechanics, structural mechanics, chemistry and production engineering. It is target scope, not an implemented solver.
+
+### Casting and moulding across material families
+- **Metal casting:** sand, investment, permanent-mould/gravity, high- and low-pressure die, centrifugal and other relevant processes.
+- **Polymer moulding/casting:** thermoplastic injection moulding, compression and transfer moulding, resin casting, reaction/injection processes and relevant thermoset routes; include rheology, viscosity/shear dependence, shrinkage, warpage, fibre orientation and curing where applicable.
+- **Other castable materials:** glass, ceramics, cementitious/mineral systems, waxes and specialist materials where project scope justifies them; each requires its own chemistry, rheology and phase-change models.
+- Moulds, cores, gating/runners, vents, filling, free surfaces, heat transfer, solidification/curing, feeding, shrinkage, porosity, inclusions, hot tears, distortion, weld/knit lines, sink marks and inspection.
+- Never transfer metal-melt assumptions to polymer melts, glass, ceramic slurries or reactive resins without a physically justified model.
+
+### Forging and thermomechanical forming
+- Open-die/free forging, closed-die/impression forging, upsetting, drawing-out, cogging, ring rolling and other relevant processes.
+- Hot, warm and cold forming only within material-specific applicability limits.
+- Coupled temperature, strain, strain rate, flow stress, friction, tooling contact, heat transfer, reheating, cooling, grain flow, recrystallization, texture, anisotropy, residual stress and defect formation.
+- Separate process datasets and models for ferrous, aluminium, copper, nickel, titanium and other alloy families.
+- Titanium-specific modelling distinguishes alloy chemistry and phase constitution, temperature region, strain-rate sensitivity, transfer/hold time, staged deformation, intermediate reheating and cooling history. A proposed multi-sided progressive reduction followed by flattening is a hypothesis until substantiated for a specified alloy and geometry. Bulat steel is a historical/metallurgical comparison, not a transferable titanium recipe.
+
+### Heat treatment and surface engineering
+- Annealing, normalizing where applicable, quenching, tempering, solution treatment, ageing, precipitation hardening, stress relief, carburizing, nitriding and other alloy-specific routes.
+- Time-temperature-atmosphere histories, phase transformations, diffusion, precipitation, hardness profiles, distortion, residual stress, oxidation/decarburization and case depth.
+- Link predictions to composition, starting microstructure, product form, section size, quench medium, furnace uniformity and measured evidence.
+
+### Cross-process data contract
+Each process model declares material family and grade range, initial product form/state, geometry/scale, boundary conditions, equipment assumptions, process parameters, outputs, defect classes, uncertainty, validation cases and prohibited extrapolations. Outputs update a versioned material-state record; they do not overwrite certified supplier/test data.
+
 ## I. Acoustics, vibration and waves
 
 - Linear/nonlinear vibration, free/forced response, modal analysis, resonance, damping and transmissibility.

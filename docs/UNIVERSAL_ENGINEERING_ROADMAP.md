@@ -31,7 +31,7 @@ The kernel owns shared representations and orchestration, not every discipline's
 1. Universal kernel, project model and extension contracts — quantities/units, frames, geometry, loads, project/component schemas, provenance, persistence, dependencies and plugin compatibility.
 2. Shared physics, materials, environments and evidence feedback — traceable datasets, cross-domain physical foundations, experiment intake, reproducible comparisons, research-data collection and reviewed model updates.
 3. External engineering ecosystem, adapters and coupled execution — candidate/licence/API evaluation, isolated workers, versioned adapters, workflow coupling, standards, benchmarks and replaceable solver integrations.
-4. Materials, manufacturing, reverse engineering and invention — process-aware materials, additive/CNC/joining/heat-treatment, inspection, repair, reverse engineering and structured invention methods.
+4. Materials, manufacturing, reverse engineering and invention — process-aware materials; metal casting and polymer/other-material moulding; material-specific forging and thermomechanical forming (including titanium); heat treatment and surface engineering; additive/CNC/joining; inspection, repair, reverse engineering and structured invention methods. Process routes link to source literature and evidence, not generic recipes.
 5. Electrical power, electronics, instrumentation and communications — DC/AC energy systems, controls, sensors, navigation, RF/satellite/acoustic/optical/tether links and fail-safe behaviour.
 6. Integrated marine application — complete cruising sailing catamaran structural, hydrodynamic, rig, propulsion, electrical, accommodation, plumbing, navigation and safety systems.
 7. Robotics, mechanisms and autonomous vehicles — humanoid/non-humanoid robots, marine robots, ROV/AUV, UAV, mechanisms, actuators, winches, cranes and moving-platform operation.
@@ -62,6 +62,8 @@ Evaluate FMI/SSP for system-model exchange and co-simulation, STEP for suitable 
 ## Physical discipline catalogue
 
 The target catalogue is maintained in PHYSICS_DOMAIN_CATALOG.md. It includes mechanics and structural analysis; fluids, hydrodynamics and aerodynamics; thermodynamics and heat transfer; electrical engineering and electromagnetics; acoustics and vibration; optics; materials science, chemistry and electrochemistry; controls and robotics; reliability and optimization; cryogenics; high-temperature/compressible gas dynamics; plasma where applicable; radiation and space environments; and future disciplines.
+
+Manufacturing-process and technical-literature architecture is specified in MANUFACTURING_PROCESS_AND_TECHNICAL_KNOWLEDGE.md. Planned scope is not evidence that process simulations or production recipes exist.
 
 The catalogue is target scope, not evidence that a solver is implemented. Every discipline declares models, assumptions, operating envelope, uncertainty, dependencies and validation evidence.
 

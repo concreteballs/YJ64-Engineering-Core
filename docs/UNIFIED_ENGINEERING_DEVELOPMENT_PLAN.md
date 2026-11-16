@@ -87,7 +87,8 @@ The kernel owns common representations and conventions, not every discipline's e
 ### Package 2 — Shared physics, materials, environments and evidence feedback
 
 Build together:
-- persistent, versioned material datasets with batch/product form, condition, heat treatment, orientation, temperature, source, test method and uncertainty;
+- persistent, versioned material and process datasets distinguishing alloy/grade, chemical composition, batch, product form, casting/forging/rolling/extrusion/additive route, heat treatment, thermomechanical history, grain/texture orientation, defects, surface condition, temperature, test method, source, uncertainty and applicability;
+- process-specific property evolution: properties depend on composition, product form, manufacturing route, deformation/solidification history, heat treatment, direction, temperature and service condition, not on grade name alone;
 - environment models: pressure-aware seawater, humid air, viscosity, conductivity, thermal properties, atmospheric/ocean profiles, gases, cryogenic fluids, vacuum and other justified media;
 - reusable physical foundations and cross-discipline state exchange;
 - public issue/experiment intake linked to exact solver versions, inputs, outputs, test conditions and measurement methods;
@@ -97,6 +98,8 @@ Build together:
 **Adaptive model-update policy:** no universal fixed percentage threshold. Significance depends on measurement uncertainty, repeatability, model uncertainty, downstream sensitivity, applicability range and consequence of error. Outcomes may be no change, request more evidence, add a bounded applicability region or propose an alternative model. Model changes require review, benchmark/regression tests and versioned release. New data never silently rewrites a trusted model.
 
 The owner's proposed spectral-database method remains a design input; specify its data model and algorithm before implementation.
+
+Material/process reference datasets distinguish handbook values, supplier datasheets, standards, measured batch data and model-derived estimates. Process knowledge links to source passages and experimental evidence; it is not silently promoted into a solver or universal recipe.
 
 **Completion gate:** an experiment can be reproduced and compared against a pinned model; a proposed correction can be reviewed without overwriting a released model.
 
@@ -147,16 +150,22 @@ Detailed policy: EXTERNAL_ENGINEERING_ECOSYSTEM.md.
 ### Package 4 — Materials, manufacturing, reverse engineering and invention
 
 Build together:
-- metals, polymers, elastomers, ceramics, glass, composites, sandwich, foam, adhesives and coatings;
-- process-aware properties and manufacturing routes;
-- polymer/composite and metal additive manufacturing, CNC machining, joining/welding and heat-treatment models;
-- tolerances, fits, GD&T, inspection and non-destructive testing;
+- metals and alloys (ferrous and non-ferrous, including aluminium, copper, nickel, titanium and specialist alloys), polymers (thermoplastics and thermosets), elastomers, ceramics, glass, composites, sandwich structures, foams, adhesives and coatings;
+- process-aware material models linking composition and grade to product form, manufacturing history, microstructure, defects, heat treatment, surface state, directionality, temperature and measured properties;
+- **Casting of metals and other castable materials:** sand, investment, permanent-mould, die, centrifugal and other relevant metal casting routes; polymer injection, compression, transfer and other moulding routes; mould/core design, filling and flow, cooling/solidification/curing, shrinkage, feeding, porosity, inclusions, warpage, residual stress, process windows and inspection. Each material family gets its own constitutive, thermal and process models;
+- **Forging and thermomechanical forming:** open-die/free forging, closed-die/impression-die forging, upsetting, drawing-out, ring rolling and other routes; hot/warm/cold forming where applicable; material-specific temperature windows, strain/strain-rate history, deformation path, friction, die contact, reheating, cooling, anisotropy, grain flow/recrystallization, loads, flash, allowances and defects. Steel, aluminium, copper, nickel and titanium alloys require distinct validated process data and models;
+- **Titanium-specific forming and forging:** alloy- and phase-region-specific process windows, controlled heating/transfer, strain rate, staged deformation, intermediate reheating, cooling and microstructure control. Preserve the proposed staged sequence (progressive reduction from multiple sides to a thin intermediate section, followed by flattening) as a research hypothesis to investigate—not a universal recipe or validated process. The bulat analogy is a prompt for studying deformation sequence and structure, not evidence that titanium and bulat steel share the same metallurgy;
+- **Heat treatment and surface engineering:** annealing, normalizing where applicable, quenching, tempering, solution treatment, ageing/precipitation hardening, stress relief, carburizing, nitriding, induction/flame treatment and other alloy-specific processes; time-temperature cycles, atmosphere, phase transformations, precipitation, hardness, distortion, residual stress, oxidation and case depth;
+- polymer/composite and metal additive manufacturing, CNC machining, joining/welding and hybrid manufacturing, with process-aware models and validated machine/process boundaries;
+- tolerances, fits, GD&T, inspection, non-destructive testing, dimensional metrology and process quality records;
 - CAD/CAM exchange and machine-specific postprocessor boundaries;
 - reverse engineering from measurements, scans, images and samples with uncertainty;
 - repair, obsolete-part replacement, lifecycle and maintenance workflows;
 - structured invention methods: TRIZ, USIT, SIT/ASIT, functional and contradiction analysis, morphology, biomimicry, analogies, QFD, FMEA/FMECA, HAZOP and design-for-X.
 
 Methods generate hypotheses, not proof. Machine-specific NC/G-code and qualified process parameters require exact machine, controller, tooling, setup, process and validated postprocessor. Safety-critical parts require appropriate engineering review, material/process qualification, inspection and testing.
+
+**Completion gate:** material records trace composition, product form, manufacturing route and condition; each process model declares its material family, process window, assumptions and validation evidence; incompatible material/process combinations are rejected. Detailed scope: MANUFACTURING_PROCESS_AND_TECHNICAL_KNOWLEDGE.md.
 
 ### Package 5 — Electrical power, electronics, instrumentation and communications
 
