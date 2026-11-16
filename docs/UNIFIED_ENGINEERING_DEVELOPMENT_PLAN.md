@@ -41,6 +41,10 @@ Create a plugin contract for specialist solvers and external applications. Input
 
 ## Package 2 — Physics and engineering solver platform
 
+**Build one shared physical kernel first, then attach discipline libraries as plugins. Do not create isolated calculators with incompatible assumptions or duplicated physical data.**
+
+The shared kernel owns versioned quantities/units, coordinate frames, geometry, material identities and evidence, environmental states, loads, boundary conditions, uncertainty, provenance and validation status. Discipline packs implement specialist equations and numerical methods behind common contracts. They must read from and publish to the same project state so that a fluid result can trigger structural checks, a thermal result can alter material allowables, and a material/process choice can constrain geometry or manufacturing. Cross-discipline coupling is explicit; a solver must not silently assume that other physical effects are irrelevant.
+
 **Build the common interfaces and initial useful solvers as one coordinated block; add specialist solvers incrementally.**
 
 Domains to support:
@@ -55,6 +59,16 @@ Domains to support:
 9. Optimization, sensitivity, uncertainty, reliability and system-level trade studies.
 
 Support both analytical calculations and external numerical engines. Keep low-order screening models clearly distinguished from CFD, full FEM, certified calculations and test evidence.
+
+### First shared-kernel implementation
+
+The first executable foundation is under src/yj64_engineering_core/physics/kernel:
+- evidence-aware material records with grade, product form, condition, heat treatment, property values, SI units, test method, source, date, temperature, orientation and uncertainty;
+- an in-memory material registry that preserves multiple incompatible test records rather than choosing or averaging them silently;
+- dry-air density from the ideal-gas equation within a declared atmospheric screening range;
+- atmospheric-pressure seawater density using UNESCO 1983 EOS-80 within its declared temperature/salinity range.
+
+This does not yet provide a populated commercial material database, persistent storage, humid-air properties, pressure-corrected seawater, viscosity, conductivity or a universal unit/geometry/load type system.
 
 ## Package 3 — Materials, processes and manufacturing
 
