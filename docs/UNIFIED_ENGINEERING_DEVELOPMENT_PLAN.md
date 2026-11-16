@@ -65,7 +65,7 @@ These capabilities already have code and must not be recreated as new work. Exte
 
 These are bounded prototypes, not complete disciplines. Their limitations remain explicit in IMPLEMENTATION_STATUS.md and solver documentation. A catalogue entry is not evidence of implementation.
 
-## 5. Eight coordinated work packages
+## 5. Nine coordinated work packages
 
 Related subtasks should be designed, implemented and tested together as coherent increments rather than scattered micro-projects.
 
@@ -184,7 +184,9 @@ Build together because these share power, interfaces, environment, controls and 
 - batteries/BMS, solar, MPPT, alternators, generators, shore power, inverters and converters;
 - loads, energy/autonomy, cable sizing, voltage drop/heating, protection, short-circuit/fault analysis, grounding, bonding, isolation and corrosion;
 - motors, drives, power electronics, sensors, embedded controllers and control-system simulation;
-- navigation, radar, AIS, GNSS, sonar, displays, alarms, health monitoring and vessel/vehicle automation;
+- navigation, radar, AIS, multi-constellation GNSS, sonar, displays, alarms, health monitoring and vessel/vehicle automation;
+- a shared Position & Time Awareness service: source-ranked location/time acquisition, last trusted fix, uncertainty-aware sensor fusion and dead reckoning, peer-device time comparison, UTC/time-zone separation, spoofing/jamming and stale-source detection;
+- Navigation Integration Hub for licensed/official integrations with established chartplotters, marine-navigation, anchoring and alarm applications; prioritize supported APIs, NMEA 0183/2000, Signal K, GPX and other documented exchange formats rather than recreating mature charting products;
 - RF/satellite, acoustic/optical communication, tethered links, relays, link budgets, cybersecurity and loss-link behaviour;
 - EMC, environmental qualification, redundancy and fail-safe operation.
 
@@ -200,6 +202,7 @@ Use the shared platform to design a complete cruising sailing catamaran:
 - electrical/energy architecture and marine electronics;
 - accommodation, galley, refrigeration, tanks, plumbing, watermaker and utilities;
 - anchoring, mooring, deck equipment, safety and service access;
+- optional Emergency Celestial Navigation module, separately invokable from routine navigation, for offline observation planning, improvised angle-measuring tools, calibration, time/position fixes, uncertainty-aware lines of position and manual fallback procedures;
 - mass/CG, volume, power, thermal, cost, maintenance and operational budgets.
 
 All subsystems share one project state. Changes trigger relevant cross-checks. Distinguish preliminary screening from full structural analysis, seakeeping validation, class review and physical qualification.
@@ -216,11 +219,27 @@ Add reusable packs for:
 - aviation, seaplanes and amphibious aircraft;
 - space launch vehicles, spacecraft, orbital systems and ground-support equipment;
 - industrial machinery, process systems and energy infrastructure;
-- road/rail vehicles and other future domains.
+- road/rail vehicles and other future domains;
+- celestial mechanics, astrometry, ephemerides, solar-system dynamics, orbital mechanics, trajectory design, gravitational modelling and cosmological model testing, with explicit separation between established reference models and user-supplied hypotheses.
 
 Space and advanced propulsion scope includes astrodynamics, flight dynamics, compressible/high-temperature gas dynamics, propulsion, cryogenics, plasma where physically applicable, thermal protection, vacuum/outgassing, radiation, structures, avionics/GNC, power, life support, test infrastructure and mission assurance. Plasma is a specialist model, not an assumption that every nozzle flow is fully ionized.
 
 Also deliver public module registry, contributor documentation, compatibility tests, reference datasets, visualization/simulation presentation and optional website/publishing/commercial integrations. External repositories may consume YJ64 interfaces but are not modified by this plan.
+
+
+### Package 9 — Human operational knowledge, emergency assistance and adaptive field problem-solving
+
+Build optional, independently installable operational modules on top of shared kernel and discipline packs. They are not part of the structural/physical solver core and must remain usable as separate application workflows:
+- first aid and emergency medical guidance: scene safety, triage support, symptom/injury information, basic first-aid procedures, escalation and emergency-service contact guidance; clearly distinguish observations, possible explanations and diagnosis; conservative, source-reviewed content, local emergency-number packs and explicit limits;
+- practical chemistry and environmental safety: combustion principles, safe fire-starting options, water-treatment selection, contamination limits, material compatibility, chemical identification confidence, hazardous-reaction warnings and safe storage; never imply that boiling removes chemical contaminants;
+- field materials, minerals, geography, ecology, woodworking, shelter, energy, food/water and repair knowledge, with local-region packs and source/evidence traceability;
+- emergency communications and signalling: prioritize internationally recognized visual, acoustic and approved radio distress methods; assess available equipment and legal constraints before proposing radio construction or transmission;
+- situation-driven construction and repair: use an inventory of available tools/materials, measured properties and environmental constraints to generate several feasible options, compare risks/resources, and produce stepwise instructions;
+- offline knowledge bundles and optional on-device language models, with versioned sources, checksums, update provenance and graceful operation without network access.
+
+Medical and chemical content is advisory and safety-bounded. The system must prioritize immediate danger reduction and professional/emergency help where available, avoid unsupported diagnosis or hazardous recipes, identify uncertainty, and never present generated procedures as certified instructions. Adaptive assembly may compose approved knowledge, tools and deterministic calculations; it must not execute arbitrary generated code or silently authorize dangerous actions.
+
+**Completion gate:** a field task can be represented with available resources, location/environment, constraints and objective; the system produces traceable alternatives with assumptions, hazard checks, confidence and offline source references. Emergency medical/chemical content passes dedicated expert review before operational release.
 
 ## 6. Civilian trajectory and launch-device scope
 
@@ -276,3 +295,28 @@ LaTeX is the primary human-readable notation, not the calculation engine. Render
 ### Mathematical formalization and proof-assistant ecosystem
 
 The mathematical workspace includes a multi-prover formal verification layer. Lean 4 + Mathlib is the first pilot candidate, while the architecture permits independent adapters for Rocq/Coq, Isabelle/HOL, Agda, Metamath, HOL Light, HOL4, PVS and ACL2. SAT/SMT engines such as Z3 and cvc5 are a separate optional category. The common contract preserves each prover's logic, assumptions, axioms, libraries, native proof artifacts and trusted checker; it must never imply that a formal proof validates physical assumptions or real-world performance. See MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md.
+
+
+## 11. Cross-cutting capability — position, time and navigation interoperability
+
+The platform provides a shared, source-aware Position & Time Awareness service used by marine, field, robotics and scientific modules. It seeks all permitted available location/time sources, records source identity, observation time, uncertainty, freshness and trust status, and preserves the last trusted fix. It supports multi-constellation GNSS, external receivers, compatible device/network positioning, permitted Wi-Fi/cellular/Bluetooth sources, connected instruments, manual fixes and celestial observations. Access is permission-gated and privacy-aware; network-derived positions are not treated as equivalent to a surveyed or GNSS fix.
+
+When satellite positioning is unavailable, the service may estimate motion from calibrated phone/external sensors, compass, barometer, speed log, vessel data and environmental estimates. This is dead reckoning/sensor fusion, not a substitute for an absolute fix: uncertainty must grow with time and distance, source bias must be modelled, and weather/current data are contextual inputs rather than direct position measurements. Reacquired fixes correct the estimated track while preserving the original track and correction history. Spoofing, jamming, stale data and implausible jumps must be flagged.
+
+Time is maintained internally against UTC with a monotonic clock and an uncertainty estimate. GNSS, network time, trusted external instruments and peer devices may contribute according to freshness and provenance. A peer's recent internet synchronization is evidence only when its synchronization time, source, clock drift and integrity can be assessed. Keep timezone/locale offsets separate from absolute time; detect manual clock changes; do not blindly copy a peer clock or change the operating-system clock. Preserve time-source history and apply explicit corrections to observations and calculations.
+
+Routine marine navigation is integrated with established third-party charting, route-planning, anchoring and alarm products through documented/licensed APIs and exchange standards. YJ64 does not recreate proprietary chart databases or bypass access controls. Emergency Celestial Navigation is a separate optional module with offline procedures and explicit uncertainty.
+
+Detailed requirements: POSITION_TIME_AND_NAVIGATION_INTEGRATION.md.
+
+## 12. Cross-cutting capability — celestial mechanics and cosmological hypothesis testing
+
+Provide a reusable discipline pack for astronomy, astrometry, celestial mechanics, orbital/trajectory mechanics, gravitational dynamics and cosmology. Support independent analytical, numerical and formal verification paths where suitable; preserve observational datasets, reference frames, time scales, constants, ephemeris versions, model assumptions and uncertainty. User hypotheses are first-class, versioned model candidates and must be compared against established reference models and observations without being silently promoted to accepted physics.
+
+Connect mathematical expressions, multi-prover proof obligations, CAS/numerical calculations and physical models through shared typed variables and provenance. A formal proof establishes only its encoded assumptions and theorem; a numerical match is not experimental validation. Detailed scope: CELESTIAL_MECHANICS_AND_COSMOLOGY.md and MATHEMATICAL_NOTATION_AND_SYMBOLIC_WORKSPACE.md.
+
+## 13. Cross-cutting capability — adaptive task assembly and offline deployment
+
+A task may span several discipline packs and operational modules. Adaptive Task Assembly resolves the objective, available resources, environment, constraints, required knowledge and risk class; selects compatible modules/tools; builds a reviewable workflow; and returns alternatives, assumptions, missing inputs, hazards and evidence. Modules remain separately versioned and replaceable. Local deployment supports selectable signed/offline knowledge bundles, cached reference datasets and optional local LLM/solver components. Offline packages must disclose age and coverage of data and cannot claim live weather, chart corrections, medical updates or current conditions without a verified source.
+
+Detailed requirements: ADAPTIVE_TASK_ASSEMBLY_AND_OFFLINE_DEPLOYMENT.md and FIELD_SURVIVAL_AND_EMERGENCY_ASSISTANCE.md.
