@@ -85,7 +85,7 @@ When a technical document is imported or translated, the workflow must explicitl
 
 The language choice is a separate question. The system must not infer the unit system from the target language or the document's country. For example, translating an American manual into Russian does not imply converting inches, psi or °F.
 
-The selection applies as a default only. Engineers can override units field-by-field, component-by-component or discipline-by-discipline. Example: keep nominal pipe sizes in NPS inches, show drilled hole diameters in mm, mass in kg and tank capacity in litres. The document viewer should show the source value/unit alongside the selected display value when requested. A converted export must record the conversion policy and preserve the original source artifact.
+The selection applies as a default only. Engineers can override units field-by-field, component-by-component or discipline-by-discipline. Example: retain nominal pipe designations (NPS/DN) unchanged, show actual pipe outside diameters and drilled hole diameters in mm, mass in kg and tank capacity in litres. The document viewer should show the source value/unit alongside the selected display value when requested. A converted export must record the conversion policy and preserve the original source artifact.
 
 ### Nominal and standards-defined sizes
 
