@@ -167,7 +167,8 @@ _UNIT_ALIASES = {
     "килограмм": "kg", "килограмма": "kg", "килограммы": "kg", "килограммов": "kg", "килограм": "kg", "kilogram": "kg", "kilograms": "kg",
     "фунт": "lb", "фунта": "lb", "фунты": "lb", "фунтов": "lb", "pound": "lb", "pounds": "lb",
     "литр": "L", "литра": "L", "литры": "L", "литров": "L", "литрa": "L", "liter": "L", "liters": "L", "litre": "L", "litres": "L",
-    "галлон": "US_gal", "галлона": "US_gal", "галлоны": "US_gal", "галлонов": "US_gal", "gallon": "US_gal", "gallons": "US_gal",\n    "имперский галлон": "Imp_gal", "имперских галлонов": "Imp_gal", "imperial gallon": "Imp_gal", "imperial gallons": "Imp_gal",
+    "галлон": "US_gal", "галлона": "US_gal", "галлоны": "US_gal", "галлонов": "US_gal", "gallon": "US_gal", "gallons": "US_gal",
+    "имперский галлон": "Imp_gal", "имперских галлонов": "Imp_gal", "imperial gallon": "Imp_gal", "imperial gallons": "Imp_gal",
     "градус цельсия": "degC", "градусов цельсия": "degC", "градусы цельсия": "degC", "цельсия": "degC", "celsius": "degC",
     "градус фаренгейта": "degF", "градусов фаренгейта": "degF", "градусы фаренгейта": "degF", "фаренгейта": "degF", "fahrenheit": "degF",
 }
