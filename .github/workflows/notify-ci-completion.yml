@@ -13,12 +13,7 @@ jobs:
     if: github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Skip when webhook is not configured
-        if: ${{ secrets.YJ64_CI_WEBHOOK_URL == '' || secrets.YJ64_CI_WEBHOOK_SECRET == '' }}
-        run: echo "::notice::CI webhook is not configured; set YJ64_CI_WEBHOOK_URL and YJ64_CI_WEBHOOK_SECRET repository secrets to enable delivery."
-
-      - name: Send CI completion event
-        if: ${{ secrets.YJ64_CI_WEBHOOK_URL != '' && secrets.YJ64_CI_WEBHOOK_SECRET != '' }}
+      - name: Send CI completion event when configured
         env:
           WEBHOOK_URL: ${{ secrets.YJ64_CI_WEBHOOK_URL }}
           WEBHOOK_SECRET: ${{ secrets.YJ64_CI_WEBHOOK_SECRET }}
@@ -31,6 +26,10 @@ jobs:
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           REPOSITORY: ${{ github.repository }}
         run: |
+          if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_SECRET" ]; then
+            echo "::notice::CI webhook is not configured; set YJ64_CI_WEBHOOK_URL and YJ64_CI_WEBHOOK_SECRET repository secrets."
+            exit 0
+          fi
           python - <<'PY'
           import json
           import os
