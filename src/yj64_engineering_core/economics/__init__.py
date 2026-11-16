@@ -1,5 +1,5 @@
 """Shared economic and procurement discipline pack."""
-from .catalog import CatalogSearchResult, MouserSearchAdapter
+from .catalog import CatalogSearchResult, MouserSearchAdapter, Nexscope1688SearchAdapter
 from .agent import AgentSourcingPlan, AgentSourcingRequest, TechnicalRequirement, plan_agent_request
 from .discovery import (
     DEFAULT_SOURCING_CATEGORIES, LocationSelection, LocationSelectionMode,
@@ -21,7 +21,7 @@ ECONOMICS_PACK_ID = "economic-sourcing"
 ECONOMICS_PACK_VERSION = "0.1.0"
 
 __all__ = [
-    "ECONOMICS_PACK_ID", "ECONOMICS_PACK_VERSION", "CatalogSearchResult", "MouserSearchAdapter",
+    "ECONOMICS_PACK_ID", "ECONOMICS_PACK_VERSION", "CatalogSearchResult", "MouserSearchAdapter", "Nexscope1688SearchAdapter",
     "AgentSourcingPlan", "AgentSourcingRequest", "TechnicalRequirement", "plan_agent_request",
     "DEFAULT_SOURCING_CATEGORIES", "LocationSelection", "LocationSelectionMode",
     "MarketScope", "SourcingCategory", "SupplierSearchPlanner", "SupplierSearchTask", "AssemblyCost",
