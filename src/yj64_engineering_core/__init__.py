@@ -1,5 +1,6 @@
 """YJ64 Engineering Core public API."""
 from .documents import DocumentSegment, SourceDocument, ingest_document
+from .typed_solver import (TypedSolverDispatcher, TypedSolverRequest, TypedSolverResponse, TypedSolverResult)
 from .persistence import ProjectSnapshot, ProjectStore, StoredArtifact, StoredCalculation
 from .extensions import CapabilityRequirement, ExtensionCapability, ExtensionDependency, ExtensionManifest, ExtensionRegistry
 from .contracts import CONTRACT_VERSION, ArtifactReference, EngineeringRequest, EngineeringResponse, GeometrySpec, LoadCase, SolverProvenance
@@ -40,6 +41,7 @@ from .physics.kernel import (
 
 __all__ = [
     "DocumentSegment", "SourceDocument", "ingest_document",
+    "TypedSolverDispatcher", "TypedSolverRequest", "TypedSolverResponse", "TypedSolverResult",
     "ProjectSnapshot", "ProjectStore", "StoredArtifact", "StoredCalculation",
     "CapabilityRequirement", "ExtensionCapability", "ExtensionDependency", "ExtensionManifest", "ExtensionRegistry",
     "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",

@@ -3,6 +3,8 @@
 **Authoritative programme:** this document governs development of concreteballs/YJ64-Engineering-Core on main. Other repositories and branches are outside this plan unless separately authorized.
 
 **Companion documents**
+- MODULAR_BIOMECHANICAL_ROBOTICS.md — actuator-neutral modular robot-body architecture.
+- ARTIFICIAL_MUSCLE_MATERIAL_DISCOVERY.md — multi-scale responsive-material and artificial-muscle research architecture.
 - UNIVERSAL_ENGINEERING_ROADMAP.md — concise architecture and domain roadmap.
 - EXTERNAL_ENGINEERING_ECOSYSTEM.md — candidate inventory, evaluation policy, adapter requirements and integration gates.
 - IMPLEMENTATION_STATUS.md — factual implementation ledger; code and tests, not plans, determine status.
@@ -167,6 +169,7 @@ Build together:
 - **Material-specific forging methods:** do not assume that a sequence or workpiece geometry suitable for one material is suitable for another. Steel, titanium alloys, bulat/welded-patterned steels and other alloys may require substantially different deformation strategies because of their distinct deformation mechanisms, phase behaviour, temperature/strain-rate sensitivity and microstructural evolution. The user's forge-example observations (including square-section steel forging and a demonstration of a titanium workpiece progressively reduced from several sides before flattening) are illustrative prompts to investigate, not proposed industrial recipes or validated universal rules. Record such observations as attributed examples, then verify them against authoritative literature and alloy-specific evidence;
 - **Heat treatment and surface engineering:** annealing, normalizing where applicable, quenching, tempering, solution treatment, ageing/precipitation hardening, stress relief, carburizing, nitriding, induction/flame treatment and other alloy-specific processes; time-temperature cycles, atmosphere, phase transformations, precipitation, hardness, distortion, residual stress, oxidation and case depth;
 - polymer/composite and metal additive manufacturing, CNC machining, joining/welding and hybrid manufacturing, with process-aware models and validated machine/process boundaries;
+- responsive actuator materials and artificial-muscle discovery, including electrically/magnetically active polymers and composites, microstructure design, multi-scale simulation and experiment feedback (research target; no material generator or actuator solver is claimed implemented);
 - tolerances, fits, GD&T, inspection, non-destructive testing, dimensional metrology and process quality records;
 - CAD/CAM exchange and machine-specific postprocessor boundaries;
 - reverse engineering from measurements, scans, images and samples with uncertainty;
@@ -208,6 +211,8 @@ Use the shared platform to design a complete cruising sailing catamaran:
 All subsystems share one project state. Changes trigger relevant cross-checks. Distinguish preliminary screening from full structural analysis, seakeeping validation, class review and physical qualification.
 
 ### Package 7 — Robotics, mechanisms and autonomous vehicles
+
+The modular biomechanical target is defined in [MODULAR_BIOMECHANICAL_ROBOTICS.md](MODULAR_BIOMECHANICAL_ROBOTICS.md). It covers actuator-neutral modular joints, structural links, adjustable actuator mounts, active/passive spinal modules, configurable degrees of freedom and task-specific motion/safety envelopes. Artificial-muscle research is specified separately in [ARTIFICIAL_MUSCLE_MATERIAL_DISCOVERY.md](ARTIFICIAL_MUSCLE_MATERIAL_DISCOVERY.md) and feeds qualified actuator models into robotics without making the robot platform dependent on an unproven material.
 
 Build a common framework for humanoid/non-humanoid robots, deckhands, inspection robots, ROV/AUV, UAV, rescue/cargo systems and industrial automation.
 
