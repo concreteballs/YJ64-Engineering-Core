@@ -99,3 +99,8 @@ A successful response contains the validated request identity and expanded categ
 The current response status is `planned`, with `execution_mode: planning_only`. It is not a supplier quote or completed search. Live marketplace/distributor connectors, price/stock freshness checks, product identity matching, shipping quotes, customs/import VAT, FX conversion and durable queue execution are follow-up implementation stages.
 
 The endpoint requires an API token and returns 503 until `YJ64_AGENT_API_TOKEN` is configured. No purchasing capability exists in this API.
+
+
+## Execution boundary
+
+`POST /api/discovery` only validates and plans. A cloud worker may use `AgentSourcingExecutor` after explicit provider registration and a per-run credit ceiling have been configured. The current paid China provider is capped at 19 credits per call; the executor requires a maximum call count and matching credit ceiling. Do not expose the Nexscope API key to the agent or browser. No third-party calls are made by the planning endpoint.
