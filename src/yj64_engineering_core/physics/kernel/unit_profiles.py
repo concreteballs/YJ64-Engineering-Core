@@ -122,6 +122,29 @@ BUILTIN_UNIT_PROFILES = {
 
 
 @dataclass(frozen=True, slots=True)
+class NominalSizeDesignation:
+    """A standards-based trade designation (for example NPS 1 or DN 25).
+
+    A nominal designation is not a physical length and must not be converted
+    arithmetically to mm/in. Actual geometry belongs in a separate Quantity.
+    """
+
+    scheme: str
+    designation: str
+    standard_reference: str
+    actual_outside_diameter: Quantity | None = None
+
+    def __post_init__(self) -> None:
+        if not self.scheme.strip() or not self.designation.strip():
+            raise ValueError("nominal size scheme and designation must be non-empty")
+        if not self.standard_reference.strip():
+            raise ValueError("nominal size requires a standard/reference")
+        if self.actual_outside_diameter is not None:
+            if self.actual_outside_diameter.dimension != LENGTH:
+                raise ValueError("actual outside diameter must have length dimension")
+
+
+@dataclass(frozen=True, slots=True)
 class VoiceUnitCommand:
     """Parsed intent from speech-to-text; this module does not perform speech recognition."""
 
