@@ -72,7 +72,7 @@ Related subtasks should be designed, implemented and tested together as coherent
 ### Package 1 — Universal kernel, project model and extension contracts
 
 Build together:
-- unit-aware physical quantities, dimension checking and extensible unit registry, with locale-independent canonical values and user/project display-unit profiles;\n- localization foundations: language-neutral identifiers and schemas, interface/document locale metadata, terminology/glossary contracts, and safe technical-document translation workflows;
+- unit-aware physical quantities, dimension checking and extensible unit registry, with locale-independent canonical values, SI/metric/US/marine display profiles and per-field overrides;\n- document-import unit policy: preserve source, apply selected profile or ask; profile defaults never override explicit field-level engineering conventions;\n- voice-command intent interface for explicit, dimension-checked unit changes, with ambiguity resolution and user confirmation before persistent changes;\n- distinction between nominal standards designations (such as NPS/DN pipe sizes) and actual physical dimensions;\n- localization foundations: language-neutral identifiers and schemas, interface/document locale metadata, terminology/glossary contracts, and safe technical-document translation workflows;
 - coordinate frames, handedness conventions, transforms and frame-compatibility validation;
 - reusable geometry primitives, stable references and geometric validation;
 - typed loads, boundary conditions, operating states and environmental references;
