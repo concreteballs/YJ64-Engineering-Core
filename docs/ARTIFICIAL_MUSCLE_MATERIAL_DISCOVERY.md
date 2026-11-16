@@ -32,3 +32,7 @@ Treat stroke, blocked force, force density, response time, efficiency, cycle ene
 ## Evidence and release gates
 
 Every candidate has a traceable composition and microstructure, model versions, assumptions, predicted performance and uncertainty. A candidate progresses from computational hypothesis to specimen only after feasibility and hazard review. Experimental validation is separate from numerical verification. Never label a simulated candidate as a proven material or a material coupon as a qualified actuator.
+
+## Discipline-pack boundary
+
+This research brief belongs to the separate Artificial Muscle Engineering and Chemistry & Molecular Design discipline packs. Their shared contracts, dependency boundaries, multi-scale workflow and staged integration are defined in [CHEMISTRY_AND_ARTIFICIAL_MUSCLE_MODULE_ARCHITECTURE.md](CHEMISTRY_AND_ARTIFICIAL_MUSCLE_MODULE_ARCHITECTURE.md). Keep this document focused on responsive-material discovery; actuator architecture and complete actuator performance belong to the Artificial Muscle Engineering pack.
