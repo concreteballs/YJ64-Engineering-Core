@@ -4,11 +4,11 @@ Last reconciled: 2026-11-17
 Repository: concreteballs/YJ64-Engineering-Core
 Authorized branch: main
 
-This document is the execution index for the autonomous development cycle. It separates verified implementation from planned work. The detailed subsystem ledger remains in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); this file records the current control-loop priority and the order in which the remaining master plan should be executed.
+This document is the execution index for the autonomous development cycle. It separates verified implementation from planned work. The detailed subsystem ledger remains in IMPLEMENTATION_STATUS.md; this file records the current control-loop priority and the order in which the remaining master plan should be executed.
 
 ## 1. Verified completed work
 
-"Completed" below means the stated prototype/code and tests exist. It does not imply production qualification, complete domain coverage, or integration of external solvers unless explicitly stated.
+"Completed" means the stated prototype/code and automated tests exist. It does not imply production qualification, complete domain coverage, or integration of external solvers unless explicitly stated.
 
 ### Core engineering foundations — implemented prototypes
 - Shared engineering contracts, dispatcher and pipeline.
@@ -35,43 +35,60 @@ This document is the execution index for the autonomous development cycle. It se
 - Agent-authored sourcing requests and technical requirements.
 - Destination-only user input model: user selects delivery point; engineering agent authors categories, terms, quantities, technical limits, budget, deadline, radius and market scopes.
 - Mobile map/GPS destination picker; GPS is explicit-consent only.
-- Authenticated planning endpoint `POST /api/discovery`, protected by `YJ64_AGENT_API_TOKEN`.
+- Authenticated planning endpoint POST /api/discovery, protected by YJ64_AGENT_API_TOKEN.
 - Mouser read-only catalogue adapter foundation.
 - Optional 1688/Nexscope read-only adapter with explicit API key and credit-budget guard.
 - Bounded provider executor with external-call and credit caps; currently only China/1688 is executable when explicitly registered. Other scopes report missing providers.
 - Tests cover sourcing calculations, planning, catalogue normalization and bounded execution.
 
-### CI and delivery foundation — implemented, partially activated
-- GitHub Actions Python test workflow.
-- GitHub Actions completion-webhook workflow for pushes to main.
-- Vercel receiver project and webhook integration work have been started; receiver/secret/deployment state must be re-verified before activation is claimed.
-- Latest verified main commit at reconciliation: `41df0ba903167a8731110ae7003116fb6ae43947`.
-- GitHub Actions run [43980671951](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43980671951) completed with conclusion `success`.
-- Earlier code test run for commit `4874cad5aa0b84a4f85c93bf56c58b886ea3e1e5` also passed.
-- This confirms the observed workflow run, not the operational state of the autonomous cloud loop.
+### CI and autonomous-cycle foundation — implemented prototypes, deployment pending
+- GitHub Actions Python/FEM/CAD test workflow.
+- GitHub Actions completion-webhook sender for pushes to main.
+- Authenticated Vercel CI receiver with repository/branch/workflow/event validation.
+- PostgreSQL migration for durable CI event records and task queue.
+- PostgreSQL store with idempotent CI event persistence, one processing task per event, atomic leased claims, bounded retries, completion and blocked states.
+- Vercel receiver now persists accepted events and enqueues a process_ci_event task when PostgreSQL is configured; it does not run a model or repository code.
+- Tests for event persistence, duplicate suppression, lease claiming, completion, retry and ingress validation.
+- Latest verified main test run at this reconciliation: [43981929835](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43981929835), conclusion success, commit 2a3245a91d4fc50e4fce441c498ce5b33c135a24.
+- The separate CI completion-webhook delivery run [43981930959](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43981930959) failed with HTTP 401 Unauthorized. GitHub has both sender secrets configured, but the receiver rejected the bearer token. The two secret values must be aligned; values must not be exposed.
+- PostgreSQL database, migration application, Vercel environment configuration and end-to-end persistence are not yet verified. The cloud worker and autonomous continuation are not implemented.
+- This confirms software tests passed; it does not mean the autonomous cloud loop is operational.
 
 ## 2. Current priority: finish the autonomous engineering cycle
 
 Do not start broad implementation of every engineering discipline until this cycle is operational. The cycle must be capable of taking the next incomplete task from this roadmap, executing bounded work, validating it, recording the result and continuing without requiring the user's phone to remain online.
 
 ### Cycle milestone A — reliable event delivery
-- Verify the GitHub Actions completion workflow and its payload.
-- Verify the canonical Vercel production receiver URL and deployed version.
-- Verify repository secrets `YJ64_CI_WEBHOOK_URL` and `YJ64_CI_WEBHOOK_SECRET` are present and correctly scoped, without exposing their values.
-- Verify receiver authentication, schema validation, repository/branch allowlist and deduplication by repository + run_id + run_attempt.
-- Record delivery acknowledgements and failure reasons.
-- Do not treat a configured sender as proof of successful delivery.
+
+Implemented in code:
+- GitHub Actions completion-event sender.
+- Authenticated receiver with strict repository, branch, workflow, event, run identity, commit and URL validation.
+- Idempotent persistence design and duplicate protection.
+
+Still required:
+- Align GitHub YJ64_CI_WEBHOOK_SECRET with the Vercel YJ64_CI_WEBHOOK_SECRET; the latest delivery test returned HTTP 401.
+- Verify the canonical Vercel production URL and deployed version.
+- Verify the receiver returns an authenticated 202 after database setup.
+- Record and verify successful end-to-end delivery; do not treat configured secrets as proof of delivery.
 
 ### Cycle milestone B — durable task state
-- Add a persistent database-backed task queue and execution ledger.
-- Persist task ID, plan item, status, attempt count, timestamps, parent/dependency IDs, input digest, code commit, CI run ID, logs/artifact references, provenance and stop reason.
-- Support atomic claiming/leases, retries with backoff, idempotency, dead-letter/blocked states and recovery after worker restart.
-- Keep task history append-only; never erase failed attempts.
-- Use migrations and backups. Do not use ephemeral serverless memory as the queue.
+
+Implemented in code:
+- PostgreSQL schema migration for CI events and task queue.
+- Persistent event store and idempotent process_ci_event enqueue.
+- Atomic queue claim with FOR UPDATE SKIP LOCKED and expiring worker lease.
+- Bounded retry, completion and blocked-state operations.
+- Automated tests using a controlled database double.
+
+Still required:
+- Create/connect the production PostgreSQL database and apply migrations/0001_autonomous_cycle.sql.
+- Configure YJ64_DATABASE_URL in Vercel using a server-side pooled connection string.
+- Verify real persistence, deduplication, queue claims and restart recovery against the live database.
+- Add task history, dependency/parent linkage, artifacts/log references and backup/retention policy as the worker contract matures.
 
 ### Cycle milestone C — cloud worker and authorized agent
 - Deploy a separate cloud worker that can wake from queued work independently of the user's device.
-- Give it access only to this repository and the authorized `main` workflow; do not grant unrelated repositories.
+- Give it access only to this repository and the authorized main workflow; do not grant unrelated repositories.
 - Connect an explicitly configured model provider through server-side secrets. No model API key is assumed to exist.
 - Worker reads this roadmap and implementation ledger, chooses the next unblocked task, prepares a bounded change, runs local checks and submits the change to the authorized branch.
 - Preserve a complete task/decision/provenance record.
@@ -93,6 +110,7 @@ Do not start broad implementation of every engineering discipline until this cyc
 - Keep the user in control of external purchases, paid API credits, data sharing, deployment secrets and consequential physical operations.
 
 ### Cycle acceptance test
+
 The autonomous cycle is operational only after a test demonstrates the full sequence:
 1. A task is enqueued durably.
 2. A cloud worker claims it after the user's phone is offline.
@@ -107,7 +125,7 @@ Until all acceptance criteria pass, describe the system as partially implemented
 
 ## 3. Master engineering roadmap after the cycle is operational
 
-The worker must use `docs/IMPLEMENTATION_STATUS.md` as the detailed source of truth, avoid recreating completed foundations, and execute the remaining work in dependency order:
+The worker must use docs/IMPLEMENTATION_STATUS.md as the detailed source of truth, avoid recreating completed foundations, and execute the remaining work in dependency order:
 
 1. **Core kernel completion:** schema migrations, external artifact storage, signed extension manifests/trust policy, runtime isolation, capability negotiation, mesh/entity mapping and solver-specific load adapters.
 2. **Shared physics and evidence:** persistent verified datasets, broader environmental/material models, experiment intake, discrepancy analysis and reviewed adaptive model updates.
@@ -127,8 +145,8 @@ Every roadmap item must be broken into small tasks with prerequisites, acceptanc
 
 ## 4. Global execution rules
 
-- Repository scope: `concreteballs/YJ64-Engineering-Core` only.
-- Branch: `main` only.
+- Repository scope: concreteballs/YJ64-Engineering-Core only.
+- Branch: main only.
 - Preserve existing interfaces unless a tested migration is supplied.
 - No secrets in source, commits, logs or chat.
 - No paid API requests without explicit per-call budget and configured credentials.
@@ -137,4 +155,4 @@ Every roadmap item must be broken into small tasks with prerequisites, acceptanc
 - Separate hypothesis, candidate, deterministic calculation, simulation, benchmark, experiment and independent review.
 - Prefer additive, reversible changes and small commits.
 - Every completed task must link its code commit, tests, CI run and limitations.
-- Update this roadmap and `IMPLEMENTATION_STATUS.md` as part of the same task that changes implementation status.
+- Update this roadmap and IMPLEMENTATION_STATUS.md as part of the same task that changes implementation status.
