@@ -272,3 +272,8 @@ The `hydrostatics.panel_pressure_loads` solver now has two explicit modes: legac
 ## Delivered: rigid-body vessel motion kinematics
 
 Implemented and tested a six-DOF rigid-body point-kinematics solver for deck-mounted equipment and robot bases. It consumes a prescribed vessel pose, translational velocity/acceleration and body angular velocity/acceleration, then returns earth-frame point position/velocity/acceleration. This is the base-motion transform only; wave-response prediction, seakeeping, sensor fusion and robot stabilization remain open roadmap items. Details: `docs/VESSEL_MOTION_KINEMATICS.md`.
+
+
+## Universal physics platform scope
+
+The physics workstream is expanded from marine-centric solvers to a cross-domain platform. The target disciplines and application packs are specified in `docs/PHYSICS_DOMAIN_CATALOG.md`: mechanics, strength of materials, structural FEM, fluids, full aerodynamics/flight mechanics, general trajectory mechanics, thermodynamics, energy, electrical/electromagnetics, materials/chemistry, acoustics/vibration, optics, controls/robotics, environmental physics, reliability and optimization. The yacht remains the first integrated application; aircraft/seaplanes, vehicles, industrial machinery, energy systems and repair projects become further application packs. Roadmap entries are not considered implemented until code, tests and appropriate validation evidence exist.
