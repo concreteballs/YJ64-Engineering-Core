@@ -73,11 +73,10 @@ Official API information: [Mouser API Hub](https://www.mouser.es/es/api-hub/) an
 
 The destination is selected at runtime by the user; it is not a deployment default or a hard-coded city.
 
-- **Map:** the user selects a point on a map. The location contract requires coordinates and a resolved destination record.
-- **GPS:** the app requests device location permission only after the user chooses GPS. GPS coordinates are accepted only when the explicit permission flag is true.
-- **Manual:** a named destination can also be supplied for users who do not want to share device coordinates.
+- **Map:** the user selects a point on the map. The page exports coordinates and selection provenance.
+- **GPS:** the user explicitly presses the GPS button; only then does the browser request location permission. The page exports coordinates and records GPS provenance.
 
-The executable contract is LocationSelection in economics/discovery.py. It records whether the destination came from map, GPS or manual entry. This is a backend contract; a graphical map picker, Android permission flow and reverse-geocoding UI are not yet implemented.
+The executable contract is `LocationSelection` in `economics/discovery.py`. The map/GPS page is implemented in the repository root `index.html`. Reverse geocoding and currency resolution are not yet implemented; the agent/API request currently supplies the resolved country and currency.
 
 SupplierSearchPlanner creates separate search tasks for every requested category and four market scopes:
 
@@ -86,7 +85,7 @@ SupplierSearchPlanner creates separate search tasks for every requested category
 3. **International** suppliers worldwide outside the destination country and the separately tracked China scope.
 4. **China** — a dedicated global search scope for Chinese manufacturers, wholesalers and marketplaces.
 
-The default taxonomy separates chemicals/reagents, polymers/elastomers/resins, metals/alloys, composites, electronics, mechanical parts, fasteners, motors/actuators, sensors/control, cables/power, ceramics/thermal materials, and manufacturing services/equipment. A discipline can pass a narrower category list, so a search for an actuator does not waste requests on unrelated materials.
+The default taxonomy separates chemicals/reagents, polymers/elastomers/resins, metals/alloys, composites, electronics, mechanical parts, fasteners, motors/actuators, sensors/control, cables/power, ceramics/thermal materials, and manufacturing services/equipment. The engineering agent may instead define task-specific categories and exact search terms; the user does not manually choose procurement categories.
 
 The planner creates typed tasks; it does not itself crawl websites or claim current prices. Actual supplier connectors must execute those tasks and normalize each result into SupplierOffer with a product identity, supplier location, currency, stock semantics, MOQ, source URL and observation timestamp. Chinese and other cross-border offers must additionally provide shipping coverage and a landed-import estimate (freight, customs, import VAT, platform/payment fees where applicable). A low catalogue price without a credible delivered-cost quote cannot win the comparison.
 
