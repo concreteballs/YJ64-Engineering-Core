@@ -1,417 +1,182 @@
-# YJ64 Engineering Core — Unified Development Plan
+# YJ64 Engineering Platform — Unified Development Plan
 
-**Scope:** this plan applies only to `concreteballs/YJ64-Engineering-Core`, branch `main`. It defines the engineering-core capability and interfaces. Separate design, visualization, website/content and commercial repositories may consume these interfaces, but are not modified by this plan.
+**Authoritative plan:** this document defines the consolidated implementation strategy for `concreteballs/YJ64-Engineering-Core`, branch `main`. Other repositories and branches are outside this work unless the owner explicitly authorizes them.
 
 ## Mission
 
-Build a model-independent engineering system that can formulate problems, generate candidate concepts, model and calculate complete systems and individual components, optimize them, prepare manufacturing data, and track evidence from analysis through physical testing.
+Build an open, model-independent, interdisciplinary engineering platform with one extensible project and physical kernel. A yacht, aircraft, robot, spacecraft or industrial machine must be represented as a different engineering project on the same platform—not as a separate incompatible application.
 
-The yacht is the first major application domain, not the limit of the engineering core. The system must eventually handle complete assemblies and very small replacement parts, including parts no longer commercially available.
+YJ64 must not need to predict every future engineering discipline. New disciplines, solver engines, datasets and application domains must be addable through versioned contracts without redesigning the kernel.
 
-This is a staged roadmap. A capability listed below is a target until its implementation, tests and validation evidence exist.
+The platform is intended to support the engineering lifecycle: requirements and concepts; architecture and interfaces; geometry and physical modelling; analysis and optimization; materials and manufacturing; verification and physical testing; operation, maintenance, repair and feedback.
 
-## Shared rules for every work package
+The yacht is the first large integrated demonstration project, not the platform's specialization limit.
 
-- One versioned project/component model with stable identifiers and explicit units (SI internally).
-- Every input, geometry, material, load case, solver result, drawing and manufacturing file is tied to exact revisions and provenance.
-- A changed upstream input invalidates dependent calculations and marks drawings, renders, toolpaths and reports stale.
-- Missing data remains explicitly unknown; no invented material properties, loads, process settings, prices or safety margins.
-- Every result states method, solver/version, assumptions, uncertainty, warnings and limitations.
-- Distinguish concept, analytical estimate, numerical simulation, reviewed design, manufactured prototype, tested part and qualified/certified use.
-- Run CAD, FEM, CAM and other external tools in isolated, resource-limited workers. Never execute arbitrary LLM-generated code in the core process.
-- A generated file is not proof that a part is safe or manufacturable. Safety-critical release requires the applicable engineering review, inspection and testing.
+## Delivery principles
 
-# Work packages
+1. **Build shared foundations once.** Common quantities, units, coordinate frames, geometry, materials, environments, loads, provenance and project state belong in the shared kernel.
+2. **Keep specialist physics modular.** Each discipline owns its equations, assumptions, numerical methods, applicability limits and validation evidence.
+3. **Integrate rather than rewrite.** Reuse mature external solvers through adapters when licensing, interfaces, security and technical suitability permit.
+4. **Preserve traceability.** Every input, model, result, artifact and test refers to exact versions and sources. Upstream changes mark dependent outputs stale.
+5. **Unknown means unknown.** Never invent material properties, loads, process parameters, uncertainty or safety margins.
+6. **Separate software correctness from engineering validity.** Passing unit tests does not validate a physical model; a validated model does not certify a complete product.
+7. **Open extension ecosystem.** Independent developers can publish discipline packs and adapters against stable, documented contracts.
+8. **Safety by application context.** Evaluate intended function, design and foreseeable use; do not apply blanket restrictions to an entire scientific discipline.
 
-## Package 1 — Universal engineering kernel and common data model
+## What is already implemented
 
-**Build together:** project/component/assembly schemas, solver contracts, dispatcher, artifact/provenance model and validation states.
+The following are existing executable foundations and must not be re-created as new work. They may be extended, refactored or validated further.
 
-The common component schema must support:
-- geometry references, coordinate frames, interfaces and assembly relationships;
-- material, product form, material condition and heat-treatment state;
-- mass, centre of gravity and inertia;
-- loads, boundary conditions, operating states and environmental exposure;
-- fits, tolerances, surface finish and inspection requirements;
-- electrical, thermal, fluid, chemical and mechanical interfaces;
-- manufacturing constraints, machine profiles and maintenance requirements;
-- source references, assumptions, uncertainty and test evidence.
+- Core request/response contracts, solver interfaces, dispatcher, pipeline, component/dependency graph, mass/centre-of-gravity/inertia records, evidence and stale-result tracking.
+- Evidence-aware material identity/property records and an in-memory material registry.
+- Dry-air ideal-gas density within declared limits and atmospheric-pressure seawater density using UNESCO 1983 EOS-80.
+- Preliminary catamaran hydrostatics, mass budget, sail polar using supplied data, apparent wind, coefficient-based aerodynamic/hydrodynamic calculations and hull-material screening.
+- Axial-member screening and a limited CalculiX truss adapter.
+- ROV cylindrical pressure-housing screening.
+- Hydrostatic panel pressure-load generation, including polygon integration mode.
+- Six-degree-of-freedom rigid-body vessel point kinematics for a supplied/prescribed motion state.
+- Parametric hull geometry and limited SVG/OpenSCAD/FreeCAD generation adapters.
+- Visual reference intake that records image metadata/hash and structured human annotations.
 
-Create a plugin contract for specialist solvers and external applications. Inputs and outputs use typed SI values and explicit operation names. Solver completion is not the same as engineering validation.
+These are prototypes or bounded capabilities, not complete disciplines. Exact limitations are recorded in `IMPLEMENTATION_STATUS.md` and the relevant solver documentation.
 
-## Package 2 — Physics and engineering solver platform
+## Consolidated implementation programme
 
-**Build one shared physical kernel first, then attach discipline libraries as plugins. Do not create isolated calculators with incompatible assumptions or duplicated physical data.**
+The programme is deliberately grouped into **eight substantial work packages**. Each package combines related work that should be designed, implemented and tested together. Subtasks are not independent mini-projects; deliver a coherent increment per implementation pass.
 
-The shared kernel owns versioned quantities/units, coordinate frames, geometry, material identities and evidence, environmental states, loads, boundary conditions, uncertainty, provenance and validation status. Discipline packs implement specialist equations and numerical methods behind common contracts. They must read from and publish to the same project state so that a fluid result can trigger structural checks, a thermal result can alter material allowables, and a material/process choice can constrain geometry or manufacturing. Cross-discipline coupling is explicit; a solver must not silently assume that other physical effects are irrelevant.
+### Package 1 — Universal kernel, project model and extension contracts
 
-**Build the common interfaces and initial useful solvers as one coordinated block; add specialist solvers incrementally.**
+**First package to execute.**
 
-Domains to support:
-1. Structural mechanics: statics, dynamics, beams, shells, solids, joints, contact, buckling, fracture, fatigue and failure.
-2. Mechanisms: kinematics, multibody dynamics, actuators, cables, pulleys, gears, linkages, folding and locking mechanisms.
-3. Fluid engineering: hydrostatics, hydrodynamics, aerodynamics, CFD interfaces, resistance, lift/drag, cavitation, ventilation, pumps, pipes and heat exchangers.
-4. Thermal engineering: conduction, convection, radiation, thermal expansion, thermal stress, cooling and refrigeration.
-5. Electrical and electronic engineering: DC/AC networks, power electronics, motors, generators, batteries, protection, grounding/bonding, control and electromagnetic compatibility.
-6. Controls and automation: sensors, actuators, feedback, fault states, interlocks and system simulation.
-7. Vibrations, modal analysis, resonance, acoustics and noise.
-8. Materials behaviour, corrosion, galvanic couples, wear, friction, tribology and chemical compatibility.
-9. Optimization, sensitivity, uncertainty, reliability and system-level trade studies.
+Build together:
+- unit-aware physical quantities and extensible unit registry;
+- coordinate frames and transformations;
+- reusable geometry primitives and validation;
+- typed loads, boundary conditions, operating states and environmental references;
+- versioned project/component/assembly and interface schemas;
+- persistent project/artifact/provenance model, dependency tracking and stale-result handling;
+- stable solver/plugin contracts, capability declarations, compatibility/version rules and structured diagnostics.
 
-Support both analytical calculations and external numerical engines. Keep low-order screening models clearly distinguished from CFD, full FEM, certified calculations and test evidence.
+The kernel owns shared representation and conventions—not every discipline's equations. A plugin must declare input/output schemas, units, coordinate conventions, assumptions, applicability bounds, dependencies, version, license and evidence level. External execution must be isolated and resource-bounded. Do not execute arbitrary LLM-generated code inside the core process.
 
-### First shared-kernel implementation
+**Completion gate:** a test plugin can consume common typed quantities and project data, return a traceable result, reject incompatible units/frames/schema versions and cause dependent results to be marked stale when upstream data changes.
 
-The first executable foundation is under src/yj64_engineering_core/physics/kernel:
-- evidence-aware material records with grade, product form, condition, heat treatment, property values, SI units, test method, source, date, temperature, orientation and uncertainty;
-- an in-memory material registry that preserves multiple incompatible test records rather than choosing or averaging them silently;
-- dry-air density from the ideal-gas equation within a declared atmospheric screening range;
-- atmospheric-pressure seawater density using UNESCO 1983 EOS-80 within its declared temperature/salinity range.
+### Package 2 — Shared physics, materials, environments and evidence feedback
 
-This does not yet provide a populated commercial material database, persistent storage, humid-air properties, pressure-corrected seawater, viscosity, conductivity or a universal unit/geometry/load type system.
+Build together:
+- expand the current material registry into persistent, versioned, traceable datasets, preserving batch/product form, condition, heat treatment, orientation, temperature, source, test method and uncertainty;
+- expand environment models: pressure-aware seawater, humid air, viscosity, conductivity, thermal properties, atmospheric/ocean profiles, gases, cryogenic fluids, vacuum and other supported media;
+- implement reusable physical foundations and cross-discipline state exchange;
+- establish a public issue/experiment intake workflow linked to exact solver versions, inputs, outputs and test conditions;
+- compare submitted measurements with predictions, classify discrepancies and create reproducible regression cases;
+- create a research-data collector for openly accessible publications and experimental datasets, retaining source, license, extraction method and uncertainty.
 
-## Package 3 — Materials, processes and manufacturing
+**Adaptive model-update policy:** do not use one fixed percentage threshold. Significance must depend on measurement uncertainty, repeatability, model uncertainty, sensitivity of downstream outputs, operating range and consequence of error. The system may recommend no change, collect more evidence, add a bounded applicability region or propose a new model. Model changes require review, benchmark/regression tests and versioned release; collected data must never silently rewrite a trusted model. The owner's proposed spectral-database method is a design input to be specified before implementing its algorithm.
 
-**Build the material/process data model and manufacturing interfaces together**, because material properties depend on product form, process, orientation and treatment.
+**Completion gate:** a submitted experiment can be reproduced, compared and traced; a proposed model correction can be evaluated without overwriting the released model.
 
-### Material knowledge
-Cover marine aluminium and other alloys, steels, titanium and other metals, polymers, elastomers, ceramics, glass, fibre composites, sandwich/honeycomb structures, foams, adhesives, coatings and relevant construction materials. Wood is not a target hull material in the current project brief.
+### Package 3 — Solver ecosystem and coupled multiphysics execution
 
-Store density, elastic/plastic properties, strength, fatigue, fracture, creep, wear, corrosion, thermal/electrical properties and anisotropy where relevant. Each property needs a source, test method, temperature, orientation, condition and uncertainty.
+Build together:
+- common adapters and isolated workers for suitable mature tools;
+- solver discovery, installation/availability metadata, license compatibility and version pinning;
+- unit/frame/schema conversion and validation at adapter boundaries;
+- orchestration of coupled analyses with explicit data dependencies and convergence criteria;
+- reference benchmarks and cross-solver comparisons.
 
-### Additive manufacturing
-- Polymer and composite printing: polymer grade, reinforcement, build orientation, layer strategy, anisotropy, infill, supports, shrinkage, warpage and post-processing.
-- Metal printing: powder-bed fusion, directed-energy deposition and wire-fed processes where supported; alloy and feedstock condition, machine limits, build orientation, process parameters, atmosphere, porosity/defect controls, residual stress, distortion, stress relief, heat treatment, HIP where applicable, machining allowance and inspection.
-- Machine-specific build preparation must be separate from generic STL/3MF export. Never invent qualified machine parameters.
+Candidate tools to evaluate—not blindly depend on—include OpenMDAO, OpenModelica, OpenFOAM, MOOSE, NASA CEA, Elmer FEM, CalculiX, Code_Aster and FreeCAD. Select per task based on capabilities, license, maintainability, interfaces and reproducibility. The core must remain usable when an optional external engine is unavailable.
 
-### CNC milling and machining
-Represent stock, datums, fixtures, tools, tool reach, cutting speed, feed, depth/width of cut, coolant, collision checking, tolerances, surface finish and operation sequence. Generate machine-specific NC/G-code only after the exact machine, controller, tools, setup and verified postprocessor are known.
+**Completion gate:** at least one external solver is connected through a documented adapter and produces a reproducible, traceable result; failure or incompatible output is contained and reported.
 
-### Heat treatment
-Model heat-treatment routes by alloy, product form and target condition: process stages, temperature/time profile, atmosphere, quench medium, cooling, aging, distortion risk, hardness and verification tests. Never offer a universal cycle when the alloy and condition are unknown.
+### Package 4 — Materials, manufacturing, reverse engineering and invention
 
-### Deliverables
-Where supported: editable native CAD, STEP, STL/3MF, dimensioned drawings with GD&T, material/process specification, inspection plan, CAM/build preparation, and machine-specific NC/G-code after setup verification. Track the exact revision and process profile for every artifact.
+Build together:
+- metal, polymer, elastomer, ceramic, glass, composite, sandwich, foam, adhesive and coating data;
+- process-aware properties and manufacturing routes;
+- polymer/composite and metal additive manufacturing, CNC machining, joining, welding and heat-treatment process models;
+- tolerances, fits, GD&T, inspection and non-destructive testing;
+- CAD/CAM exchange and machine-specific postprocessor boundaries;
+- reverse engineering from measurements, scans, images and samples with uncertainty;
+- repair, obsolete-part replacement and lifecycle/maintenance workflows;
+- structured invention-method library: TRIZ, USIT, SIT/ASIT, functional analysis, contradiction analysis, morphology, biomimicry, analogies, QFD, FMEA/FMECA, HAZOP and design-for-X.
 
-## Package 4 — Complete electrical power and energy engineering
+Methods generate candidate hypotheses, not proof. Machine-specific NC/G-code and qualified manufacturing parameters require exact machine, controller, tooling, setup, process and validated postprocessor. Safety-critical parts require suitable engineering review, material/process qualification, inspection and tests.
 
-**This is a major first-class engineering subsystem, not just a battery calculator.** It must design and verify the complete vessel electrical architecture.
+### Package 5 — Electrical power, electronics, instrumentation and communications
 
-### Voltage architectures to compare
-Evaluate nominal DC architectures of **12 V, 24 V and 48 V** as explicit alternatives. Do not choose one in advance. Compare:
-- current and cable cross-section for each load and distribution path;
-- voltage drop, losses, heating and connector ratings;
-- device availability and compatibility;
-- converters and distribution complexity;
-- battery configuration, protection and serviceability;
-- peak loads, motor starting/surge currents and expansion capacity.
+Build together because these systems share power, interfaces, environment, controls and fault management:
+- complete DC/AC electrical architecture; compare 12/24/48 V rather than preselecting;
+- batteries/BMS, solar, MPPT, alternators, generators, shore power, inverters and converters;
+- loads, energy/autonomy, cable sizing, voltage drop/heating, protection, short-circuit/fault analysis, grounding, bonding, isolation and corrosion;
+- motors, drives, power electronics, sensors, embedded controllers and control-system simulation;
+- navigation, radar, AIS, GNSS, sonar, displays, alarms, health monitoring and vessel/vehicle automation;
+- RF/satellite, acoustic and optical communication, tethered links, relays, link budgets, cybersecurity and loss-link behaviour;
+- EMC, environmental qualification, redundancy and fail-safe operation.
 
-A mixed architecture may be appropriate (for example, a higher-voltage main bus with DC-DC conversion for lower-voltage consumers), but must be justified by the load inventory and actual equipment. Also model the vessel's AC system, shore supply, inverter and generator where applicable; frequency and shore standards depend on intended operating region.
+The smartphone may be a user interface or supplementary sensor/compute node, never the sole safety controller for a vessel or autonomous vehicle. Local deterministic controllers retain critical safety functions.
 
-### Energy sources and storage
-Model solar panels by location, area, orientation, shading, temperature and realistic yield; MPPT/controllers; alternators; shore chargers; generators; wind or hydro generation where applicable; batteries by chemistry and configuration; BMS; fuses/contactors; DC-DC converters; inverters and chargers.
+### Package 6 — First integrated application: complete marine systems
 
-### Loads
-Create a complete load register with rated power, voltage, duty cycle, start/surge demand, daily operating hours, priority and operating scenario. Include refrigeration/freezers, lighting, navigation, communications, radar, autopilot, computers, pumps, watermaker/desalination, ventilation, heating/cooling, galley appliances, entertainment, workshop tools and electric propulsion/charging where selected.
+Use the shared platform to design the complete cruising sailing catamaran, including:
+- hulls, decks, bulkheads, crossbeams, global/local structural loads and stability;
+- hydrostatics, seakeeping, hydrodynamics, foils, rudders and appendages;
+- mast, sails, rigging, folding/stowage and automated sail handling;
+- diesel/electric/hybrid propulsion, propellers, cooling and exhaust;
+- complete electrical/energy architecture and marine electronics;
+- accommodation, galley, refrigeration, tanks, plumbing, watermaker and utilities;
+- anchoring, mooring, deck equipment, safety and service access;
+- mass/CG, volume, power, thermal, cost, maintenance and operational budgets.
 
-### Calculations and outputs
-- daily and seasonal energy balance, autonomy and reserve;
-- charge/discharge profiles and source contribution;
-- battery usable energy, current, temperature and ageing assumptions;
-- peak and continuous bus currents;
-- cable sizing, voltage drop, thermal loading and routing;
-- fuse/breaker ratings, interrupt capacity and selective coordination;
-- short-circuit and fault analysis;
-- isolation, grounding/earthing, bonding, leakage and galvanic-corrosion control;
-- AC inverter sizing, waveform, frequency, shore connection and protective devices;
-- monitoring, alarms, emergency isolation, redundancy and failure scenarios;
-- single-line diagrams, circuit schedules, cable lists, protection schedule and equipment specifications.
+All subsystems must share one project state. A change in one subsystem must trigger relevant checks elsewhere. The project must distinguish preliminary screening from full structural analysis, seakeeping validation, class review and physical qualification.
 
-Electrical design must account for the actual hull material and bonding strategy. Metallic and composite hulls have different bonding and isolation implications. Salt water is a conductive electrolyte; ingress, leakage paths, galvanic couples and corrosion must be modelled as real marine hazards.
+### Package 7 — Robotics, mechanisms and autonomous vehicles
 
-Use applicable current small-craft standards and regulations as design constraints, including the relevant editions of ISO 13297 (AC/DC systems) and ISO 10133 (extra-low-voltage DC installations), plus applicable flag-state, equipment and classification requirements. Standards are controlled references, not text to reproduce without permission.
+Build a common mechanism and vehicle framework supporting humanoid and non-humanoid robots, deckhands, inspection robots, ROV/AUV, UAV, rescue/cargo systems and industrial automation.
 
-## Package 5 — Marine environment and complete vessel engineering
+Include chassis/link/joint models, DOF, multibody dynamics, actuators (electric, geared, cable/tendon, hydraulic, pneumatic and compliant systems), transmissions, grippers, winches, cranes, propellers/rotors, balance/contact, mass/CG/inertia, power/thermal budgets and fault states. Marine variants must account for moving decks, six-DOF vessel motion, salt, ingress, cold, shock, vibration, corrosion, tethering, stowage and recovery. UAVs need local return/divert/land logic; underwater vehicles need physically appropriate acoustic, optical or tether communications.
 
-Build the vessel domain as a complete interacting system, not a hull-only model.
+### Package 8 — Cross-domain application packs and open ecosystem
 
-### Marine environment properties
-Do not use one fixed “water density” for every calculation. Support water temperature, salinity and pressure and calculate/select density and other required properties from a traceable seawater model or measured inputs. Include viscosity, heat capacity, thermal conductivity, vapour pressure, freezing behaviour and electrical conductivity where relevant.
+Add and maintain reusable application packs for:
+- aviation, seaplanes and amphibious aircraft;
+- space launch vehicles, spacecraft, orbital systems and ground-support equipment;
+- industrial machinery, process systems and energy infrastructure;
+- road/rail vehicles and other future domains.
 
-Typical seawater density is around 1025 kg/m³, while freshwater is around 1000 kg/m³; actual seawater density changes with temperature, salinity and pressure. This affects displacement and hydrostatics. Conductivity and chloride content also matter for corrosion, electrical leakage and material selection. Keep these effects distinct rather than treating “salt water” as one correction factor.
+Space and advanced propulsion scope includes astrodynamics, flight dynamics, compressible/high-temperature gas dynamics, propulsion-system modelling, cryogenics, plasma where physically applicable, thermal protection, vacuum/outgassing, radiation, structures, avionics/GNC, power, life support, test infrastructure and mission assurance. Plasma is a specialist model, not an assumption that every nozzle flow is fully ionized.
 
-### Hydrostatic pressure and hull structural strength
+Also deliver the public module registry, contributor documentation, compatibility tests, reference datasets, visualization/simulation presentation and optional website/publishing/commercial integrations. External repositories may consume YJ64 interfaces, but are not modified by this plan.
 
-Hydrostatics must feed structural load cases, not stop at displacement. For each operating/loading condition, calculate the external hydrostatic pressure field from local depth, water density and gravity, and the relevant internal pressure/reference level. For a vented hull with approximately atmospheric internal pressure, use the external-to-internal differential pressure on the wetted shell; do not mistake absolute ambient pressure for the net shell load. Pressure varies with depth and must be mapped over the actual hull geometry and waterline.
+## Civilian trajectory and launch-device scope
 
-Use these pressure fields to define local panel and global structural cases for bottom and side shell plating/laminates, stiffeners, frames, floors, bulkheads, cross-structure and joints. Couple them with hull-girder bending/torsion, payload and tank loads, support reactions, wave-induced loads, slamming and local impact where applicable. Evaluate deflection, stress/strain, buckling, fatigue and failure modes using material/process-specific properties and appropriate shell/solid FEM or validated analytical methods. Account for openings, penetrations, bonded joints, laminate direction/thickness, core shear and skin wrinkling in sandwich construction.
+Provide general trajectory mechanics and legitimate civilian engineering, including rescue line-throwing systems, signalling devices, sports/industrial launch mechanisms and safety-oriented net capture concepts for hazardous or unauthorized drones. Evaluate the actual function, energy source, projectile/payload, environment, risks to bystanders and legal operating context.
 
-The model must distinguish static hydrostatic pressure in displacement mode from dynamic pressure, slamming, impact, grounding and pressure loads on sealed compartments. A simplified pressure calculation is a load generator/screening step, not a complete scantling rule or class approval. The weight of the vessel is not a single downward force carried by the bottom: buoyancy arises from the distributed pressure field, while structural response depends on geometry, supports, internal structure and all load paths.
+This does not include designing or optimizing automatic/rifle/cannon weapon barrels, ammunition, weapon launch systems or terminal/penetrating effects. The word "ballistics" alone is not a reason to block general physics or civilian rescue calculations. A device is assessed by its actual design and intended/foreseeable use; pressure level or payload material alone is not a sufficient classification rule.
 
-### Automated sail handling and remote yacht operation
+## Common quality and validation gates
 
-Treat sail handling as a complete electromechanical and control system. Evaluate a self-tacking headsail on a track/carriage so routine tacks do not require a crew member to move and reattach the sheet; calculate track loads, carriage travel, sheet geometry, lead angles, end stops, damping, locking and failure states. Include an automatically furling headsail. For the mainsail, evaluate in-boom furling as a primary option, including boom structure, drum/mandrel, luff/foot geometry, sail compatibility, drive torque, alignment, jamming detection, manual recovery and safe reefing. Also retain in-mast furling as an optional configuration because it is widely used, but model its distinct mast structural, sail-shape, luff-tension, alignment and jam/recovery constraints. Do not assume either furling architecture is failure-proof.
+Every module/result must distinguish:
+- concept or incomplete inputs;
+- analytical screening;
+- numerical simulation;
+- independently reviewed analysis;
+- prototype manufactured;
+- bench tested;
+- field tested;
+- qualified/certified for a specifically stated use.
 
-Design an integrated remote-command capability that can operate the yacht from a smartphone as a low-cost user interface, while remaining expandable to dedicated marine displays, helm controls, certified autopilot equipment, redundant sensors and professional communications. The phone is an interface/secondary terminal, not the sole safety controller. Propulsion, steering, sail winches/furlers, power management and safety interlocks remain under local onboard controllers with deterministic fail-safe behaviour. Provide distinct authority levels: monitoring, supervised command, limited autonomous navigation and approved autonomous passage. Require explicit mode indication, command acknowledgement, position/heading/speed feedback, geofencing, obstacle/traffic awareness, collision-risk handling, weather/sea-state limits, route constraints, watchdogs, emergency stop/override and safe response to lost or delayed communications.
+Every result records exact inputs and revisions, solver/model version, assumptions, applicability range, uncertainty, warnings, provenance and validation evidence. Software tests verify implementation behaviour; benchmark cases verify numerical behaviour; experiments inform physical validity; independent engineering review and qualification address the complete application.
 
-Support motor-only remote passage as the first operational mode. Sailing automation is a separately validated mode and must only be enabled with a compatible rig configuration, including self-tacking headsail and automated furling/reefing arrangements. Define safe sail reduction, depowering and storm-response procedures; never infer that automated furling alone makes a yacht safe in severe weather.
+## Delivery method
 
-A future use case is owner-directed repositioning: the yacht may leave an exposed or insecure anchorage, travel to a pre-authorized offshore waypoint (the owner suggested approximately 200 km from shore as an example), enter a defined low-energy waiting state, then receive a new route and rendezvous with the owner at another authorized location. Model this as a sequence of bounded mission states, not an unrestricted “send it anywhere” command. “Wait” must be explicitly selected among safe alternatives such as controlled drifting within a verified area, heave-to under a validated sail plan, or station-keeping if propulsion/energy permits. Include drift prediction, current/wind forecasts and uncertainty, exclusion zones, minimum separation from traffic, shallow water and hazards, energy reserve for diversion/recovery, anchor/no-anchor logic, and periodic health checks. An offshore waypoint is not inherently safe merely because it is far from shore.
+- Work only in this repository and `main` unless separately authorized.
+- Execute one coherent package increment per pass; combine related subtasks rather than creating disconnected micro-commits.
+- Keep completed prototypes and tests; do not rewrite functioning code without a reason.
+- Update `IMPLEMENTATION_STATUS.md`, the relevant design docs and tests with every delivered capability.
+- Run the relevant test suite and CI; report exact outcomes without claiming unverified success.
+- Preserve backwards compatibility where practical; document breaking changes and migration paths.
+- Keep optional solver adapters and discipline packs independently versioned and replaceable.
 
-Autonomous or remotely supervised operation must be evaluated against applicable COLREGs, flag-state and coastal-state rules, radio/satellite licensing, navigation equipment requirements and insurance/class constraints. The system must not represent remote operation as legally permitted everywhere. Loss of shore link must not disable onboard collision avoidance, navigation safety or emergency procedures; define local fallback behaviour for each failure mode.
+## Immediate first implementation pass
 
-### Whole-vessel subsystems
-- twin hulls, crossbeams, decks, bulkheads, frames, stringers and structural joints;
-- hull material alternatives: marine aluminium, glass-fibre composite, carbon composite, sandwich/honeycomb and reinforced concrete as a special comparison;
-- hydrostatics, displacement, reserve buoyancy, trim, heel, stability, downflooding and loading cases;
-- foils, rudders, steering, appendages, slamming, cavitation and ventilation;
-- mast, boom, sails, standing/running rigging, fittings and folding/stowage mechanisms;
-- propulsion alternatives: diesel, electric and hybrid; engines, motors, batteries, shafts, saildrives/pods, propellers, cooling, fuel and exhaust;
-- anchors, chain, windlass, deck equipment and mooring;
-- accommodation, cabins, berths, galley, refrigeration, furniture, storage and appliances;
-- fresh-water, grey-water, black-water, fuel and other tanks, pumps, plumbing and desalination;
-- safety systems, bilge, fire protection, communications and navigation;
-- payload, provisions, maintenance access, service clearances and operating costs.
-
-Maintain subsystem mass, centre of gravity, power, cooling, volume, access and maintenance budgets. Avoid double counting and evaluate empty, design-load and maximum-load scenarios. The design must account for the complete yacht, not merely the hull and rig.
-
-## Package 6 — Marine electronics, instrumentation and vessel automation
-
-**Treat electronics as a vessel-wide engineering discipline shared by the yacht, robots and autonomous craft—not as a subfeature of robotics.**
-
-Cover the complete marine electronic architecture and its interfaces to the electrical power package:
-
-- navigation sensors and systems: GNSS, heading sensors, magnetic and satellite compasses, inertial measurement units, speed/log, wind instruments, depth sounders and sonar;
-- radar, AIS, chartplotters, multifunction displays, autopilot, communications, distress and emergency signalling;
-- cameras, thermal/low-light imaging, microphones, environmental and machinery sensors;
-- onboard networks, data buses, gateways, time synchronization, signal integrity, antenna placement and electromagnetic compatibility;
-- embedded controllers, compute units, software interfaces, alarms, logging, redundancy, cybersecurity boundaries and degraded operating modes;
-- transducers, connectors, cable routing, shielding, grounding, bonding, isolation and power conditioning;
-- equipment selection and integration using actual manufacturer specifications, interface protocols, operating limits and installation requirements.
-
-### Unified radio, optical and underwater communications engineering
-
-Design communications as one end-to-end, multi-domain system connecting the shore operator, surface yacht, surface buoys, underwater ROV/AUVs and aerial UAVs. Use a common message/command architecture with explicit device identity, authority, authentication, encryption, replay protection, timestamps, acknowledgements, health monitoring, latency limits, priority and loss-link behaviour. A shared command layer must not imply that every medium has the same range, bandwidth, latency or safety properties.
-
-**Above-water RF and satellite links.** Provide engineering calculations and equipment integration for applicable HF, VHF, UHF, microwave and satellite systems, selected by mission and legal operating region rather than assuming one universal frequency. Calculate link budgets from transmitter power, receiver sensitivity, antenna gains/patterns, feeder and connector losses, polarization mismatch, path loss, implementation losses and required fade margin. Model antenna height and radio horizon, Fresnel clearance, sea-surface reflection and multipath, diffraction/obstruction, atmospheric absorption, rain and other frequency-dependent weather effects, interference, co-site desensitization and EMC. Include antenna placement on mast/hull/UAV, coax or waveguide runs, matching, grounding/bonding, lightning/surge protection, corrosion, radomes, thermal/power budgets and installation constraints. Support point-to-point, mesh, store-and-forward, shore stations, satellite backhaul and mobile relays. Frequencies, power, duty cycle, equipment approval and operating modes must be checked against current national/coastal-state spectrum and maritime/aviation rules.
-
-**Relays and network topology.** Evaluate fixed shore stations, elevated mast antennas, surface buoys, dedicated relay craft, tethered aerial platforms and free-flying UAVs as temporary airborne relays. A UAV can extend line-of-sight and bridge otherwise separated radio networks, but its useful coverage depends on altitude, antenna pattern, terrain/sea geometry, interference, flight endurance, weather, payload, station-keeping and regulatory limits. Model relay placement, handover, routing, congestion, latency, redundancy, failure and recovery; do not treat a drone relay as an unlimited or permanently available link. Prefer a compact, recoverable, vehicle-deployed surface communications float over a free-drifting autonomous station when the mission only needs an intermittent surface gateway. The underwater vehicle releases it on demand (for example after loss of its direct link or when it needs high-bandwidth contact); it remains connected by a suitably engineered tether or recovery line, raises an antenna above the surface and relays via RF/satellite or an aerial relay. Evaluate tether drag, current and wind loads, entanglement, deployment/retrieval, reserve buoyancy, antenna exposure, battery and water ingress. The float must not be allowed to drift away as an untracked independent asset. Retain acoustic communication as a separate low-rate fallback; compare tethered data/fibre and acoustic links for the actual mission.
-
-**Underwater communications are a separate physical channel.** Do not assume ordinary Wi-Fi, cellular, VHF or conventional RF links work through seawater at useful control/data rates. Model frequency-dependent seawater conductivity and attenuation, depth, salinity, temperature, antenna/electrode dimensions, transmitter power, bandwidth and achievable data rate before considering any underwater RF option; low-frequency penetration trades against antenna size, bandwidth and practicality. Compare:
-- acoustic modems for underwater telemetry and command over useful ranges, accounting for low bandwidth, propagation delay, multipath, reverberation, noise, Doppler, sound-speed profile, surface/bottom interaction and interference;
-- blue-green optical links (including green-laser candidates) for short-range, line-of-sight, high-rate communication in sufficiently clear water, accounting for absorption, scattering, turbidity, bubbles, alignment, platform motion, sunlight/background light, eye/laser safety and optical-window fouling;
-- tethered copper or fibre-optic links for ROV control/video where a physical tether is acceptable, including tether drag, snagging, connector/penetrator sealing and break/recovery behaviour.
-
-A green laser is a candidate optical carrier, not a guaranteed underwater command channel or a substitute for a modem design. Specify an optical transceiver with modulation, acquisition/tracking, beam divergence, receiver field of view, link margin and fail-safe behaviour. A UAV may act as an optical relay or command source to a submerged drone only when the underwater vehicle has a suitable optical receiver, the water path is sufficiently clear, and stable line-of-sight/pointing can be maintained. This is a specialised short-range link, not a general-purpose long-distance connection; evaluate a surface buoy or tether/fibre gateway as the more robust alternative. Never make safety-critical underwater control depend on an unverified laser link.
-
-**Cross-domain gateway and degraded modes.** Define how an underwater vehicle reports through acoustic/optical/tether to a surface gateway, then through RF/satellite/UAV relay to the yacht or shore. Keep local control and emergency behaviour onboard each vehicle. Loss of one link must trigger a predefined safe state (for example hold, surface, return along a validated route, or tethered recovery) appropriate to vehicle type, depth, energy and environment—not a universal action. Separate command/telemetry, bulk sensor/video, emergency beacon and time-synchronization traffic; prioritise low-bandwidth safety messages. Test link acquisition, handover, latency, packet loss, interference, jamming/spoofing resilience, cybersecurity, power loss and recovery under representative sea conditions.
-
-### Marine environmental qualification
-
-### Marine environmental qualification
-
-Every electronic device and installation must be evaluated for its actual location and duty: water ingress and immersion exposure, salt mist/corrosion, condensation, humidity, temperature range, vibration, mechanical shock, continuous vessel motion, UV exposure where relevant, electrical transients, conducted/radiated interference and power interruptions. Represent ingress-protection and environmental ratings as sourced equipment data; do not infer them from product category.
-
-### Vessel motion and operation at sea
-
-The system must model six-degree-of-freedom vessel motion (surge, sway, heave, roll, pitch and yaw), angular rates and accelerations, with operating sea-state scenarios and uncertainty. Use this common motion/environment model for:
-- instrument and antenna mounting, sensor alignment and measurement correction;
-- autopilot, stabilization and control-system evaluation;
-- robotic balance, foot placement, grasping and manipulation on a moving deck;
-- machinery, battery, tank, payload and equipment mounting loads;
-- launch/recovery and operation of drones and rescue equipment from a moving vessel.
-
-A robot intended for deck work must be designed and tested for a moving support frame, not merely for static balance. It needs motion sensing, state estimation, control bandwidth and recovery/fail-safe behaviour appropriate to the defined sea-state envelope. Define what operations are permitted, degraded or prohibited at each sea state; do not promise safe operation in arbitrary storms.
-
-### Separate design-time vessel dynamics from real-time onboard learning
-
-These are complementary models and must not be conflated.
-
-**Design-time naval architecture and hull hydrodynamics:** calculate how hull geometry and loading interact with waves, speed and heading. The model must support hydrostatics, resistance, seakeeping and six-degree-of-freedom response, wave encounter conditions, response amplitude operators (RAOs) where data/methods permit, added mass, damping, restoring forces, slamming and relevant structural loads. It must predict and compare candidate hull forms over defined operating conditions. A short rolling sensor history from one voyage cannot replace this design-time analysis or establish performance in unobserved sea states.
-
-**Onboard adaptive motion estimation for robots:** do not expect one fixed sea-motion profile to predict every changing wave pattern. A robot may use a smartphone as a replaceable onboard computing, communications and sensor package. It can provide phone calls where cellular coverage exists, and expose available sensors such as accelerometer, gyroscope, magnetometer, GNSS and barometer where supported. Sensor availability, sample rate, calibration, orientation, latency and drift must be measured rather than assumed. The phone must be rigidly mounted in a known frame; critical balance/control should also be able to use dedicated robot IMU/joint/foot-contact sensors if phone measurements are insufficient or unavailable.
-
-Use a configurable rolling local observation window (initial candidates: 5 or 15 minutes, not a fixed universal choice) to estimate recent motion statistics and short-horizon motion tendencies. Continuously update the estimate as new measurements arrive; track confidence and prediction error, detect abrupt regime changes, and fall back to a safe degraded mode when sensors or predictions become unreliable. This is adaptive short-horizon estimation, not guaranteed prediction of future waves. The control system must react to measured motion as well as anticipate it.
-
-**Data retention and privacy:** raw high-rate motion samples should remain in volatile/local working memory only for the configured rolling window and be automatically overwritten/deleted as the window advances. Do not create a persistent onboard archive of raw motion history. If the owner explicitly enables remote research/diagnostics, upload only a separately defined, minimized set of derived statistics or selected records, with consent, encryption, access control, retention limits and the ability to disable upload. Remote storage is optional and must never be required for real-time robot balance or safe operation. Loss of internet/cellular service must not interrupt local estimation or control.
-
-Record the algorithm version, sensor configuration, window length, uncertainty, prediction error and sea-state context with any uploaded aggregate so that datasets remain interpretable. Avoid retaining identifiable crew/location data unless strictly necessary and explicitly authorized.
-
-### Outputs
-
-Provide network and interface diagrams, equipment and sensor registers, antenna/transducer installation constraints, cable and power schedules, data-flow maps, alarm/failure matrices, environmental qualification requirements and traceable integration test plans.
-
-## Package 7 — Robotics, mechanisms and autonomous vehicles
-
-**Use a common mechanical and control foundation for humanoid robots, specialist robots, lifting equipment, winches, propellers and aerial vehicles.**
-
-### Skeleton-first and modular actuation architecture
-
-Start with a task-derived mechanical chassis/skeleton: coordinate frames, links, joints, degrees of freedom, ranges, limits, stiffness, backlash, load paths, mass, centre of gravity and inertia. Only then select and attach actuator “muscles” and transmissions to meet required forces, speed, power, compliance, precision, duty cycle and environmental conditions.
-
-Do not assume electric motors are the only or universally best actuator. Compare:
-- electric motors, geared drives and direct drives;
-- cable/tendon and remote-actuation systems;
-- hydraulic and pneumatic actuators;
-- compliant and elastic transmissions, series-elastic actuators and variable-stiffness mechanisms;
-- electroactive polymers and other emerging artificial-muscle technologies where reliable property data exists.
-
-For every actuator, model force/torque, stroke, speed, power, efficiency, thermal limits, bandwidth, compliance, fatigue life, failure modes, energy supply and maintenance. Distinguish demonstrated technologies from speculative materials; unknown properties remain unknown.
-
-### Robot families and marine requirements
-
-Support humanoid, mobile, wheeled, tracked, legged, manipulator, service, inspection, cooking/galley, deckhand, rescue and general-purpose configurations. The design workflow must choose morphology from the task and environment rather than forcing every robot into a human shape.
-
-Marine robot configurations must explicitly address corrosion-resistant materials and coatings, sealed joints/connectors, drainage, salt ingress, condensation, cold-weather operation, vibration, shock, washdown and serviceability. For onboard robots, integrate vessel motion and sea-state models from Package 6. Include balance and manipulation on moving decks, handholds/anchoring strategies, safe stowage, emergency stop and safe behaviour after loss of power or communications.
-
-### Mechanisms, winches and lifting systems
-
-Provide reusable solvers for gears, belts, chains, screws, linkages, bearings, clutches, brakes, cable drives, pulleys and reeving. Apply them to:
-- sailing winches sized from sail loads, sheet geometry, line lead, drum radius, gear ratio, handle/drive input, efficiency, duty and braking/holding requirements;
-- anchor and mooring winches, capstans and windlasses;
-- davits, crane beams, boat/rescue-craft hoists and other lifting systems;
-- robot joints, grippers, manipulators and deployable structures.
-
-Calculate line pull, torque, speed, power, drum capacity, rope fleet angle, line layering, brake/holding capacity, structural reactions, fatigue and dynamic loads. Include vessel motion, shock loading, corrosion and applicable safety factors/standards as explicit inputs. Never size a lifting device from nominal payload alone.
-
-### Propellers and rotors
-
-Support marine propellers and aerial rotors with geometry, blade count, diameter, pitch/twist, section data, material, rotational speed and operating medium. Calculate thrust, torque, power, efficiency and operating envelope; add cavitation, ventilation, tip-speed, structural, vibration and noise checks as appropriate. Keep air and water models physically distinct while reusing geometry, blade-element and rotating-machinery infrastructure where valid. Include propeller/rotor matching to motors, engines, shafts, gearboxes, controllers and energy systems.
-
-### Uncrewed and aerial vehicles
-
-Support multirotor, fixed-wing, hybrid VTOL and other UAV configurations, including larger cargo/rescue platforms. Model mass budget, centre of gravity, inertia, aerodynamics, propulsion, rotor/propeller performance, battery/fuel energy, endurance, range, payload, control authority, wind/gust response, take-off/landing and failure cases. Include maritime rescue use cases such as delivering a distress beacon or communications payload to another vessel, subject to aviation, maritime and radio regulations.
-
-### Verification
-
-Robot and vehicle outputs must include kinematic reach/workspace, collision checks, load and stability envelopes, actuator sizing, energy budget, thermal limits, fault response, maintenance access and test plans. Separate simulation from physical validation. Human-interacting and load-bearing systems require appropriate risk assessment, guarding, emergency stops and independent testing.
-
-### Small underwater inspection and service ROVs
-
-Include a dedicated design path for compact remotely operated underwater vehicles (ROVs), initially targeting a 15–20 m operating depth for yacht maintenance and recovery support. Representative tasks include inspecting the anchor, chain and seabed around a fouled anchor; inspecting hull bottoms, rudders, propellers, foils and intakes; locating entanglements; and performing limited non-destructive service tasks. Treat anchor recovery as inspection/assistance, not an assumption that a small ROV can safely lift or free a loaded anchor or chain.
-
-Model the vehicle as a complete system: pressure-resistant electronics/battery enclosures and end closures; penetrators, connectors and tether; cameras, lights and optional sonar; thrusters and guards; buoyancy/ballast and trim; frame, lifting points and tether management; control, navigation aids and communications; optional manipulator/tooling; power, thermal management, leak detection and emergency recovery. Evaluate hydrodynamic drag, tether drag/current loads, stability, controllability, thrust margin, endurance, visibility, handling and recovery from loss of power or tether communication.
-
-At 15–20 m, calculate ambient pressure and differential pressure for each sealed volume using actual water density and depth. Pressure-vessel design must address external-pressure collapse/implosion, shell geometry and thickness, end-cap restraint, penetrator stress concentrations, seals, buckling imperfections, material properties, manufacturing tolerances, fatigue/cycles and proof/leak testing. A nominal depth rating is a verified design and test requirement, not a label inferred from component marketing. Pressure housings, battery enclosures and connectors require independently substantiated ratings; buoyancy materials must be qualified for depth and water absorption.
-
-The first target is a tethered inspection ROV with camera, lighting, controlled thrusters and depth/heading feedback. Manipulation and anchor/chain intervention are later capability levels, requiring explicit force limits, tool design, tether/vehicle reaction analysis and hazard controls. The 15–20 m target is an initial product envelope, not a claim of achieved capability or certification.
-
-#### First implemented pressure-housing solver
-
-The first executable ROV structural calculation is `rov.pressure_housing_cylinder_screen`. It accepts a cylindrical isotropic housing's outer diameter and wall thickness, operating depth, water density, internal gauge pressure, Young's modulus, Poisson ratio, allowable von Mises stress, a justified buckling-imperfection factor and design factor of safety. It reports hydrostatic/differential pressure, thin-wall hoop and axial membrane stresses, von Mises stress, an ideal long-cylinder elastic-buckling estimate reduced by the supplied imperfection factor, utilization ratios and the pressure resultant on the end-cap projected area.
-
-The first hull pressure-load generator is `hydrostatics.panel_pressure_loads`. It accepts wetted surface panels (unique ID, area, centroid and outward unit normal), waterline elevation, water density, gravity and internal gauge pressure. It reports signed differential pressure, panel force vectors, moments about the global origin and total force/moment resultants. Positive differential pressure acts inward; internal overpressure reverses the direction. The current centroid-pressure panel representation is a load-generation interface only: it does not solve shell/laminate/stiffener stress, mesh connectivity, wave/slamming loads or hull-girder strength. The operation returns the shared `screening_only` response status. See `docs/HYDROSTATIC_PANEL_LOADS.md`.
-
-This is intentionally a preliminary screen only. It is limited to thin-wall isotropic cylinders and does not size end caps, flanges, bolts, seals, viewports, penetrators, welds or composite housings. The imperfection factor must come from defensible evidence; it is never silently guessed. A passing result is not a depth rating. Next steps are finite-length and boundary-condition effects, shell imperfections/cut-outs, end-cap and joint calculations, material/process records, corrosion/fatigue, and validated proof/leak-test planning.
-
-## Package 8 — Invention methods and engineering knowledge base
-
-**Create a unified method library rather than choosing only one TRIZ variant.**
-
-Include:
-- classical TRIZ: contradictions, 40 inventive principles, contradiction matrix, separation principles, Su-Field analysis, standards, evolution trends and ARIZ;
-- USIT (Unified Structured Inventive Thinking), developed by Ed Sickafus in the United States at Ford, as a concise structured problem-solving method influenced by TRIZ;
-- SIT/ASIT (Systematic/Advanced Systematic Inventive Thinking), while recording its distinct historical origin and relationship to TRIZ/USIT;
-- functional analysis, resource analysis, ideality and function-oriented search;
-- morphological analysis and morphological charts;
-- C-K design theory, design-by-analogy and biomimicry;
-- QFD and requirements engineering;
-- FMEA/FMECA, HAZID/HAZOP, fault trees and reliability-centred maintenance;
-- design-for-manufacture, assembly, service, repair, cost, safety and sustainability.
-
-Every method/knowledge record must retain source, author, edition, license/usage rights, scope and limitations. Do not ingest or redistribute copyrighted books or proprietary databases without permission.
-
-### Candidate-improvement workflow
-1. Define the required function and measurable success criteria.
-2. Map system elements, interfaces, useful/harmful effects and constraints.
-3. Identify technical/physical contradictions and available resources.
-4. Generate multiple candidate concepts using several methods.
-5. Explain the method and assumptions behind each proposal.
-6. Convert candidates into testable engineering hypotheses.
-7. Screen for physical feasibility, safety, reliability, cost, mass and manufacturability.
-8. Send candidates to the appropriate CAD and physics solvers.
-9. Compare results, preserve rejected ideas and record why they were rejected.
-
-Invention methods generate hypotheses; they do not prove feasibility.
-
-## Package 9 — Reverse engineering, repair and component lifecycle
-
-Support repair and reproduction of unavailable parts, from small engine components to structural assemblies.
-
-Inputs may include measurements, photographs, scans, broken samples and incomplete drawings. Record measurement uncertainty and distinguish observed geometry from inferred geometry.
-
-Workflow:
-1. identify function, interfaces and operating conditions;
-2. capture geometry and uncertainty;
-3. identify original material, condition and process where possible;
-4. define mechanical, thermal, electrical, pressure, speed, chemical and duty-cycle requirements;
-5. compare repair, redesign, machining and additive routes;
-6. model and verify the proposed replacement;
-7. define inspection and validation tests;
-8. release the manufacturing package at a clearly stated evidence level.
-
-Classify part criticality. Sensor brackets, instrument housings, covers and plugs may be suitable for onboard production after checks. Mast, rigging, steering, engine-internal, pressure-containing, rotating and other safety-critical components require qualified materials/processes, engineering review, inspection and appropriate proof tests. A printable file is never an automatic approval.
-
-## Package 10 — Specialized design and mechanism pilots
-
-Once the common kernel and relevant solvers exist, use real projects as integration tests. The folding mast is a future pilot, not a prerequisite for building the general system.
-
-The saved concept notes include a mast folding in two or three stages depending on height, plus a separately folding/rolling arrangement using cross-shaped supports at bends with a cable passing through them. Do not invent missing geometry or mechanism details. When drawings are available, decompose and analyze mast sections, hinges, locks, cable path, actuation, rigging release/re-tensioning, stowage supports, vessel loads, transition loads, fail-safe states and operational interlocks.
-
-## Package 11 — Visualization and simulation presentation interface
-
-A separate visualization module should consume the same versioned geometry and engineering data. Provide interfaces for:
-- accurate CAD-based still renders and technical illustrations;
-- assembly/exploded views and cutaways;
-- animation from actual mechanism/kinematic simulation;
-- engineering plots, flow/force visualizations and simulation playback;
-- concept imagery for communication and marketing.
-
-Keep accurate CAD/solver visualization distinct from generative concept images. Concept imagery must never be presented as validated geometry or engineering evidence. The same outputs can later support a project website.
-
-## Package 12 — Website/content and commercial workflows (later)
-
-The engineering core should expose approved, versioned artifacts and descriptions to downstream agents.
-
-A content agent may prepare website text, images, video/audio assets, upload media, fill platform forms and publish when explicitly authorized. A separate commercial module may later handle market analysis, positioning, marketing strategy, advertising, promotion, audience development and sales. These are downstream workflows, not reasons to put marketing logic inside the engineering kernel.
-
-# Recommended execution sequence and grouping
-
-To minimize repeated work, implement in these combined passes:
-
-1. **Foundation pass:** Package 1 plus the shared evidence/versioning rules. Establish contracts before adding many solvers.
-2. **Core physics pass:** Package 2 solver interfaces and first implementations, including the electrical-network foundation.
-3. **Materials and manufacturing pass:** Package 3 together with the manufacturing fields in Package 1. Material/process data must be consistent with solver and CAD records.
-4. **Electrical vessel pass:** Complete Package 4 as a coherent subsystem, then connect its mass, heat, space, control and safety interfaces to Package 5.
-5. **Marine/vessel integration pass:** Package 5, using existing hydrostatics, mass-budget, flow and hull-material work as starting points; expand the simplified models instead of treating them as finished naval architecture.
-6. **Marine electronics and automation pass:** Package 6, integrated with vessel power, motion, navigation and communications.
-7. **Robotics and mechanisms pass:** Package 7, starting with reusable kinematics, actuator models, winches and propellers before complete robots and UAVs.
-8. **Invention and repair pass:** Packages 8 and 9. Connect idea generation to actual solvers and manufacturing feasibility, not just text suggestions.
-9. **Pilot validation pass:** Package 10 with real mechanisms/components; the folding mast can be one when its drawings are available.
-10. **Visualization pass:** Package 11 against versioned design and simulation data.
-11. **Downstream publishing/commercial pass:** Package 12 after reliable engineering outputs and approvals exist.
-
-Packages 2–7 can be developed by parallel contributors only after Package 1 contracts are stable. Integration and validation remain centralized in the core repository.
-
-## Current implementation versus target
-
-Already present in the repository are early foundations for dispatch/pipeline contracts, CAD adapters, flow/aero/hydro screening, sail polars and material screening, apparent wind, simplified twin-hull hydrostatics, vessel mass budgeting and hull material mass/cost/maintenance screening.
-
-These are starting points, not completed full-discipline engineering systems. In particular, the current hydrostatics is not a full stability analysis, the current structural adapter is not hull FEM, coefficient-based flow models are not CFD, and the current hull material comparison is not structural equivalence sizing. Future work must preserve these distinctions.
-
-
-### Latest executable improvement: polygon-integrated hull pressure loads
-
-The hull pressure-load operation now supports optional ordered `vertices_m` for convex planar panels. It integrates the linear hydrostatic differential-pressure field over triangulated panels, computes pressure-weighted force and moment resultants, and reports the pressure-resultant centroid. It validates polygon planarity, area consistency, normal orientation consistency and rejects waterline-crossing panels rather than silently approximating a discontinuous wet/dry boundary. The original centroid-panel mode remains available for compatibility. Automated tests cover a depth-gradient side panel, resultant-centroid moment, waterline crossing, area mismatch and non-planar geometry. This is still a load generator; structural plate/shell/stiffener stress analysis remains a separate next stage.
-
-
-## Implemented foundation: six-DOF vessel motion kinematics
-
-The core now includes `VesselMotionKinematicsSolver` (`marine.vessel_motion_point_kinematics`). It transforms body-fixed equipment/robot-base points into earth-frame position, velocity and acceleration from a supplied rigid-body six-DOF state. The implementation includes roll/pitch/yaw rotation, translational motion, angular velocity, angular acceleration and centripetal acceleration, with tests and explicit axis conventions. It is a kinematics layer only: wave response, RAOs, seakeeping, hydrodynamic coefficients, sensor fusion and robot balance/control remain future work. See `docs/VESSEL_MOTION_KINEMATICS.md`.
-
-
-## Universal physics scope expansion
-
-The intended physics platform is not restricted to marine engineering. The complete domain catalogue is maintained in `docs/PHYSICS_DOMAIN_CATALOG.md` and covers classical mechanics, strength of materials, structural mechanics/FEM, fluid mechanics, full aerodynamics and flight mechanics, general trajectory/ballistics mechanics, thermodynamics, heat transfer, energy, electrical/electronic engineering, electromagnetics, materials science and chemistry, corrosion/tribology, acoustics/vibration/waves, optics/photonics, control theory, robotics/mechanisms, geophysics/environmental exposure, reliability, uncertainty and optimization. Application packs reuse the same verified physical solvers for marine craft, seaplanes/aircraft, vehicles, industrial machinery, energy systems, robots and repair engineering.
-
-The catalogue is a target architecture, not a statement that every listed solver exists. Each solver must declare model class, equations/reference, valid range, inputs, assumptions, uncertainty, verification and validation evidence. General non-weapon trajectory mechanics can be supported; design and optimization of projectile launchers, weapons, propellant systems or firing performance is outside the supported engineering scope. Maritime distress signalling should prioritize certified radio, AIS/DSC, EPIRB/PLB, radar transponders, visible/IR strobes, searchlights and compliant commercial signalling equipment.
+Start Package 1 with **unit-aware physical quantities and an extensible unit registry**, then proceed to coordinate frames, geometry primitives, and common load/boundary-condition schemas. This sequence creates shared typed foundations for existing and future solvers without duplicating current material/environment models.
