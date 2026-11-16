@@ -39,10 +39,12 @@ class CoordinateFrameTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "orthonormal"):
             RigidTransform("a", "b", ((1,0,0),(0,2,0),(0,0,1)))
 
-    def test_registry_requires_existing_parent_and_one_root(self):
+    def test_registry_requires_existing_parent_and_one_identity_root(self):
         registry = CoordinateFrameRegistry()
         with self.assertRaisesRegex(ValueError, "not registered"):
             registry.add(CoordinateFrame("child", "missing"))
+        with self.assertRaisesRegex(ValueError, "identity world pose"):
+            registry.add(CoordinateFrame("shifted", translation_to_parent_m=(1, 0, 0)))
         registry.add(CoordinateFrame("world"))
         with self.assertRaisesRegex(ValueError, "one root"):
             registry.add(CoordinateFrame("other"))
