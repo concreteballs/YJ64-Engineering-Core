@@ -148,8 +148,8 @@ def parse_voice_unit_command(transcript: str) -> VoiceUnitCommand:
     """Parse explicit 'convert X to Y' / 'переведи X в Y' speech transcripts."""
     normalized = " ".join(transcript.lower().strip().replace("ё", "е").split())
     patterns = (
-        r"(?:переведи|перевести|измени|преобразуй)\s+(.+?)\s+(?:в|на)\s+(.+)",
-        r"(?:convert|change)\s+(.+?)\s+(?:to|into)\s+(.+)",
+        r"(?:переведи|перевести|измени|преобразуй)\s+(.+?)\s+(?:в|на)\s+(.+?)(?:\s+для\s+(.+))?",
+        r"(?:convert|change)\s+(.+?)\s+(?:to|into)\s+(.+?)(?:\s+for\s+(.+))?",
     )
     match = next((re.search(pattern, normalized) for pattern in patterns if re.search(pattern, normalized)), None)
     if not match:
