@@ -21,6 +21,11 @@ from .physics.hull_material import HullMaterialScreeningSolver
 from .physics.rov_pressure_housing import ROVPressureHousingSolver
 from .physics.hydrostatic_panel_loads import HydrostaticPanelLoadSolver
 from .physics.vessel_motion import VesselMotionKinematicsSolver
+from .physics.kernel import (
+    AirDensityResult, MaterialLibrary, MaterialPropertyEvidence, MaterialRecord,
+    SeawaterDensityResult, dry_air_density_ideal_kg_m3,
+    seawater_density_eos80_kg_m3,
+)
 
 __all__ = [
     "CONTRACT_VERSION", "AerodynamicsSolver", "AnalysisRequest", "AnalysisResult",
@@ -34,6 +39,9 @@ __all__ = [
     "ImageAnnotation", "VisualObservation", "VisualReference", "apply_hull_changes",
     "ingest_reference_image", "visual_changes", "LoadCase", "MaterialProperties",
     "OpenSCADSourceBackend", "PipelineBranch", "PipelineResult", "Point3D",
-    "SVGDrawingBackend", "SolverProvenance",
+    "SVGDrawingBackend", "SolverProvenance", "AirDensityResult",
+    "MaterialLibrary", "MaterialPropertyEvidence", "MaterialRecord",
+    "SeawaterDensityResult", "dry_air_density_ideal_kg_m3",
+    "seawater_density_eos80_kg_m3",
 ]
 __version__ = "0.1.0"
