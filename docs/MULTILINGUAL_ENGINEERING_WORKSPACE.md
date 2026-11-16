@@ -24,7 +24,7 @@ YJ64 must let engineers work in their preferred language and read technical docu
 
 ## Technical-document translation pipeline
 
-The first supported document types should be PDF (including scanned PDFs), DOCX, Markdown and plain text; additional formats can be added through import/export adapters.
+The first supported document types are planned to be PDF (including scanned PDFs), DOCX, Markdown and plain text. The initial executable intake adapter now supports UTF-8 Markdown and plain text; PDF/DOCX/OCR extraction remains a separate adapter milestone.
 
 1. Import the source as an immutable artifact; compute a content hash and retain original bytes/metadata where licensing permits.
 2. Extract text, tables, headings, captions, footnotes and structural relationships. For scanned documents, use OCR and preserve page/region references.
@@ -131,4 +131,4 @@ Technical documents may contain confidential designs or customer data. Before us
 
 ## Current status
 
-Planned. Existing quantity primitives provide a starting point for unit conversion. Multilingual UI, technical-document ingestion/translation, glossary management, locale-aware rendering, unit profiles and review workflows are not yet implemented.
+Partially implemented. The kernel provides unit profiles, per-field overrides, document unit-policy values and voice conversion intent parsing. A first immutable UTF-8 Markdown/plain-text intake adapter now preserves original bytes, SHA-256 identity, source-language metadata and stable segment-to-source character/line spans. PDF/DOCX extraction, OCR, translation providers, glossary management, protected-token integrity checks, side-by-side rendering, locale-aware UI and review/export workflows remain planned. Importing a source document does not translate it or convert its units.

@@ -1,4 +1,5 @@
 """YJ64 Engineering Core public API."""
+from .documents import DocumentSegment, SourceDocument, ingest_document
 from .contracts import CONTRACT_VERSION, ArtifactReference, EngineeringRequest, EngineeringResponse, GeometrySpec, LoadCase, SolverProvenance
 from .component_model import ComponentCalculationRecord, ComponentDependency, ComponentInterface, ComponentMassProperties, EngineeringComponent, EngineeringProjectGraph, EvidenceRecord, ManufacturingConstraint, stale_calculations, stale_component_dependencies
 from .dispatcher import AxialMemberSolver, DispatchResult, EngineeringDispatcher
@@ -36,6 +37,7 @@ from .physics.kernel import (
 )
 
 __all__ = [
+    "DocumentSegment", "SourceDocument", "ingest_document",
     "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",
     "METRIC_ENGINEERING_PROFILE", "SI_PROFILE", "UK_IMPERIAL_PROFILE", "US_CUSTOMARY_PROFILE",
     "DocumentUnitPolicy", "NominalSizeDesignation", "UnitDisplayPreferences", "UnitSystemProfile",
