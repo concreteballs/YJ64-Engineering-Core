@@ -20,7 +20,9 @@ This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PL
 | 5. Electrical power, electronics, instrumentation and communications | Planned | Requirements only | DC/AC networks, 12/24/48 V comparison, energy balance, batteries/BMS, generation/charging, cables/protection/faults, controls, sensors, navigation, communications and fail-safe behaviour |
 | 6. Integrated marine application | Partially implemented | Parametric hull geometry/CAD; preliminary catamaran hydrostatics; mass budget; sail polar/apparent wind; coefficient-based aero/hydrodynamics; hull-material screening; hydrostatic panel pressure loads with polygon integration; ROV pressure-housing screen; prescribed six-DOF vessel point kinematics | Complete hull/global structure, stability/trim/damage, seakeeping, foils/rig/propulsion/propellers, electrical/electronics, accommodation/tanks/plumbing, integrated budgets and design validation |
 | 7. Robotics, mechanisms and autonomous vehicles | Planned | Vessel base-point six-DOF kinematics is reusable groundwork; architecture requirements documented | Link/joint and multibody models, actuators, contact/balance on moving decks, manipulators, winches/hoists, ROV/AUV/UAV performance and local safety controllers |
-| 8. Cross-domain application packs and open ecosystem | Planned | Physics domain catalogue and spaceflight target scope documented | Full aviation/space/industrial solvers, cryogenics/plasma where applicable, application packs, public module registry, contributor tooling and ecosystem integrations |
+| 8. Cross-domain application packs and open ecosystem | Planned | Physics domain catalogue and spaceflight target scope documented | Full aviation/space/industrial solvers, celestial mechanics/astrodynamics/cosmology, application packs, public module registry, contributor tooling and ecosystem integrations |
+| 9. Human operational knowledge and emergency assistance | Planned | Requirements documented in the field-assistance architecture | Reviewed first-aid/medical guidance, chemistry and water safety, field materials/minerals, geography/ecology, woodworking, shelter/energy, emergency signalling, resource-aware field procedures and offline knowledge bundles |
+| 10. Adaptive task assembly and offline deployment | Planned | Architectural requirements documented; no task-assembly runtime or on-device LLM deployment is claimed | Task/resource/environment modelling, module capability matching, workflow composition, hazard and evidence checks, local model/runtime packaging, signed offline data bundles, update/freshness controls and device capability profiling |
 
 ## Multilingual engineering workspace status
 
@@ -84,3 +86,16 @@ The following are implemented foundations and must not be recreated: unit/quanti
 ## Formal proof and theorem-prover ecosystem status
 
 **Planned — no proof assistant or SAT/SMT adapter is currently claimed as integrated.** Lean 4 + Mathlib is the first pilot candidate. The target compatibility catalogue includes Rocq/Coq, Isabelle/HOL, Agda, Metamath, HOL Light, HOL4, PVS and ACL2, with Z3/cvc5 and similar automated reasoning tools treated separately. The prover-neutral proof-obligation/result contract, native artifact preservation, axiom/assumption audit, proof-certificate validation and adapter conformance tests remain unimplemented. A checked mathematical proof does not establish physical model validity or engineering qualification.
+
+
+## Position, time and navigation integration status
+
+**Planned — no general Position & Time Awareness service or Navigation Integration Hub is currently claimed as implemented.** The target includes multi-source location/time acquisition, last trusted fix, uncertainty-aware dead reckoning, phone/external sensor fusion, peer-device time assessment, UTC/timezone separation, source freshness and spoofing/jamming diagnostics. Routine marine navigation is to integrate existing products only through supported APIs/licensed interfaces and documented formats; no proprietary chart integration is assumed. Emergency Celestial Navigation is a separate optional offline module. See POSITION_TIME_AND_NAVIGATION_INTEGRATION.md.
+
+## Celestial mechanics and cosmology status
+
+**Planned — no celestial mechanics, astrodynamics or cosmology solver pack is currently claimed as implemented.** Candidate libraries and ephemeris sources require exact release, licence, reference-frame/time-scale and benchmark review. Multi-prover, symbolic and numerical workflows are architectural targets, not integrated capabilities. User hypotheses remain explicitly labelled research models until tested against independent calculations and observations. See CELESTIAL_MECHANICS_AND_COSMOLOGY.md.
+
+## Field assistance and offline deployment status
+
+**Planned — no medical, survival, field-chemistry or adaptive task-assembly module is currently claimed as implemented.** Operational content requires source traceability and domain review; medical/chemical workflows require additional safety review. Local LLM and solver deployment, offline bundles and update integrity are future capabilities. See FIELD_SURVIVAL_AND_EMERGENCY_ASSISTANCE.md and ADAPTIVE_TASK_ASSEMBLY_AND_OFFLINE_DEPLOYMENT.md.
