@@ -139,6 +139,5 @@ class WorkerRunnerTests(unittest.TestCase):
             WorkerRunner(FakeStore(), worker_id="worker-a", handlers={}, recovery_limit=0)
 
 
-if __
-    == "__main__":
+if __name__ == "__main__":
     unittest.main()
