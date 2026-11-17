@@ -696,15 +696,45 @@ class PostgresCycleStore:
                 )
                 return cursor.rowcount == 1
 
+    def expire_deadline_tasks(self, limit: int = 100) -> list[int]:
+        """Fail pending tasks whose absolute deadline elapsed before execution."""
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH expired AS (
+                        SELECT task_id FROM yj64_task_queue
+                        WHERE state = 'pending' AND deadline_at IS NOT NULL
+                          AND deadline_at <= now()
+                        ORDER BY deadline_at, task_id
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT %s
+                    )
+                    UPDATE yj64_task_queue AS task
+                    SET state = 'failed', blocked_reason = 'task_deadline_exceeded',
+                        last_error = 'Task deadline elapsed before execution',
+                        updated_at = now()
+                    FROM expired
+                    WHERE task.task_id = expired.task_id
+                    RETURNING task.task_id
+                    """,
+                    (limit,),
+                )
+                return [row[0] for row in cursor.fetchall()]
+
     def run_recovery_maintenance(self, limit: int = 100) -> dict:
         """Run bounded durable recovery work; safe to invoke repeatedly."""
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
         quota_tasks = self.recover_due_quota_tasks(limit=limit)
         expired_reservations = self.expire_unsent_provider_reservations(limit=limit)
+        deadline_tasks = self.expire_deadline_tasks(limit=limit)
         return {
             "quota_tasks_requeued": quota_tasks,
             "unsent_reservations_expired": expired_reservations,
+            "deadline_tasks_failed": deadline_tasks,
         }
 
     def recover_due_quota_tasks(self, limit: int = 100) -> list[int]:
