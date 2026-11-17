@@ -6,6 +6,8 @@ Authorized branch: main
 
 This document is the execution index for the autonomous development cycle. It separates verified implementation from planned work. The detailed subsystem ledger remains in IMPLEMENTATION_STATUS.md; this file records the current control-loop priority and the order in which the remaining master plan should be executed.
 
+**Strategic programme index:** see [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) for the expandable strategic graph and the implementation checklists beneath each major stage. This document remains the detailed autonomous-cycle execution plan.
+
 ## 1. Verified completed work
 
 "Completed" means the stated prototype/code and automated tests exist. It does not imply production qualification, complete domain coverage, or integration of external solvers unless explicitly stated.
