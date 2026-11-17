@@ -177,6 +177,28 @@ class ProviderReservationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "different request content"):
             self.reserve(self.store(cursor))
 
+    def test_task_request_count_budget_blocks_new_reservation(self):
+        cursor = ReservationCursor(task=(
+            "running", "worker-a", None,
+            None, None, None, 0, 0, 0, 0, 0, 0,
+            None, 1, 0, 1,
+        ))
+        result = self.reserve(self.store(cursor))
+        self.assertFalse(result["reserved"])
+        self.assertEqual(result["action"], "task_budget_exhausted")
+        self.assertIn("request", result["reason"])
+
+    def test_expired_task_deadline_blocks_new_reservation(self):
+        cursor = ReservationCursor(task=(
+            "running", "worker-a", None,
+            None, None, None, 0, 0, 0, 0, 0, 0,
+            datetime(2026, 11, 17, 15, 59, tzinfo=timezone.utc),
+            None, 0, 0,
+        ))
+        result = self.reserve(self.store(cursor))
+        self.assertFalse(result["reserved"])
+        self.assertEqual(result["action"], "task_deadline_exceeded")
+
     def test_task_budget_blocks_before_reserving(self):
         cursor = ReservationCursor(task=(
             "running", "worker-a", None,
