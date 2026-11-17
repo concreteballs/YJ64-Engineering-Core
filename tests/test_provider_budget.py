@@ -127,7 +127,25 @@ class ProviderBudgetTests(unittest.TestCase):
         )
         self.assertFalse(result.allowed)
         self.assertEqual(result.active_requests, 1)
+        self.assertEqual(result.action, "hold_for_review")
+        self.assertIsNone(result.retry_at)
+
+    def test_live_sending_request_uses_short_scheduler_recheck(self):
+        profile = ProviderLimitProfile("p", "m", "/v1", max_concurrency=1)
+        result = plan_provider_capacity(
+            profile, input_tokens=1,
+            reservations=[{
+                "created_at": self.now - timedelta(seconds=10),
+                "estimated_tokens": 1,
+                "state": "sending",
+                "expires_at": None,
+                "sent_at": self.now - timedelta(seconds=10),
+            }],
+            now=self.now,
+        )
+        self.assertFalse(result.allowed)
         self.assertEqual(result.action, "schedule_retry")
+        self.assertEqual(result.retry_at, self.now + timedelta(seconds=5))
 
     def test_completed_sent_reservation_counts_in_rolling_usage(self):
         profile = ProviderLimitProfile("p", "m", "/v1", requests_per_minute=1)
