@@ -51,7 +51,7 @@ Not yet implemented or demonstrated: checkpoint persistence/runtime, context-bud
 
 **Status: Partially implemented — provider failure classification, durable attempt/recovery metadata, and integrity-checked chunk storage are present; provider adapters, live scheduler invocation and provider transport remain unimplemented.**
 
-[MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) remains the governing protocol. New code in `automation/provider_limits.py` classifies rate limits, quota exhaustion, payload/context overflow, transient failures, concurrency limits, permanent configuration failures and unknown errors. It produces bounded retry hints and honors Retry-After/reset headers. `tests/test_provider_limits.py` covers these decisions.
+[MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) remains the governing protocol. New code in `automation/provider_limits.py` classifies rate limits, quota exhaustion, payload/context overflow, transient failures, concurrency limits, permanent configuration failures and unknown errors. It produces bounded retry hints and honors Retry-After/reset headers. `tests/test_provider_limits.py` covers these decisions. The pure `automation/provider_budget.py` planner separately evaluates rolling RPM/TPM windows, input/output token ceilings and live concurrency reservations, returning a durable retry time or a split/reduce-output decision. `tests/test_provider_budget.py` covers these limits. This planner is not yet backed by persisted provider profiles/reservations or invoked by a live scheduler.
 
 The PostgreSQL `yj64_model_request_attempts` table is deployed with RLS enabled, no grants to anon/authenticated, and only SELECT/INSERT for service_role. It stores append-only request metadata, safe allowlisted headers, classification, retry hints and sanitized summaries; it excludes prompts, response bodies and credentials. `PostgresCycleStore.record_model_request_attempt` writes an attempt under a live task lease and atomically releases the lease into pending for a scheduled retry, failed for permanent configuration errors, or blocked for quota waits, payload splitting, context rebuilding and unknown errors. `tests/test_provider_attempt_store.py` covers persistence decisions and lease handling.
 
@@ -61,7 +61,7 @@ The chunk foundation is implemented in `automation/payload_chunks.py`: determini
 
 CI run [44117161287](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44117161287) passed for the chunking, durable-storage and quota-recovery code, including unit/FEM/CAD integration tests and yacht-hull artifact generation.
 
-**Not yet implemented or demonstrated:** live provider limit discovery, per-provider RPM/TPM/concurrency budgeting, automatic invocation of quota recovery by a running scheduler, actual provider chunk transport/remote acknowledgement, provider adapters, real service-role application round-trip tests, and end-to-end model execution gated on FINALIZE. No worker is running.
+**Not yet implemented or demonstrated:** live provider limit discovery, persistent provider limit profiles and request reservations, automatic invocation of quota recovery/provider capacity admission by a running scheduler, actual provider chunk transport/remote acknowledgement, provider adapters, real service-role application round-trip tests, and end-to-end model execution gated on FINALIZE. No worker is running.
 
 
 ## Consolidated work-package status
@@ -122,7 +122,7 @@ A model update retains old versions, exact provenance, test evidence and applica
 
 ## Latest verified CI checkpoint
 
-Commit `92cd08de440ba8c0a7f00e25133e8e673ad4d892` completed GitHub Actions run [44117161287](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44117161287) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
+Commit `639dae903f39e95744f48f2b9f2823c28fb01f4e` completed GitHub Actions run [44117625702](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44117625702) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
 
 ## Document intake prototype
 
