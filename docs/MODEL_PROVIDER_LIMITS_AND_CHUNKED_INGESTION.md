@@ -1,7 +1,14 @@
 # YJ64 — Model Provider Limits and Chunked Request Protocol
-Status: **Approved architectural requirement; runtime implementation planned**
+Status: **Approved requirement; partially implemented durable foundations, provider adapters and live transport still planned**
 Repository: `concreteballs/YJ64-Engineering-Core`
 Authorized branch: `main`
+
+## Runtime implementation status
+
+Implemented foundations include provider failure classification and durable attempt metadata; explicit quota-block reasons and reset timestamps; bounded, idempotent quota recovery; deterministic token-counter-driven chunking; stable chunk IDs; per-chunk and total SHA-256 checks; durable manifests, chunks and acknowledgements; and integrity-checked assembly before a payload can become `ready_for_model`. The related Supabase migrations are deployed, with RLS enabled and service_role-only table privileges. CI run [44117161287](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44117161287) passed.
+
+Still not implemented: live scheduler invocation, provider-specific tokenizer/limit discovery, provider adapters, remote chunk transmission, provider continuity integration, service-role application round-trip tests and end-to-end model execution. In particular, independent stateless API calls are not treated as accumulating context; the orchestrator must reassemble the full verified payload before sending one request.
+
 
 ## 1. Purpose
 
