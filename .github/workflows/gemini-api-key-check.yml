@@ -2,6 +2,9 @@ name: Gemini API key check
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/gemini-api-key-check.yml"
 
 permissions:
   contents: read
@@ -10,27 +13,69 @@ jobs:
   verify-gemini-key:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Gemini API access without exposing the key
+      - name: Query Gemini models endpoint
+        id: check
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          mkdir -p diagnostics
           if [ -z "${GEMINI_API_KEY:-}" ]; then
+            printf '{"http_status":"not_sent","error":"GEMINI_API_KEY secret is missing or empty."}\n' > diagnostics/gemini-api-response.json
             echo "GEMINI_API_KEY secret is missing or empty."
             exit 1
           fi
+
+          curl_exit=0
           code="$(curl --silent --show-error --output /tmp/gemini-models.json --write-out '%{http_code}' \
             --header "x-goog-api-key: ${GEMINI_API_KEY}" \
-            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1")"
-          if [ "$code" != "200" ]; then
-            echo "Gemini API check failed with HTTP $code."
-            message="$(jq -r '.error.message // "No API error message returned."' /tmp/gemini-models.json 2>/dev/null || echo "Could not parse API error.")"
-            printf '%s\n' "$message" | sed "s/${GEMINI_API_KEY}/[REDACTED]/g"
-            exit 1
-          fi
-          if ! jq -e '.models | length > 0' /tmp/gemini-models.json >/dev/null; then
-            echo "Gemini API responded, but the models list was not valid."
-            exit 1
-          fi
-          echo "Gemini API key is valid and the API is reachable. No generation request was made."
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1")" || curl_exit=$?
+          code="${code:-000}"
+          export GEMINI_HTTP_STATUS="$code"
+          export GEMINI_CURL_EXIT="$curl_exit"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          key = os.environ.get("GEMINI_API_KEY", "")
+          status = os.environ.get("GEMINI_HTTP_STATUS", "000")
+          curl_exit = int(os.environ.get("GEMINI_CURL_EXIT", "0"))
+          raw = Path("/tmp/gemini-models.json").read_text(errors="replace") if Path("/tmp/gemini-models.json").exists() else ""
+          if key:
+              raw = raw.replace(key, "[REDACTED]")
+          try:
+              response = json.loads(raw) if raw else {}
+          except json.JSONDecodeError:
+              response = {"unparsed_response": raw[:12000]}
+          report = {
+              "http_status": status,
+              "curl_exit_code": curl_exit,
+              "response": response,
+          }
+          Path("diagnostics/gemini-api-response.json").write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+          )
+          message = response.get("error", {}).get("message") if isinstance(response, dict) else None
+          if status != "200" or curl_exit != 0:
+              print(f"Gemini API check failed: HTTP {status}; curl exit {curl_exit}.")
+              if message:
+                  print(f"Gemini API message: {message}")
+              raise SystemExit(1)
+          models = response.get("models") if isinstance(response, dict) else None
+          if not isinstance(models, list) or not models:
+              print("Gemini API responded, but the models list was empty or invalid.")
+              raise SystemExit(1)
+          print("Gemini API key is valid and the API is reachable. No generation request was made.")
+          PY
+
+      - name: Upload Gemini diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-api-diagnostics
+          path: diagnostics/gemini-api-response.json
+          if-no-files-found: warn
+          retention-days: 14
