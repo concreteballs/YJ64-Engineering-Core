@@ -1,4 +1,7 @@
+import sys
+import types
 import unittest
+from unittest.mock import patch
 
 from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
 
@@ -61,6 +64,23 @@ class PostgresCycleStoreTests(unittest.TestCase):
 
     def store(self, cursor):
         return PostgresCycleStore("postgresql://test", lambda _: FakeConnection(cursor))
+
+    def test_connect_disables_auto_prepare_for_transaction_pooler(self):
+        calls = {}
+        fake_connection = object()
+
+        def fake_connect(database_url, **kwargs):
+            calls["database_url"] = database_url
+            calls.update(kwargs)
+            return fake_connection
+
+        fake_psycopg = types.SimpleNamespace(connect=fake_connect)
+        with patch.dict(sys.modules, {"psycopg": fake_psycopg}):
+            connection = PostgresCycleStore("postgresql://pooler")._connect()
+
+        self.assertIs(connection, fake_connection)
+        self.assertEqual(calls["database_url"], "postgresql://pooler")
+        self.assertIsNone(calls["prepare_threshold"])
 
     def test_new_event_is_persisted_and_enqueued(self):
         cursor = FakeCursor()
