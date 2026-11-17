@@ -114,10 +114,11 @@ def plan_provider_capacity(
             not isinstance(expires_at, datetime) or expires_at.tzinfo is None
         ):
             raise ValueError("reservation expires_at must be timezone-aware")
-        reservation = (
-            created_at, tokens, state,
-            expires_at or created_at + timedelta(seconds=reservation_ttl_seconds),
-        )
+        if expires_at is None and state in {"sending", "accepted", "unknown"}:
+            effective_expiry = datetime.max.replace(tzinfo=timezone.utc)
+        else:
+            effective_expiry = expires_at or created_at + timedelta(seconds=reservation_ttl_seconds)
+        reservation = (created_at, tokens, state, effective_expiry)
         sent_at = item.get("sent_at")
         if sent_at is not None and (
             not isinstance(sent_at, datetime) or sent_at.tzinfo is None
