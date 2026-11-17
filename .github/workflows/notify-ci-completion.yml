@@ -74,6 +74,21 @@ jobs:
                   print(f"Webhook accepted CI event (HTTP {response.status}).")
           except urllib.error.HTTPError as error:
               print(f"Webhook endpoint returned HTTP {error.code}.")
+              try:
+                  body = json.loads(error.read().decode("utf-8"))
+                  code = body.get("error") if isinstance(body, dict) else None
+                  allowed = {
+                      "webhook_not_configured",
+                      "database_not_configured",
+                      "persistent_queue_unavailable",
+                      "unauthorized",
+                      "not_found",
+                      "event_scope_rejected",
+                  }
+                  if code in allowed:
+                      print("Webhook diagnostic: " + code)
+              except (UnicodeDecodeError, json.JSONDecodeError):
+                  print("Webhook diagnostic body was not recognized.")
               raise
           except urllib.error.URLError as error:
               print(f"Webhook connection failed: {error.reason}")
