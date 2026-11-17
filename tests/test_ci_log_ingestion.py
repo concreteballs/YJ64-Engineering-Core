@@ -74,7 +74,7 @@ class FakeContext:
 class CiLogIngestionTests(unittest.TestCase):
     def test_extracts_text_and_redacts_credentials(self):
         archive = make_archive(
-            content="Authorization: Bearer token-secret-123\\n"
+            content="Authorization: Bearer token-secret-123\n"
                     "key=AIza123456789012345678901234567890"
         )
         text = extract_text_logs(archive, secrets=("token-secret-123",))
