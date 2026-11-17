@@ -49,10 +49,10 @@ def _safe_database_error_code(exc: Exception) -> str:
             return "database_authentication_error"
         if sqlstate.startswith("23"):
             return "database_integrity_error"
-        if sqlstate.startswith("42") or sqlstate.startswith("3D"):
-            return "database_schema_error"
         if sqlstate == "42501":
             return "database_permission_error"
+        if sqlstate.startswith("42") or sqlstate.startswith("3D"):
+            return "database_schema_error"
         if sqlstate.startswith("0A"):
             return "database_feature_error"
         return "database_sqlstate_" + sqlstate
