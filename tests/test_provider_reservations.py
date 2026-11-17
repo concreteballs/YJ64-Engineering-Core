@@ -18,6 +18,7 @@ class ReservationCursor:
         self.many = []
         self.rowcount = 1
         self.statements = []
+        self.reservation_state = "reserved"
 
     def __enter__(self):
         return self
@@ -41,6 +42,11 @@ class ReservationCursor:
             ) if self.profile else None
         elif "FROM yj64_provider_request_reservations" in query and "SELECT created_at" in query:
             self.many = []
+        elif "SELECT state FROM yj64_provider_request_reservations" in query:
+            self.one = (self.reservation_state,)
+        elif "UPDATE yj64_provider_request_reservations" in query and "RETURNING state" in query:
+            self.reservation_state = "sending"
+            self.one = ("sending",)
         elif "SELECT now()" in query:
             self.one = (datetime(2026, 11, 17, 16, 0, tzinfo=timezone.utc),)
         elif "FROM yj64_cycle_usage_budget" in query:
@@ -102,6 +108,24 @@ class ProviderReservationTests(unittest.TestCase):
         self.assertTrue(any("pg_advisory_xact_lock" in q for q, _ in cursor.statements))
         self.assertTrue(any("WHERE capacity_scope = %s" in q for q, _ in cursor.statements))
         self.assertTrue(any("INSERT INTO yj64_provider_request_reservations" in q for q, _ in cursor.statements))
+
+    def test_mark_sending_consumes_request_budget_once(self):
+        cursor = ReservationCursor()
+        store = self.store(cursor)
+        self.assertTrue(store.mark_provider_request_sending(9, "worker-a", "r-1"))
+        task_updates_after_first = sum(
+            1 for query, _ in cursor.statements
+            if "UPDATE yj64_task_queue" in query
+            and "provider_requests_consumed = provider_requests_consumed + 1" in query
+        )
+        self.assertTrue(store.mark_provider_request_sending(9, "worker-a", "r-1"))
+        task_updates_after_second = sum(
+            1 for query, _ in cursor.statements
+            if "UPDATE yj64_task_queue" in query
+            and "provider_requests_consumed = provider_requests_consumed + 1" in query
+        )
+        self.assertEqual(task_updates_after_first, 1)
+        self.assertEqual(task_updates_after_second, 1)
 
     def test_missing_provider_profile_fails_closed(self):
         cursor = ReservationCursor(profile=False)
