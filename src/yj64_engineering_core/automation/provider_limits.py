@@ -80,8 +80,12 @@ def classify_provider_error(
     message = str(error or "").lower()
     retry_hint = _retry_after(hdr, now)
 
-    quota_markers = ("daily quota", "monthly quota", "billing limit", "quota exceeded",
-                     "usage limit", "insufficient_quota", "hard limit")
+    quota_markers = (
+        "daily quota", "monthly quota", "daily limit", "monthly limit",
+        "requests per day", "tokens per day", "requests per month", "tokens per month",
+        "billing limit", "quota exceeded", "exceeded your quota", "current quota",
+        "usage limit", "insufficient_quota", "hard limit",
+    )
     if any(marker in message for marker in quota_markers):
         reset = retry_hint
         return RetryDecision("quota_exhausted", "block_until_reset", False, reset,
