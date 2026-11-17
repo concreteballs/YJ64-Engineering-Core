@@ -239,3 +239,11 @@ The final high-performance stage is a deliberate test mode, not an unrestricted 
 - Control Systems: real-time feedback, balance, contact and deterministic execution.
 - Safety & Environment Interaction: people/object separation, force limits, stop/recovery and test-zone interlocks.
 - Shared Autonomous Engineering Cycle: queues simulation/training jobs, stores artifacts, records provenance and triggers next stages; it is the common orchestration layer, not a separate loop embedded in the learning module.
+
+## 4.1 Initial durable checkpoint implementation status
+
+**Implemented and CI-verified:** a canonical, hash-verified task checkpoint contract and PostgreSQL append-only persistence methods. Checkpoints preserve task state, budget and approval snapshots, artifact references, sequence numbers and previous-checkpoint linkage. Repeated writes of the same checkpoint are idempotent; conflicting content for an existing sequence is rejected. Latest-checkpoint recovery verifies the stored integrity hash before returning state.
+
+**Database:** the `yj64_task_checkpoints` table is deployed to the YJ64 Supabase project with RLS enabled and server-role-only access. It is empty pending application-level integration. No autonomous worker is running; queue claim/lease, checkpoint save/recovery, provider calls and durable retry scheduling have not yet been proven end to end.
+
+**Next implementation gates:** (1) verify actual database round-trip with a disposable queued task and remove the test data; (2) bind checkpoint save/recovery to task lifecycle and lease ownership; (3) add provider request metadata and durable retry schedule; (4) implement and test provider-limit classification and chunk assembly; (5) only then enable a bounded worker with explicit budgets and stop conditions.
