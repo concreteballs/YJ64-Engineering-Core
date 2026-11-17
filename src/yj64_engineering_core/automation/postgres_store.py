@@ -327,6 +327,7 @@ class PostgresCycleStore:
         """
         import re
         from datetime import datetime, timezone, timedelta
+        from urllib.parse import urlsplit
 
         required = ("attempt_number", "provider", "model", "endpoint", "error_classification")
         if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
@@ -371,6 +372,9 @@ class PostgresCycleStore:
         summary = str(decision.get("reason") or attempt["error_classification"])
         summary = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._~+/-]+", r"\1[REDACTED]", summary)
         summary = re.sub(r"(?i)(api[_-]?key\s*[:=]\s*)\S+", r"\1[REDACTED]", summary)[:1000]
+        # Keep only the endpoint path: query strings and URL userinfo can carry secrets.
+        parsed_endpoint = urlsplit(str(attempt["endpoint"]))
+        safe_endpoint = (parsed_endpoint.path or "/")[:512]
         now = datetime.now(timezone.utc)
         scheduled_at = now + timedelta(seconds=delay) if delay is not None else None
 
@@ -402,7 +406,7 @@ class PostgresCycleStore:
                     """,
                     (
                         queue_task_id, attempt_number, str(attempt["provider"])[:128],
-                        str(attempt["model"])[:256], str(attempt["endpoint"])[:512],
+                        str(attempt["model"])[:256], safe_endpoint,
                         attempt.get("provider_request_id"),
                         str(attempt["error_classification"])[:128],
                         attempt.get("http_status"), delay, attempt.get("quota_reset_at"),
