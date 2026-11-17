@@ -81,6 +81,18 @@ class ProviderAttemptStoreTests(unittest.TestCase):
         self.assertIn("available_at = now()", update)
         self.assertIn("lock_owner = NULL", update)
 
+    def test_endpoint_query_string_is_not_persisted(self):
+        cursor = FakeCursor()
+        attempt = self.attempt()
+        attempt["endpoint"] = "https://api.example.test/v1/responses?api_key=secret"
+        self.store(cursor).record_model_request_attempt(
+            12, "worker-a", attempt,
+            {"action": "schedule_retry", "delay_seconds": 15, "reason": "rate limited"},
+        )
+        insert = next(params for query, params in cursor.statements
+                      if "INSERT INTO yj64_model_request_attempts" in query)
+        self.assertEqual(insert[4], "/v1/responses")
+
     def test_quota_and_payload_recovery_are_blocked_not_retried_unchanged(self):
         cursor = FakeCursor()
         result = self.store(cursor).record_model_request_attempt(
