@@ -147,6 +147,22 @@ def process_ci_event(
     ):
         return TaskExecutionResult("blocked", "ci_logs_integrity_check_failed")
 
+    queued = context.store.enqueue_task(
+        "analyze_ci_logs",
+        {
+            "event_id": event_id,
+            "source_task_id": context.task_id,
+            "payload_id": payload_id,
+            "run_id": run_id,
+            "run_attempt": attempt,
+            "commit_sha": sha,
+        },
+        dedupe_key=f"ci-log-analysis:{event_id}:{attempt}:{payload_digest}",
+        max_attempts=3,
+    )
+    if not queued.get("enqueued") and not queued.get("duplicate"):
+        return TaskExecutionResult("retry", "ci_log_analysis_enqueue_incomplete", 90)
+
     return TaskExecutionResult("completed")
 
 
