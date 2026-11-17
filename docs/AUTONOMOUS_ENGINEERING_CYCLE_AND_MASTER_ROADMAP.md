@@ -59,7 +59,7 @@ This document is the execution index for the autonomous development cycle. It se
 
 ## 2. Current priority: finish the autonomous engineering cycle
 
-Cross-cutting prerequisite: implement the observability and diagnostic foundation defined in [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md). The current HTTP 503 investigation is an immediate use case: preserve exact safe SQLSTATE/category, deployment identity, correlation IDs and the failing operation before selecting a fix.
+Cross-cutting prerequisite: implement the observability and diagnostic foundation defined in [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md), using the assessed [YJ64 monitor prototype](YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md) as a source for portable event and offline-delivery patterns. The common event schema and initial redaction tests now exist; shared ingestion, durable telemetry storage and end-to-end propagation remain outstanding. **No engineering module is fully integrated until it emits the common diagnostic contract and delivers evidence to shared collection or a bounded recoverable spool with visible delivery state.** The current HTTP 503 investigation is an immediate use case: preserve exact safe SQLSTATE/category, deployment identity, correlation IDs and the failing operation before selecting a fix.
 
 Do not start broad implementation of every engineering discipline until this cycle is operational. The cycle must be capable of taking the next incomplete task from this roadmap, executing bounded work, validating it, recording the result and continuing without requiring the user's phone to remain online.
 
@@ -160,6 +160,7 @@ Every roadmap item must be broken into small tasks with prerequisites, acceptanc
 - Separate hypothesis, candidate, deterministic calculation, simulation, benchmark, experiment and independent review.
 - Prefer additive, reversible changes and small commits.
 - Every completed task must link its code commit, tests, CI run and limitations.
+- Every module onboarding must pass the mandatory Observability & Diagnostics integration gate; local-only logs are prototype-level diagnostics, not full integration.
 - Update this roadmap and IMPLEMENTATION_STATUS.md as part of the same task that changes implementation status.
 
 
