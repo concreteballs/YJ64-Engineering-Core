@@ -13,6 +13,8 @@ Supabase migrations `0007`–`0017` for provider profiles, shared quota scopes, 
 
 A provider adapter interface contract is now defined in `automation/provider_adapters.py`; it binds requests to exact serialized-body hashes, requires model-specific token counting, declares idempotency/lookup capabilities and requires durable response artifacts. It is not a live adapter.
 
+Admission fails closed until at least one explicit global daily/monthly usage ceiling is configured. No provider profiles or global budget rows are currently seeded, so the request-admission path cannot yet send model calls.
+
 Still not implemented: provider-specific API adapters and live limit/pricing discovery; initial verified profile and budget configuration; automatic scheduler invocation of quota recovery, reservation expiry and provider admission; provider-specific rate-window semantics/tokenizers/body-size ceilings; provider-specific adapters that can perform authoritative lookup and produce trusted reconciliation evidence; remote chunk transmission; service-role application round-trip tests; and end-to-end model execution gated on FINALIZE. No worker is running.
 
 
