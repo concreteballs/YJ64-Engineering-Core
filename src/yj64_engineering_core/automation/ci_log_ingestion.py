@@ -31,12 +31,12 @@ def redact_log_text(text: str, secrets: tuple[str, ...] | list[str] = ()) -> str
     ):
         text = text.replace(secret, "[REDACTED]")
     patterns = (
-        (r"(?i)(authorization\\s*:\\s*bearer\\s+)[^\\s]+", r"\\1[REDACTED]"),
-        (r"\\bgh[pousr]_[A-Za-z0-9_]{20,}\\b", "[REDACTED_GITHUB_TOKEN]"),
-        (r"\\bAIza[0-9A-Za-z_-]{25,}\\b", "[REDACTED_GOOGLE_KEY]"),
-        (r"\\bsk-[A-Za-z0-9_-]{20,}\\b", "[REDACTED_API_KEY]"),
-        (r"(?i)\\b(postgres(?:ql)?://)[^:/\\s]+:[^@/\\s]+@", r"\\1[REDACTED]@"),
-        (r"\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b", "[REDACTED_JWT]"),
+        (r"(?i)(authorization\s*:\s*bearer\s+)[^\s]+", r"\1[REDACTED]"),
+        (r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b", "[REDACTED_GITHUB_TOKEN]"),
+        (r"\bAIza[0-9A-Za-z_-]{25,}\b", "[REDACTED_GOOGLE_KEY]"),
+        (r"\bsk-[A-Za-z0-9_-]{20,}\b", "[REDACTED_API_KEY]"),
+        (r"(?i)\b(postgres(?:ql)?://)[^:/\s]+:[^@/\s]+@", r"\1[REDACTED]@"),
+        (r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b", "[REDACTED_JWT]"),
     )
     for pattern, replacement in patterns:
         text = re.sub(pattern, replacement, text)
@@ -67,7 +67,7 @@ def extract_text_logs(
             name = info.filename
             if info.is_dir() or not name.lower().endswith(".txt"):
                 continue
-            normalized = name.replace("\\\\", "/")
+            normalized = name.replace("\\", "/")
             if normalized.startswith("/") or any(part in {".", ".."} for part in normalized.split("/")):
                 raise GitHubLogsError("unsafe_log_archive_path", retryable=False)
             files_seen += 1
@@ -84,11 +84,11 @@ def extract_text_logs(
                 raise GitHubLogsError("truncated_log_archive_entry", retryable=True)
             decoded = raw.decode("utf-8", errors="replace")
             decoded = redact_log_text(decoded, secrets)
-            sections.append(f"===== {name} =====\\n{decoded.rstrip()}\\n")
+            sections.append(f"===== {name} =====\n{decoded.rstrip()}\n")
 
     if not sections:
         raise GitHubLogsError("no_text_logs_in_archive", retryable=True)
-    result = "\\n".join(sections)
+    result = "\n".join(sections)
     if len(result.encode("utf-8")) > max_log_bytes:
         raise GitHubLogsError("run_logs_exceed_storage_limit", retryable=False)
     return result
