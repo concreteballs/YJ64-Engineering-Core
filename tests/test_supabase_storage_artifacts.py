@@ -88,7 +88,7 @@ class SupabaseStorageArtifactStoreTests(unittest.TestCase):
         second = store.put(namespace="responses", content=payload, content_type="text/plain")
         self.assertEqual(first, second)
         self.assertEqual(store.get(first), payload)
-        self.assertEqual([r[0].method for r in http.requests], ["POST", "POST", "GET"])
+        self.assertEqual([r[0].method for r in http.requests], ["POST", "POST", "GET", "GET"])
 
     def test_corrupt_download_is_rejected_by_sha256(self):
         http = FakeStorageHTTP()
