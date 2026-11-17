@@ -91,6 +91,59 @@ class ProviderBudgetTests(unittest.TestCase):
         self.assertTrue(result.allowed)
         self.assertEqual(result.action, "send")
 
+    def test_unsent_reservation_uses_concurrency_but_not_rpm_or_tpm(self):
+        profile = ProviderLimitProfile(
+            "p", "m", "/v1", requests_per_minute=1,
+            tokens_per_minute=100, max_concurrency=2,
+        )
+        result = plan_provider_capacity(
+            profile, input_tokens=40,
+            reservations=[{
+                "created_at": self.now - timedelta(seconds=5),
+                "estimated_tokens": 90,
+                "state": "reserved",
+                "expires_at": self.now + timedelta(seconds=30),
+                "sent_at": None,
+            }],
+            now=self.now,
+        )
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.requests_in_window, 0)
+        self.assertEqual(result.tokens_in_window, 0)
+        self.assertEqual(result.active_requests, 1)
+
+    def test_unknown_sent_request_remains_in_concurrency_after_ttl(self):
+        profile = ProviderLimitProfile("p", "m", "/v1", max_concurrency=1)
+        result = plan_provider_capacity(
+            profile, input_tokens=1,
+            reservations=[{
+                "created_at": self.now - timedelta(minutes=10),
+                "estimated_tokens": 1,
+                "state": "unknown",
+                "expires_at": None,
+                "sent_at": self.now - timedelta(minutes=10),
+            }],
+            now=self.now,
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.active_requests, 1)
+        self.assertEqual(result.action, "schedule_retry")
+
+    def test_completed_sent_reservation_counts_in_rolling_usage(self):
+        profile = ProviderLimitProfile("p", "m", "/v1", requests_per_minute=1)
+        result = plan_provider_capacity(
+            profile, input_tokens=1,
+            reservations=[{
+                "created_at": self.now - timedelta(seconds=15),
+                "estimated_tokens": 20,
+                "state": "completed",
+                "sent_at": self.now - timedelta(seconds=15),
+            }],
+            now=self.now,
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.requests_in_window, 1)
+
     def test_invalid_reservation_timestamp_is_rejected(self):
         with self.assertRaises(ValueError):
             plan_provider_capacity(
