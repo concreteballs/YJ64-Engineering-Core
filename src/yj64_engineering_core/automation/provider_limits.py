@@ -110,6 +110,16 @@ def classify_provider_error(
         return RetryDecision("rate_limited", "schedule_retry", True, delay,
                              "Persist retry time and release the worker lease")
 
+    transport_markers = (
+        "timeout", "connection reset", "connection refused", "connection error",
+        "network error", "temporary network", "name resolution", "dns lookup",
+    )
+    if status_code is None and any(marker in message for marker in transport_markers):
+        delay = min(max_delay_seconds, base_delay_seconds * (2 ** min(attempt - 1, 20)))
+        delay = min(max_delay_seconds, int(delay * (1 + jitter_fraction)))
+        return RetryDecision("transient_transport_error", "schedule_retry", True, delay,
+                             "Transport failure before a provider response was received")
+
     if status_code == 408 or status_code is not None and 500 <= status_code <= 599:
         delay = retry_hint if retry_hint is not None else min(
             max_delay_seconds, base_delay_seconds * (2 ** min(attempt - 1, 20))
