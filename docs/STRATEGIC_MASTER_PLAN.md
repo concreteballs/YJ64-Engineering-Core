@@ -72,6 +72,11 @@ No new or existing engineering module is considered **fully integrated** until i
 3. Verify atomic task claims, leases, bounded retries, completion/blocked states and recovery after worker restart.
 4. Deploy a separate cloud worker that can claim tasks without relying on the phone, browser, or an open ChatGPT conversation. The worker must comply with the [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md): durable task state is authoritative; model calls are replaceable, bounded sessions; context rollover is automatic and recoverable.
 5. Connect a server-side model provider using a separately configured API key; do not assume a ChatGPT subscription is an API credential.
+6. Implement [MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md): detect provider RPM/TPM/context/concurrency/quota limits and structured errors; schedule Retry-After/reset-aware retries; adaptively chunk oversized inputs; verify ordered chunk hashes and explicit FINALIZE before model work. Stateless calls must be assembled by the orchestrator, not assumed to accumulate.
+7. Make the worker read this strategic plan, the detailed roadmap and implementation ledger; select only the next unblocked task.
+8. Require exact-commit CI validation before a task is marked complete or the next dependent task is started.
+9. Add bounded repair attempts, task/time/token/cost budgets, pause/resume/cancel, kill switch and safe blocked states.
+10. Add external notifications and a status view for active task, queue, last commit, CI result, next task, budget and stop reason.
 6. Make the worker read this strategic plan, the detailed roadmap and implementation ledger; select only the next unblocked task.
 7. Require exact-commit CI validation before a task is marked complete or the next dependent task is started.
 8. Add bounded repair attempts, task/time/token/cost budgets, pause/resume/cancel, kill switch and safe blocked states.
