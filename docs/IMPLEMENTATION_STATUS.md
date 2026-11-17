@@ -2,7 +2,7 @@
 
 This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PLAN.md. A plan, candidate evaluation or catalogue entry is not an implemented solver.
 
-**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle.
+**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md) defines the cross-cutting monitoring/diagnostics foundation. [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle.
 
 ## Status definitions
 
@@ -10,6 +10,18 @@ This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PL
 - Partially implemented — an executable foundation exists, but major parts of the intended capability remain.
 - Planned — requirements are documented; no meaningful executable subsystem is present.
 - Evaluating — an external candidate has been identified for review; no adoption or integration is implied.
+
+## Cross-cutting platform capability — Observability & Diagnostics
+
+**Status: Partially implemented primitives; shared subsystem planned.**
+
+Verified existing foundation: api/index.py extracts validated PostgreSQL SQLSTATE from psycopg .sqlstate / .pgcode, classifies database failures into safe categories and avoids exposing raw exception text or credentials. CI job logs and summaries are available for manual inspection.
+
+Not yet implemented as a shared capability: versioned telemetry schema, end-to-end correlation IDs, standardized structured logging across modules, metrics, distributed tracing, diagnostic bundles, dependency-aware health checks, alerting, operator drill-down and evidence-based diagnostic assistant. The live CI receiver's HTTP 503 remains unresolved; the current diagnostic category is not proof of root cause.
+
+Implementation specification: [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md). This capability is mandatory for every discipline onboarding and for the autonomous-cycle acceptance test.
+
+---
 
 ## Consolidated work-package status
 
