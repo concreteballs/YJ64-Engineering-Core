@@ -77,6 +77,7 @@ jobs:
               try:
                   body = json.loads(error.read().decode("utf-8"))
                   code = body.get("error") if isinstance(body, dict) else None
+                  diagnostic = body.get("diagnostic") if isinstance(body, dict) else None
                   allowed = {
                       "webhook_not_configured",
                       "database_not_configured",
@@ -85,8 +86,17 @@ jobs:
                       "not_found",
                       "event_scope_rejected",
                   }
+                  safe_diagnostics = {
+                      "database_connection_error",
+                      "database_schema_error",
+                      "database_integrity_error",
+                      "database_driver_error",
+                      "database_operation_error",
+                  }
                   if code in allowed:
                       print("Webhook diagnostic: " + code)
+                  if diagnostic in safe_diagnostics:
+                      print("Database diagnostic: " + diagnostic)
               except (UnicodeDecodeError, json.JSONDecodeError):
                   print("Webhook diagnostic body was not recognized.")
               raise
