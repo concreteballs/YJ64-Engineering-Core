@@ -2,6 +2,7 @@ import unittest
 from datetime import datetime, timezone
 
 from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
+from yj64_engineering_core.automation.provider_budget import ProviderLimitProfile
 
 
 class ReservationCursor:
@@ -81,6 +82,14 @@ class ProviderReservationTests(unittest.TestCase):
             endpoint="/v1/responses", payload_sha256="a" * 64,
             input_tokens=100, output_tokens=40, payload_bytes=1024,
         )
+
+    def test_provider_derived_profile_requires_timezone_aware_expiry(self):
+        profile = ProviderLimitProfile("p", "m", "/v1", max_input_tokens=100)
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            self.store(ReservationCursor()).set_provider_limit_profile(
+                profile, profile_source="provider_api",
+                valid_until=datetime(2026, 11, 17, 18, 0),
+            )
 
     def test_reservation_locks_task_and_provider_profile_then_persists(self):
         cursor = ReservationCursor()
