@@ -421,11 +421,15 @@ class PostgresCycleStore:
                     cursor.execute(
                         """
                         UPDATE yj64_task_queue
-                        SET state = 'pending',
-                            available_at = now() + (%s * interval '1 second'),
+                        SET state = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
+                            available_at = CASE
+                                WHEN attempts >= max_attempts THEN available_at
+                                ELSE now() + (%s * interval '1 second')
+                            END,
                             locked_at = NULL, lock_owner = NULL,
                             last_error = %s, updated_at = now()
                         WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                        RETURNING state
                         """,
                         (delay, summary, queue_task_id, worker_id),
                     )
@@ -453,7 +457,10 @@ class PostgresCycleStore:
                     )
                 if cursor.rowcount != 1:
                     raise RuntimeError("task lease was lost while recording provider attempt")
-                state = "pending" if action == "schedule_retry" else (
-                    "failed" if action == "fail_or_require_configuration" else "blocked"
+                updated_state = cursor.fetchone()
+                state = updated_state[0] if updated_state else (
+                    "pending" if action == "schedule_retry" else (
+                        "failed" if action == "fail_or_require_configuration" else "blocked"
+                    )
                 )
                 return {"recorded": True, "duplicate": False, "task_state": state}
