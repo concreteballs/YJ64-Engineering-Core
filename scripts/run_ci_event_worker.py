@@ -163,8 +163,10 @@ def main() -> int:
     run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     worker_id = f"gha-ci-log-ingestion-{run_id}-{run_attempt}"
 
+    stage = "store_init"
     try:
         store = PostgresCycleStore(database_url)
+        stage = "runner_init"
         runner = WorkerRunner(
             store,
             worker_id=worker_id,
@@ -173,6 +175,7 @@ def main() -> int:
             recovery_limit=100,
             allowed_task_types=["process_ci_event"],
         )
+        stage = "run_once"
         result = runner.run_once()
     except Exception as exc:
         sqlstate = None
@@ -181,11 +184,16 @@ def main() -> int:
             if isinstance(candidate, str) and len(candidate) == 5 and candidate.isalnum():
                 sqlstate = candidate
                 break
+        detail = str(exc).splitlines()[0][:180]
+        for secret in (database_url, os.environ.get("GITHUB_TOKEN", "")):
+            if secret:
+                detail = detail.replace(secret, "[REDACTED]")
         print(json.dumps({
             "ok": False,
+            "stage": stage,
             "error_type": type(exc).__name__,
             "sqlstate": sqlstate,
-            "message": "Worker invocation failed; details suppressed.",
+            "diagnostic": detail,
         }), file=sys.stderr)
         return 1
 
