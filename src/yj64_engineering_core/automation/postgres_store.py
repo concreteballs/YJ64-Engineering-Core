@@ -219,6 +219,11 @@ class PostgresCycleStore:
                     SET state = 'completed', locked_at = NULL, lock_owner = NULL,
                         updated_at = now()
                     WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND NOT EXISTS (
+                          SELECT 1 FROM yj64_provider_request_reservations AS reservation
+                          WHERE reservation.queue_task_id = yj64_task_queue.task_id
+                            AND reservation.state IN ('reserved', 'sending', 'accepted', 'unknown')
+                      )
                     """,
                     (task_id, worker_id),
                 )
