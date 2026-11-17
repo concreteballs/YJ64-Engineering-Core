@@ -1009,6 +1009,7 @@ class PostgresCycleStore:
     def set_task_usage_budget(
         self, task_id: int, *, input_token_limit: int | None = None,
         output_token_limit: int | None = None, cost_limit_usd=None,
+        max_provider_requests: int | None = None, deadline_at=None,
     ) -> bool:
         """Configure task budgets before the first attempt or any reservation."""
         from decimal import Decimal, InvalidOperation
@@ -1023,6 +1024,15 @@ class PostgresCycleStore:
                 not isinstance(value, int) or isinstance(value, bool) or value < 0
             ):
                 raise ValueError(f"{name} must be a non-negative integer or None")
+        if max_provider_requests is not None and (
+            not isinstance(max_provider_requests, int) or isinstance(max_provider_requests, bool)
+            or max_provider_requests < 0
+        ):
+            raise ValueError("max_provider_requests must be a non-negative integer or None")
+        if deadline_at is not None and (
+            not hasattr(deadline_at, "tzinfo") or deadline_at.tzinfo is None
+        ):
+            raise ValueError("deadline_at must be timezone-aware")
         cost = None
         if cost_limit_usd is not None:
             try:
@@ -1037,13 +1047,14 @@ class PostgresCycleStore:
                     """
                     UPDATE yj64_task_queue
                     SET budget_input_tokens = %s, budget_output_tokens = %s,
-                        budget_cost_usd = %s, updated_at = now()
+                        budget_cost_usd = %s, max_provider_requests = %s,
+                        deadline_at = %s, updated_at = now()
                     WHERE task_id = %s AND state = 'pending' AND attempts = 0
                       AND reserved_input_tokens = 0 AND reserved_output_tokens = 0
                       AND reserved_cost_usd = 0 AND consumed_input_tokens = 0
                       AND consumed_output_tokens = 0 AND consumed_cost_usd = 0
                     """,
-                    (input_token_limit, output_token_limit, cost, task_id),
+                    (input_token_limit, output_token_limit, cost, max_provider_requests, deadline_at, task_id),
                 )
                 return cursor.rowcount == 1
 
@@ -1057,7 +1068,9 @@ class PostgresCycleStore:
                     """
                     SELECT budget_input_tokens, budget_output_tokens, budget_cost_usd,
                            reserved_input_tokens, reserved_output_tokens, reserved_cost_usd,
-                           consumed_input_tokens, consumed_output_tokens, consumed_cost_usd
+                           consumed_input_tokens, consumed_output_tokens, consumed_cost_usd,
+                           max_provider_requests, provider_requests_reserved,
+                           provider_requests_consumed, deadline_at
                     FROM yj64_task_queue WHERE task_id = %s
                     """,
                     (task_id,),
@@ -1069,6 +1082,10 @@ class PostgresCycleStore:
                     "limits": {"input_tokens": row[0], "output_tokens": row[1], "cost_usd": str(row[2]) if row[2] is not None else None},
                     "reserved": {"input_tokens": row[3], "output_tokens": row[4], "cost_usd": str(row[5])},
                     "consumed": {"input_tokens": row[6], "output_tokens": row[7], "cost_usd": str(row[8])},
+                    "request_budget": {
+                        "max": row[9], "reserved": row[10], "consumed": row[11],
+                        "deadline_at": row[12].isoformat() if row[12] is not None else None,
+                    },
                 }
 
     def get_cycle_usage(self) -> dict:
