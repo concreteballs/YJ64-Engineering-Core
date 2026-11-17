@@ -78,7 +78,8 @@ class ProviderReservationTests(unittest.TestCase):
     def reserve(self, store, key="task-9:model-call-1"):
         return store.reserve_provider_capacity(
             9, "worker-a", key, provider="provider-a", model="model-a",
-            endpoint="/v1/responses", input_tokens=100, output_tokens=40,
+            endpoint="/v1/responses", payload_sha256="a" * 64,
+            input_tokens=100, output_tokens=40,
         )
 
     def test_reservation_locks_task_and_provider_profile_then_persists(self):
@@ -101,7 +102,7 @@ class ProviderReservationTests(unittest.TestCase):
 
     def test_idempotent_duplicate_returns_original_reservation(self):
         cursor = ReservationCursor(
-            duplicate=("reservation-1", "reserved", 9, "provider-a", "model-a", "/v1/responses")
+            duplicate=("reservation-1", "reserved", 9, "provider-a", "model-a", "/v1/responses", "a" * 64)
         )
         result = self.reserve(self.store(cursor))
         self.assertTrue(result["duplicate"])
@@ -128,9 +129,16 @@ class ProviderReservationTests(unittest.TestCase):
 
     def test_idempotency_key_cannot_be_reused_for_another_task(self):
         cursor = ReservationCursor(
-            duplicate=("reservation-1", "reserved", 10, "provider-a", "model-a", "/v1/responses")
+            duplicate=("reservation-1", "reserved", 10, "provider-a", "model-a", "/v1/responses", "a" * 64)
         )
         with self.assertRaisesRegex(ValueError, "different task or provider request"):
+            self.reserve(self.store(cursor))
+
+    def test_idempotency_key_cannot_be_reused_with_different_payload_hash(self):
+        cursor = ReservationCursor(
+            duplicate=("reservation-1", "reserved", 9, "provider-a", "model-a", "/v1/responses", "b" * 64)
+        )
+        with self.assertRaisesRegex(ValueError, "different request content"):
             self.reserve(self.store(cursor))
 
     def test_task_budget_blocks_before_reserving(self):
