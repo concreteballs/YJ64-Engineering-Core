@@ -19,6 +19,21 @@ class ProviderErrorClassificationTests(unittest.TestCase):
         result = classify_provider_error(429, attempt=4, jitter_fraction=0.2, now=self.now)
         self.assertEqual(result.delay_seconds, 48)
 
+    def test_provider_specific_token_reset_duration(self):
+        result = classify_provider_error(
+            429, headers={"x-ratelimit-reset-tokens": "6m0s"}, now=self.now
+        )
+        self.assertEqual(result.delay_seconds, 360)
+
+    def test_anthropic_iso_reset_timestamp(self):
+        target = datetime(2026, 1, 1, 0, 2, tzinfo=timezone.utc)
+        result = classify_provider_error(
+            429,
+            headers={"anthropic-ratelimit-requests-reset": target.isoformat()},
+            now=self.now,
+        )
+        self.assertEqual(result.delay_seconds, 120)
+
     def test_retry_after_http_date(self):
         target = datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc)
         result = classify_provider_error(503, headers={"Retry-After": format_datetime(target)},
