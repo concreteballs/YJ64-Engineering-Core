@@ -11,6 +11,8 @@ Chunk foundations include deterministic token-counter-driven splitting; stable c
 
 Supabase migrations `0007`–`0017` for provider profiles, shared quota scopes, payload identity, body-size limits, capacity deferrals, cost-confidence tracking and ambiguous-request reconciliation are deployed. RLS is enabled; anon/authenticated have no table grants; service_role has the required server-side grants. The security advisor reports informational `RLS enabled, no policy` findings for these private tables; this is intentional because direct client roles have no grants and access is reserved for the trusted server role.
 
+A provider adapter interface contract is now defined in `automation/provider_adapters.py`; it binds requests to exact serialized-body hashes, requires model-specific token counting, declares idempotency/lookup capabilities and requires durable response artifacts. It is not a live adapter.
+
 Still not implemented: provider-specific API adapters and live limit/pricing discovery; initial verified profile and budget configuration; automatic scheduler invocation of quota recovery, reservation expiry and provider admission; provider-specific rate-window semantics/tokenizers/body-size ceilings; provider-specific adapters that can perform authoritative lookup and produce trusted reconciliation evidence; remote chunk transmission; service-role application round-trip tests; and end-to-end model execution gated on FINALIZE. No worker is running.
 
 
