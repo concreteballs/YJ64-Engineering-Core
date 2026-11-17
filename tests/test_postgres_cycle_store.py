@@ -140,6 +140,9 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertIn("available_at", query)
         self.assertIn("GREATEST(%s, now())", query)
         self.assertIn("lock_owner = NULL", query)
+        self.assertIn("attempts = GREATEST(0, attempts - 1)", query)
+        self.assertIn("capacity_deferrals = capacity_deferrals + 1", query)
+        self.assertIn("max_capacity_deferrals", query)
         self.assertEqual(params[0], retry_at)
 
     def test_task_capacity_deferral_rejects_naive_datetime(self):
