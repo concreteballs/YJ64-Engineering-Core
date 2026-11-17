@@ -153,6 +153,10 @@ class ProviderAttemptStoreTests(unittest.TestCase):
             {"action": "schedule_retry", "delay_seconds": 30, "reason": "connection timeout"},
         )
         self.assertEqual(result["task_state"], "blocked")
+        attempt_insert, attempt_params = next((q, params) for q, params in cursor.statements
+                                              if "INSERT INTO yj64_model_request_attempts" in q)
+        self.assertIn("reservation_id", attempt_insert)
+        self.assertEqual(attempt_params[-3], "reservation-1")
         reservation_update = next(q for q, _ in cursor.statements
                                   if "UPDATE yj64_provider_request_reservations" in q)
         self.assertIn("state = 'unknown'", reservation_update)
