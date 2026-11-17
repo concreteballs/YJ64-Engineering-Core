@@ -244,3 +244,11 @@ The training curriculum must not permanently constrain the robot to low speed/fo
 - Shared Autonomous Engineering Cycle: common durable task/event orchestration for simulation and training jobs; no separate orchestration loop inside the learning discipline.
 
 Acceptance evidence must distinguish observation, inferred skill, simulation, supervised physical trial and validated operating envelope. A skill learned from a human demonstration is only a candidate until the robot's own physical execution has been tested.
+
+## Durable task checkpoint persistence — initial implementation
+
+`automation/checkpoints.py` defines the canonical `yj64.task-checkpoint.v1` payload with deterministic JSON encoding, SHA-256 integrity verification, a monotonic sequence, previous-checkpoint linkage, task state, budgets, approvals and artifact references. `PostgresCycleStore.save_checkpoint` performs append-only, idempotent persistence and rejects conflicting content for a reused task sequence; `load_latest_checkpoint` retrieves and verifies the newest checkpoint. Unit tests cover stable hashes, mutation detection, invalid input, idempotent save, conflicting sequence reuse and recovery.
+
+The Supabase migration `durable_task_checkpoints` has been applied to project `YJ64-Autonomous-Core`. The `yj64_task_checkpoints` table exists with RLS enabled, no public policies, and access granted only to `service_role`. The table is currently empty. This is a persistence primitive, not a running worker or an end-to-end autonomous cycle. No worker has been started and no real task has yet been checkpointed through the application.
+
+The CI run for commit `c6ff86be7464a754c6fc3086ba9987e631b76237` passed, including unit, FEM and real 3D CAD integration tests. The separate CI completion webhook remains failing and is tracked independently.
