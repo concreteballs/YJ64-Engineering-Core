@@ -841,7 +841,7 @@ class PostgresCycleStore:
         if not any((
             profile.requests_per_minute, profile.tokens_per_minute,
             profile.max_concurrency, profile.max_input_tokens,
-            profile.max_output_tokens,
+            profile.max_output_tokens, profile.max_payload_bytes,
         )):
             raise ValueError("at least one provider capacity limit must be known")
         if capacity_scope is None:
@@ -888,10 +888,10 @@ class PostgresCycleStore:
                     INSERT INTO yj64_provider_limit_profiles
                         (provider, model, endpoint, requests_per_minute,
                          tokens_per_minute, max_concurrency, max_input_tokens,
-                         max_output_tokens, tokens_per_minute_includes_output,
+                         max_output_tokens, max_payload_bytes, tokens_per_minute_includes_output,
                          input_cost_per_million_usd, output_cost_per_million_usd,
                          profile_source, observed_at, valid_until, capacity_scope, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                             %s, now(), %s, %s, now())
                     ON CONFLICT (provider, model, endpoint) DO UPDATE SET
                         requests_per_minute = EXCLUDED.requests_per_minute,
@@ -899,6 +899,7 @@ class PostgresCycleStore:
                         max_concurrency = EXCLUDED.max_concurrency,
                         max_input_tokens = EXCLUDED.max_input_tokens,
                         max_output_tokens = EXCLUDED.max_output_tokens,
+                        max_payload_bytes = EXCLUDED.max_payload_bytes,
                         tokens_per_minute_includes_output = EXCLUDED.tokens_per_minute_includes_output,
                         input_cost_per_million_usd = EXCLUDED.input_cost_per_million_usd,
                         output_cost_per_million_usd = EXCLUDED.output_cost_per_million_usd,
@@ -910,7 +911,8 @@ class PostgresCycleStore:
                         profile.provider, profile.model, profile.endpoint,
                         profile.requests_per_minute, profile.tokens_per_minute,
                         profile.max_concurrency, profile.max_input_tokens,
-                        profile.max_output_tokens, profile.tokens_per_minute_includes_output,
+                        profile.max_output_tokens, profile.max_payload_bytes,
+                        profile.tokens_per_minute_includes_output,
                         profile.input_cost_per_million_usd,
                         profile.output_cost_per_million_usd,
                         profile_source, valid_until, capacity_scope,
@@ -969,7 +971,7 @@ class PostgresCycleStore:
     def reserve_provider_capacity(
         self, queue_task_id: int, worker_id: str, idempotency_key: str,
         *, provider: str, model: str, endpoint: str, payload_sha256: str,
-        input_tokens: int, output_tokens: int,
+        input_tokens: int, output_tokens: int, payload_bytes: int,
         lease_seconds: int = 300, reservation_ttl_seconds: int = 300,
     ) -> dict:
         """Atomically check budgets/limits and reserve one provider request.
@@ -994,7 +996,10 @@ class PostgresCycleStore:
         import re
         if not isinstance(payload_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", payload_sha256):
             raise ValueError("payload_sha256 must be a lowercase SHA-256 hex digest")
-        for name, value in (("input_tokens", input_tokens), ("output_tokens", output_tokens)):
+        for name, value in (
+            ("input_tokens", input_tokens), ("output_tokens", output_tokens),
+            ("payload_bytes", payload_bytes),
+        ):
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
         if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
@@ -1048,7 +1053,7 @@ class PostgresCycleStore:
                 cursor.execute(
                     """
                     SELECT requests_per_minute, tokens_per_minute, max_concurrency,
-                           max_input_tokens, max_output_tokens,
+                           max_input_tokens, max_output_tokens, max_payload_bytes,
                            tokens_per_minute_includes_output,
                            input_cost_per_million_usd, output_cost_per_million_usd,
                            capacity_scope, profile_source, valid_until
@@ -1069,12 +1074,12 @@ class PostgresCycleStore:
                     provider, model, endpoint,
                     requests_per_minute=limits[0], tokens_per_minute=limits[1],
                     max_concurrency=limits[2], max_input_tokens=limits[3],
-                    max_output_tokens=limits[4],
-                    tokens_per_minute_includes_output=limits[5],
-                    input_cost_per_million_usd=float(limits[6]) if limits[6] is not None else None,
-                    output_cost_per_million_usd=float(limits[7]) if limits[7] is not None else None,
+                    max_output_tokens=limits[4], max_payload_bytes=limits[5],
+                    tokens_per_minute_includes_output=limits[6],
+                    input_cost_per_million_usd=float(limits[7]) if limits[7] is not None else None,
+                    output_cost_per_million_usd=float(limits[8]) if limits[8] is not None else None,
                 )
-                capacity_scope, profile_source, valid_until = limits[8], limits[9], limits[10]
+                capacity_scope, profile_source, valid_until = limits[9], limits[10], limits[11]
                 cursor.execute("SELECT now()")
                 database_now = cursor.fetchone()[0]
                 if profile_source != "operator_config" and (
@@ -1108,7 +1113,7 @@ class PostgresCycleStore:
                     })
                 capacity = plan_provider_capacity(
                     profile, input_tokens=input_tokens, output_tokens=output_tokens,
-                    reservations=reservations, now=database_now,
+                    payload_bytes=payload_bytes, reservations=reservations, now=database_now,
                 )
                 if not capacity.allowed:
                     return {
@@ -1196,16 +1201,17 @@ class PostgresCycleStore:
                     """
                     INSERT INTO yj64_provider_request_reservations
                         (reservation_id, idempotency_key, queue_task_id, provider, model,
-                         endpoint, capacity_scope, request_payload_sha256,
+                         endpoint, capacity_scope, request_payload_sha256, payload_bytes,
                          input_tokens_estimated, output_tokens_estimated,
                          estimated_cost_usd, state, expires_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
                             now() + (%s * interval '1 second'))
                     """,
                     (
                         reservation_id, idempotency_key, queue_task_id, provider, model,
-                        endpoint, capacity_scope, payload_sha256, input_tokens, output_tokens,
-                        estimated_cost or Decimal("0"), reservation_ttl_seconds,
+                        endpoint, capacity_scope, payload_sha256, payload_bytes,
+                        input_tokens, output_tokens, estimated_cost or Decimal("0"),
+                        reservation_ttl_seconds,
                     ),
                 )
                 cursor.execute(
