@@ -99,13 +99,10 @@ class OpenAIResponsesLookupTests(unittest.TestCase):
         self.assertEqual(result.status, "unknown")
 
     def test_oversized_response_is_unknown(self):
-        result = self.lookup(self.adapter(
-            lambda request, timeout: FakeResponse(self.body + b" " * 2048)
-        ))
-        # The adapter's default bound is much larger; use a deliberately small bound.
+        oversized_body = self.body + b" " * 1200
         small = OpenAIResponsesLookupAdapter(
             artifact_store=self.artifacts, api_key="test-key",
-            opener=lambda request, timeout: FakeResponse(self.body),
+            opener=lambda request, timeout: FakeResponse(oversized_body),
             max_response_bytes=1024,
         )
         result = small.lookup(
