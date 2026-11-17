@@ -1125,7 +1125,11 @@ class PostgresCycleStore:
                         COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())
                             AND state <> 'expired' AND actual_cost_usd IS NULL AND NOT cost_estimate_known),
                         COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now())
-                            AND state <> 'expired' AND actual_cost_usd IS NULL AND NOT cost_estimate_known)
+                            AND state <> 'expired' AND actual_cost_usd IS NULL AND NOT cost_estimate_known),
+                        COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())
+                            AND state <> 'expired'),
+                        COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now())
+                            AND state <> 'expired')
                     FROM yj64_provider_request_reservations
                     """
                 )
@@ -1143,6 +1147,7 @@ class PostgresCycleStore:
                         "daily_unknown_cost_requests": usage[4],
                         "monthly_unknown_cost_requests": usage[5],
                         "cost_estimate_complete": usage[4] == 0 and usage[5] == 0,
+                        "daily_requests": usage[6], "monthly_requests": usage[7],
                     },
                     "time_basis": "database_timezone",
                 }
