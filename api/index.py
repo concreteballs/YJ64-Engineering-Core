@@ -29,6 +29,20 @@ EXPECTED_EVENT = "yj64.ci.completed"
 MAX_BODY_BYTES = 16 * 1024
 
 
+def _safe_database_error_code(exc: Exception) -> str:
+    """Classify database failures without exposing exception text or secrets."""
+    name = type(exc).__name__
+    if name in {"OperationalError", "InterfaceError"}:
+        return "database_connection_error"
+    if name in {"ProgrammingError", "UndefinedTable", "UndefinedColumn"}:
+        return "database_schema_error"
+    if name in {"IntegrityError", "UniqueViolation", "CheckViolation"}:
+        return "database_integrity_error"
+    if name in {"ImportError", "ModuleNotFoundError"}:
+        return "database_driver_error"
+    return "database_operation_error"
+
+
 class handler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, payload: dict[str, object]) -> None:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -162,9 +176,13 @@ class handler(BaseHTTPRequestHandler):
             return
         try:
             result = PostgresCycleStore(database_url).record_ci_event(event_record)
-        except Exception:
-            # Do not expose connection strings, SQL details or provider diagnostics.
-            self._send_json(503, {"ok": False, "error": "persistent_queue_unavailable"})
+        except Exception as exc:
+            # Return only a fixed category; never expose exception text or connection data.
+            self._send_json(
+                503,
+                {"ok": False, "error": "persistent_queue_unavailable",
+                 "diagnostic": _safe_database_error_code(exc)},
+            )
             return
         self._send_json(
             202,
