@@ -47,6 +47,14 @@ The [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md) is now a m
 
 Not yet implemented or demonstrated: checkpoint persistence/runtime, context-budget monitor and automatic rollover, worker recovery, model-call idempotency/reconciliation, and the forced-rollover acceptance test. The protocol does not mean this ChatGPT conversation can automatically continue itself or that the current cloud worker already exists.
 
+## Model provider limits and chunked input protocol
+
+**Status: Architecture requirement approved and documented; provider adapter/runtime not yet implemented.**
+
+[MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) now defines provider-aware context/RPM/TPM/concurrency/payload/quota handling, structured error classification, Retry-After/reset-aware delayed scheduling, adaptive chunking, integrity-checked assembly, explicit accumulation/FINALIZE semantics and mandatory fault tests. It explicitly distinguishes continuity-capable conversations from stateless API requests, which must be reassembled by the orchestrator.
+
+Not yet implemented or demonstrated: provider-specific limit discovery, rate-budget scheduler, durable delayed retries, model error classifier, chunk manifest/storage/acknowledgement/assembler, provider adapters and integration tests. A documented protocol is not evidence that the current worker already handles provider limits.
+
 ## Consolidated work-package status
 
 | Work package | Status | Existing implementation | Main remaining work |
