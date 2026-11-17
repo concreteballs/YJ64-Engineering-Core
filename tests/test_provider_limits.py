@@ -67,6 +67,11 @@ class ProviderErrorClassificationTests(unittest.TestCase):
         result = classify_provider_error(499, "provider returned unusual response")
         self.assertEqual(result.action, "hold_for_review")
 
+    def test_statusless_unclassified_failure_is_held_for_review(self):
+        result = classify_provider_error(None, "provider returned an unstructured error")
+        self.assertEqual(result.classification, "unknown_provider_error")
+        self.assertEqual(result.action, "hold_for_review")
+
     def test_invalid_retry_inputs_are_rejected(self):
         with self.assertRaises(ValueError):
             classify_provider_error(429, attempt=0)
