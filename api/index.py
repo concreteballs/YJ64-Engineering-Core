@@ -29,16 +29,39 @@ EXPECTED_EVENT = "yj64.ci.completed"
 MAX_BODY_BYTES = 16 * 1024
 
 
+def _database_sqlstate(exc: Exception) -> str | None:
+    """Return a validated SQLSTATE from psycopg 3 or psycopg2 exceptions."""
+    for attribute in ("sqlstate", "pgcode"):
+        value = getattr(exc, attribute, None)
+        if isinstance(value, str) and re.fullmatch(r"[0-9A-Z]{5}", value):
+            return value
+    return None
+
+
 def _safe_database_error_code(exc: Exception) -> str:
     """Classify database failures without exposing exception text or secrets."""
+    sqlstate = _database_sqlstate(exc)
+    if sqlstate:
+        # SQLSTATE class codes are more reliable than broad Python exception names.
+        if sqlstate.startswith("08"):
+            return "database_connection_error"
+        if sqlstate.startswith("28"):
+            return "database_authentication_error"
+        if sqlstate.startswith("23"):
+            return "database_integrity_error"
+        if sqlstate.startswith("42") or sqlstate.startswith("3D"):
+            return "database_schema_error"
+        if sqlstate == "42501":
+            return "database_permission_error"
+        if sqlstate.startswith("0A"):
+            return "database_feature_error"
+        return "database_sqlstate_" + sqlstate
+
     name = type(exc).__name__
     if name in {"OperationalError", "InterfaceError"}:
         return "database_connection_error"
     if name in {"ProgrammingError", "UndefinedTable", "UndefinedColumn"}:
         return "database_schema_error"
-    sqlstate = getattr(exc, "sqlstate", None)
-    if isinstance(sqlstate, str) and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
-        return "database_sqlstate_" + sqlstate
     if name in {"IntegrityError", "UniqueViolation", "CheckViolation"}:
         return "database_integrity_error"
     if name in {"ImportError", "ModuleNotFoundError"}:
@@ -185,12 +208,7 @@ class handler(BaseHTTPRequestHandler):
                 503,
                 {"ok": False, "error": "persistent_queue_unavailable",
                  "diagnostic": _safe_database_error_code(exc),
-                 "sqlstate": (
-                     getattr(exc, "sqlstate")
-                     if isinstance(getattr(exc, "sqlstate", None), str)
-                     and re.fullmatch(r"[0-9A-Z]{5}", getattr(exc, "sqlstate"))
-                     else None
-                 )},
+                 "sqlstate": _database_sqlstate(exc)},
             )
             return
         self._send_json(
