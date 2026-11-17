@@ -1,4 +1,4 @@
-name: CI completion webhook
+name: CI completion persistence
 
 on:
   workflow_run:
@@ -9,109 +9,21 @@ permissions:
   contents: read
 
 jobs:
-  notify:
+  persist:
     if: github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Send CI completion event when configured
+      - name: Check out trusted main-branch code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install YJ64 package and PostgreSQL driver
+        run: python -m pip install -e .
+      - name: Persist CI event directly to Supabase PostgreSQL queue
         env:
-          WEBHOOK_URL: ${{ secrets.YJ64_CI_WEBHOOK_URL }}
-          WEBHOOK_SECRET: ${{ secrets.YJ64_CI_WEBHOOK_SECRET }}
-          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-          WORKFLOW_ID: ${{ github.event.workflow_run.id }}
-          WORKFLOW_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
-          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ] || [ -z "$WEBHOOK_SECRET" ]; then
-            echo "::notice::CI webhook is not configured; set YJ64_CI_WEBHOOK_URL and YJ64_CI_WEBHOOK_SECRET repository secrets."
-            exit 0
-          fi
-          python - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          actual = urllib.parse.urlsplit(os.environ["WEBHOOK_URL"])
-          expected = urllib.parse.urlsplit("https://yj-64-engineering-core-kakq.vercel.app/api")
-          actual_key = (actual.scheme.lower(), (actual.hostname or "").lower(), actual.path.rstrip("/"))
-          expected_key = (expected.scheme, expected.hostname, expected.path)
-          matches = actual_key == expected_key and not actual.query and not actual.fragment
-          print("Webhook URL matches canonical Vercel endpoint: " + ("YES" if matches else "NO"))
-          if actual.scheme != "https" or not actual.hostname:
-              raise SystemExit("Webhook URL must use HTTPS and include a hostname.")
-
-          payload = {
-              "event": "yj64.ci.completed",
-              "repository": os.environ["REPOSITORY"],
-              "workflow": os.environ["WORKFLOW_NAME"],
-              "run_id": int(os.environ["WORKFLOW_ID"]),
-              "run_attempt": int(os.environ["WORKFLOW_ATTEMPT"]),
-              "conclusion": os.environ["CONCLUSION"],
-              "commit_sha": os.environ["HEAD_SHA"],
-              "branch": os.environ["HEAD_BRANCH"],
-              "run_url": os.environ["RUN_URL"],
-          }
-          request = urllib.request.Request(
-              os.environ["WEBHOOK_URL"],
-              data=json.dumps(payload).encode("utf-8"),
-              headers={
-                  "Content-Type": "application/json",
-                  "Authorization": "Bearer " + os.environ["WEBHOOK_SECRET"],
-                  "User-Agent": "YJ64-CI-Webhook/1.0",
-              },
-              method="POST",
-          )
-          try:
-              with urllib.request.urlopen(request, timeout=20) as response:
-                  if not 200 <= response.status < 300:
-                      raise SystemExit(f"Webhook returned HTTP {response.status}")
-                  print(f"Webhook accepted CI event (HTTP {response.status}).")
-          except urllib.error.HTTPError as error:
-              print(f"Webhook endpoint returned HTTP {error.code}.")
-              try:
-                  body = json.loads(error.read().decode("utf-8"))
-                  code = body.get("error") if isinstance(body, dict) else None
-                  diagnostic = body.get("diagnostic") if isinstance(body, dict) else None
-                  sqlstate = body.get("sqlstate") if isinstance(body, dict) else None
-                  allowed = {
-                      "webhook_not_configured",
-                      "database_not_configured",
-                      "persistent_queue_unavailable",
-                      "unauthorized",
-                      "not_found",
-                      "event_scope_rejected",
-                  }
-                  safe_diagnostics = {
-                      "database_connection_error",
-                      "database_authentication_error",
-                      "database_schema_error",
-                      "database_permission_error",
-                      "database_integrity_error",
-                      "database_feature_error",
-                      "database_driver_error",
-                      "database_operation_error",
-                  }
-                  if code in allowed:
-                      print("Webhook diagnostic: " + code)
-                  if diagnostic in safe_diagnostics or (
-                      isinstance(diagnostic, str)
-                      and diagnostic.startswith("database_sqlstate_")
-                      and len(diagnostic) == len("database_sqlstate_") + 5
-                      and diagnostic[-5:].isalnum()
-                  ):
-                      print("Database diagnostic: " + diagnostic)
-                  if isinstance(sqlstate, str) and len(sqlstate) == 5 and sqlstate.isalnum():
-                      print("PostgreSQL SQLSTATE: " + sqlstate)
-              except (UnicodeDecodeError, json.JSONDecodeError):
-                  print("Webhook diagnostic body was not recognized.")
-              raise
-          except urllib.error.URLError as error:
-              print(f"Webhook connection failed: {error.reason}")
-              raise
-          PY
+          YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
+        run: python scripts/record_ci_completion.py
