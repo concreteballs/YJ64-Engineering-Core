@@ -33,6 +33,8 @@ class ReservationCursor:
         self.rowcount = 1
         if "SELECT state, lock_owner, locked_at" in query:
             self.one = self.task
+        elif "SELECT task_id FROM yj64_task_queue" in query:
+            self.one = (9,)
         elif "SELECT reservation_id, state, queue_task_id" in query:
             self.one = self.duplicate
         elif "FROM yj64_provider_limit_profiles" in query:
