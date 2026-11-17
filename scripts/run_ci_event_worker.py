@@ -175,9 +175,16 @@ def main() -> int:
         )
         result = runner.run_once()
     except Exception as exc:
+        sqlstate = None
+        for attribute in ("sqlstate", "pgcode"):
+            candidate = getattr(exc, attribute, None)
+            if isinstance(candidate, str) and len(candidate) == 5 and candidate.isalnum():
+                sqlstate = candidate
+                break
         print(json.dumps({
             "ok": False,
             "error_type": type(exc).__name__,
+            "sqlstate": sqlstate,
             "message": "Worker invocation failed; details suppressed.",
         }), file=sys.stderr)
         return 1
