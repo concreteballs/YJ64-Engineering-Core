@@ -88,7 +88,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(result, {
             "accepted": True, "duplicate": False, "event_id": 73, "task_enqueued": True
         })
-        self.assertEqual(len(cursor.statements), 2)
+        self.assertEqual(len(cursor.statements), 3)
         self.assertIn("yj64_task_queue", cursor.statements[1][0])
         self.assertEqual(cursor.statements[1][1][1], "ci-event:concreteballs/YJ64-Engineering-Core:123:1")
 
@@ -165,7 +165,9 @@ class PostgresCycleStoreTests(unittest.TestCase):
         class ConflictingCursor(FakeCursor):
             def execute(self, query, params):
                 self.statements.append((query, params))
-                if "INSERT INTO yj64_task_checkpoints" in query:
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (42,)
+                elif "INSERT INTO yj64_task_checkpoints" in query:
                     self._fetch = None
                 elif "SELECT checkpoint_hash" in query:
                     self._fetch = ("f" * 64,)
