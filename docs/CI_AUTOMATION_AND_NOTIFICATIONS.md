@@ -2,48 +2,48 @@
 
 ## Current verified implementation
 
-- `.github/workflows/tests.yml` runs the Python, FEM and CAD test suite.
-- `.github/workflows/notify-ci-completion.yml` listens for completion of the `Python tests` workflow on pushes to `main`.
-- `scripts/record_ci_completion.py` validates the GitHub `workflow_run` payload and writes the event directly to Supabase PostgreSQL.
-- `src/yj64_engineering_core/automation/postgres_store.py` persists CI events idempotently and enqueues `process_ci_event` tasks in the existing `yj64_task_queue`.
-- `src/yj64_engineering_core/automation/worker.py` provides a one-task-per-invocation worker with leases, recovery, completion, retry and blocked states.
-- `scripts/run_ci_event_worker.py` validates one persisted CI event without executing repository code or making provider calls.
-- `.github/workflows/scheduled-ci-event-worker.yml` starts that bounded worker every five minutes and supports manual dispatch.
+- \`.github/workflows/tests.yml\` runs the Python, FEM and CAD test suite.
+- \`.github/workflows/notify-ci-completion.yml\` listens for completion of the \`Python tests\` workflow on pushes to \`main\`.
+- \`scripts/record_ci_completion.py\` validates the GitHub \`workflow_run\` payload and writes the event directly to Supabase PostgreSQL.
+- \`src/yj64_engineering_core/automation/postgres_store.py\` persists CI events idempotently and enqueues \`process_ci_event\` tasks in the existing \`yj64_task_queue\`.
+- \`src/yj64_engineering_core/automation/worker.py\` provides a one-task-per-invocation worker with leases, recovery, completion, retry and blocked states.
+- \`src/yj64_engineering_core/automation/ci_log_ingestion.py\` downloads the exact workflow-run attempt log archive through the read-only GitHub Actions API, bounds archive/member sizes, reads text logs without extracting files, and redacts known/common credential formats.
+- \`scripts/run_ci_event_worker.py\` validates the persisted event, fetches its logs and stores a SHA-256-verified payload using the existing durable payload-manifest/chunk tables.
+- \`.github/workflows/scheduled-ci-event-worker.yml\` starts that bounded worker every five minutes and supports manual dispatch.
 
-The CI completion path no longer depends on the Vercel webhook endpoint. The GitHub Actions workflow uses only the repository secret `YJ64_DATABASE_URL`. The queue remains the single durable queue; no parallel queue was introduced.
+The CI completion path does not depend on the Vercel webhook endpoint. The worker uses the repository's \`YJ64_DATABASE_URL\` secret and the per-run \`GITHUB_TOKEN\` with \`actions: read\`. The queue and payload tables are reused; no parallel queue or log database was introduced.
 
 ## Current worker safety boundary
 
-The scheduled worker claims only `process_ci_event` tasks. Other task types are left untouched. Each invocation claims at most one task and has a four-minute job timeout. PostgreSQL leases and `FOR UPDATE SKIP LOCKED` protect concurrent claims.
+The scheduled worker claims only \`process_ci_event\` tasks and processes at most one per invocation. PostgreSQL leases and \`FOR UPDATE SKIP LOCKED\` protect concurrent claims.
 
-The current `process_ci_event` handler verifies that the referenced database event exists and that its repository, workflow, branch, conclusion, commit SHA and run URL are within the expected scope. It then acknowledges the event as validated.
+For a validated event, the worker retrieves logs for the exact \`run_id\` and \`run_attempt\`, rejects oversized or unsafe archives, redacts credentials, and persists a deterministic payload manifest plus content-addressed chunks. It reassembles the payload and verifies the complete SHA-256 before marking it \`ready_for_model\`. Log contents are explicitly marked as untrusted diagnostic data, not instructions. No repository code from the downloaded archive is executed.
 
-**This is not yet CI diagnosis or autonomous engineering.** The handler does not fetch GitHub job details or logs, call an LLM, read and select roadmap tasks, modify source code, create commits, or launch engineering jobs. Those capabilities remain disabled until their own handlers, policies and tests are implemented.
+**LLM transmission is not enabled yet.** The live provider send adapter is still missing, and the database currently has no configured provider limit profiles or global usage budget. The logs are durably prepared for a model request, but no model call is made and no automatic code repair is claimed.
 
 ## Required configuration
 
-The scheduled worker requires the repository Actions secret:
+- \`YJ64_DATABASE_URL\`: PostgreSQL connection string for the YJ64 Supabase database.
+- GitHub Actions \`GITHUB_TOKEN\`: automatically provided by GitHub Actions; the worker job requires \`actions: read\`.
 
-- `YJ64_DATABASE_URL`: PostgreSQL connection string for the YJ64 Supabase database.
-
-Keep the connection string server-side. Never put it in source files, workflow output, issues or chat messages. The worker does not require the old Vercel webhook URL or webhook bearer secret.
+Keep database and provider credentials server-side. Never put them in source files, workflow output, issues or chat messages.
 
 ## Safe development loop — current stage
 
 1. GitHub Actions completes the Python test workflow.
 2. The completion workflow validates and persists the event directly to PostgreSQL.
-3. PostgreSQL atomically inserts one deduplicated `process_ci_event` task.
+3. PostgreSQL atomically inserts one deduplicated \`process_ci_event\` task.
 4. The scheduled worker claims at most one matching task using the existing lease mechanism.
-5. The worker validates the persisted event and acknowledges it, or leaves it blocked with a classified reason.
-6. A later stage will add bounded GitHub run inspection, roadmap task selection, model-provider execution, validation and continuation.
+5. The worker fetches the exact run-attempt logs, redacts and bounds them, then persists a verified payload.
+6. The payload is ready for a future provider adapter; it is not yet transmitted to an LLM.
 
 ## Remaining activation work
 
-- Verify that the scheduled worker runs successfully against the live Supabase queue and processes a real pending CI event.
-- Add a durable audit/result record for worker outcomes.
-- Implement safe GitHub workflow/job inspection and evidence capture.
+- Implement a live provider send adapter with provider-specific token counting and durable response artifacts.
+- Configure verified provider limit profiles and explicit global/task budgets before enabling any model call.
+- Connect provider reservations, idempotency, ambiguous-send reconciliation, rate-limit retry and chunked-input policy to the worker.
+- Consume the prepared CI payload, persist a structured diagnosis and then implement bounded repair/rebuild orchestration.
 - Implement roadmap task selection and session-independent checkpoints.
-- Add provider adapters, server-side secrets, quotas, cost limits and retry policies before any model calls.
 - Add pause/resume/kill switch, monitoring and notifications.
 - Demonstrate that the worker continues while the user's phone is offline and recovers after interruption.
 
@@ -51,4 +51,4 @@ Keep the connection string server-side. Never put it in source files, workflow o
 
 An external worker cannot resume this exact ChatGPT conversation. A separate event/notification bridge is required before automatic continuation inside this chat can be claimed.
 
-The current system is a working CI-event persistence pipeline with a bounded scheduled event-validation worker. It is not yet a fully autonomous engineering cycle.
+The current system is a working CI-event persistence pipeline with bounded, redacted, integrity-verified log capture. It is not yet a live LLM-driven autonomous engineering cycle.
