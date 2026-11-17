@@ -5,10 +5,11 @@ from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
 
 
 class FakeCursor:
-    def __init__(self, *, has_lease=True, inserted=True, rowcount=1):
+    def __init__(self, *, has_lease=True, inserted=True, rowcount=1, queue_state_after_update="pending"):
         self.has_lease = has_lease
         self.inserted = inserted
         self.rowcount = rowcount
+        self.queue_state_after_update = queue_state_after_update
         self.statements = []
         self._fetch = None
 
@@ -24,6 +25,8 @@ class FakeCursor:
             self._fetch = (12,) if self.has_lease else None
         elif "INSERT INTO yj64_model_request_attempts" in query:
             self._fetch = (91,) if self.inserted else None
+        elif "UPDATE yj64_task_queue" in query and "RETURNING state" in query:
+            self._fetch = (self.queue_state_after_update,)
         else:
             self._fetch = None
 
@@ -92,6 +95,15 @@ class ProviderAttemptStoreTests(unittest.TestCase):
         insert = next(params for query, params in cursor.statements
                       if "INSERT INTO yj64_model_request_attempts" in query)
         self.assertEqual(insert[4], "/v1/responses")
+
+    def test_retry_budget_exhaustion_marks_task_failed(self):
+        cursor = FakeCursor(queue_state_after_update="failed")
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", self.attempt(),
+            {"action": "schedule_retry", "delay_seconds": 45, "reason": "rate limited"},
+        )
+        self.assertEqual(result["task_state"], "failed")
+        self.assertIn("attempts >= max_attempts", cursor.statements[-1][0])
 
     def test_quota_and_payload_recovery_are_blocked_not_retried_unchanged(self):
         cursor = FakeCursor()
