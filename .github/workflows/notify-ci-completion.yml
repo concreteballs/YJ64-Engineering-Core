@@ -78,6 +78,7 @@ jobs:
                   body = json.loads(error.read().decode("utf-8"))
                   code = body.get("error") if isinstance(body, dict) else None
                   diagnostic = body.get("diagnostic") if isinstance(body, dict) else None
+              sqlstate = body.get("sqlstate") if isinstance(body, dict) else None
                   allowed = {
                       "webhook_not_configured",
                       "database_not_configured",
