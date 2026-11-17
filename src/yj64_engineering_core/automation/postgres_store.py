@@ -1287,6 +1287,82 @@ class PostgresCycleStore:
                 if inserted is None:
                     return {"recorded": False, "duplicate": True, "task_state": None}
 
+                reservation_id = attempt.get("reservation_id")
+                block_reason_override = None
+                if reservation_id is not None:
+                    cursor.execute(
+                        """
+                        SELECT input_tokens_estimated, output_tokens_estimated,
+                               estimated_cost_usd, state
+                        FROM yj64_provider_request_reservations
+                        WHERE reservation_id = %s AND queue_task_id = %s
+                        FOR UPDATE
+                        """,
+                        (reservation_id, queue_task_id),
+                    )
+                    reservation = cursor.fetchone()
+                    if reservation is None or reservation[3] not in {"sending", "accepted", "unknown"}:
+                        raise RuntimeError("provider attempt is not linked to a sent durable reservation")
+                    if attempt.get("http_status") is None:
+                        # No response means delivery is ambiguous. Never blindly
+                        # resend a request that may already have been processed.
+                        cursor.execute(
+                            """
+                            UPDATE yj64_provider_request_reservations
+                            SET state = 'unknown',
+                                last_error_classification = %s
+                            WHERE reservation_id = %s
+                            """,
+                            (str(attempt["error_classification"])[:128], reservation_id),
+                        )
+                        action = "hold_for_review"
+                        block_reason_override = "request_outcome_unknown"
+                        summary = "Provider delivery is ambiguous; reconcile the original idempotency key before retry"
+                    else:
+                        # A provider response was received. Settle conservatively
+                        # using estimates unless the adapter supplied actual usage.
+                        actual_input = attempt.get("input_tokens_actual")
+                        actual_output = attempt.get("output_tokens_actual")
+                        actual_input = reservation[0] if actual_input is None else actual_input
+                        actual_output = reservation[1] if actual_output is None else actual_output
+                        actual_cost = attempt.get("actual_cost_usd")
+                        actual_cost = reservation[2] if actual_cost is None else actual_cost
+                        cursor.execute(
+                            """
+                            UPDATE yj64_provider_request_reservations
+                            SET state = 'failed', input_tokens_actual = %s,
+                                output_tokens_actual = %s, actual_cost_usd = %s,
+                                provider_request_id = COALESCE(%s, provider_request_id),
+                                last_error_classification = %s, finished_at = now(),
+                                expires_at = NULL
+                            WHERE reservation_id = %s
+                            """,
+                            (
+                                actual_input, actual_output, actual_cost,
+                                attempt.get("provider_request_id"),
+                                str(attempt["error_classification"])[:128], reservation_id,
+                            ),
+                        )
+                        cursor.execute(
+                            """
+                            UPDATE yj64_task_queue
+                            SET reserved_input_tokens = GREATEST(0, reserved_input_tokens - %s),
+                                reserved_output_tokens = GREATEST(0, reserved_output_tokens - %s),
+                                reserved_cost_usd = GREATEST(0, reserved_cost_usd - %s),
+                                consumed_input_tokens = consumed_input_tokens + %s,
+                                consumed_output_tokens = consumed_output_tokens + %s,
+                                consumed_cost_usd = consumed_cost_usd + %s
+                            WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                            """,
+                            (
+                                reservation[0], reservation[1], reservation[2],
+                                actual_input, actual_output, actual_cost,
+                                queue_task_id, worker_id,
+                            ),
+                        )
+                        if cursor.rowcount != 1:
+                            raise RuntimeError("task lease was lost while settling failed provider request")
+
                 if action == "schedule_retry":
                     cursor.execute(
                         """
@@ -1335,7 +1411,7 @@ class PostgresCycleStore:
                             last_error = %s, updated_at = now()
                         WHERE task_id = %s AND state = 'running' AND lock_owner = %s
                         """,
-                        (action, summary, queue_task_id, worker_id),
+                        (block_reason_override or action, summary, queue_task_id, worker_id),
                     )
                 if cursor.rowcount != 1:
                     raise RuntimeError("task lease was lost while recording provider attempt")
