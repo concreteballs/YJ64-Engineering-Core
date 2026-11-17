@@ -17,8 +17,8 @@ class FakeStore:
         self.calls.append(("recovery", limit))
         return {"quota_tasks_requeued": [], "unsent_reservations_expired": [], "deadline_tasks_failed": []}
 
-    def claim_next_task(self, worker_id, lease_seconds=300):
-        self.calls.append(("claim", worker_id, lease_seconds))
+    def claim_next_task(self, worker_id, lease_seconds=300, task_types=None):
+        self.calls.append(("claim", worker_id, lease_seconds, task_types))
         return self.task
 
     def renew_task_lease(self, task_id, worker_id, lease_seconds=300):
