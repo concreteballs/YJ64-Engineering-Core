@@ -392,7 +392,6 @@ class PostgresCycleStore:
                     SELECT task_id FROM yj64_task_queue
                     WHERE task_id = %s AND state = 'running' AND lock_owner = %s
                       AND locked_at >= now() - (%s * interval '1 second')
-                      AND (deadline_at IS NULL OR deadline_at > now())
                     FOR UPDATE
                     """,
                     (queue_task_id, worker_id, lease_seconds),
