@@ -17,6 +17,8 @@ class ProviderLimitProfile:
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
     tokens_per_minute_includes_output: bool = True
+    input_cost_per_million_usd: float | None = None
+    output_cost_per_million_usd: float | None = None
 
     def __post_init__(self):
         if not self.provider.strip() or not self.model.strip() or not self.endpoint.strip():
@@ -32,6 +34,13 @@ class ProviderLimitProfile:
                 raise ValueError(f"{name} must be a positive integer or None")
         if not isinstance(self.tokens_per_minute_includes_output, bool):
             raise ValueError("tokens_per_minute_includes_output must be boolean")
+        for name in ("input_cost_per_million_usd", "output_cost_per_million_usd"):
+            value = getattr(self, name)
+            if value is not None and (
+                not isinstance(value, (int, float)) or isinstance(value, bool)
+                or value < 0 or value == float("inf") or value != value
+            ):
+                raise ValueError(f"{name} must be a finite non-negative number or None")
 
 
 @dataclass(frozen=True)
