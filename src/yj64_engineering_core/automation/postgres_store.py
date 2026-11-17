@@ -391,6 +391,7 @@ class PostgresCycleStore:
                     SELECT task_id FROM yj64_task_queue
                     WHERE task_id = %s AND state = 'running' AND lock_owner = %s
                       AND locked_at >= now() - (%s * interval '1 second')
+                      AND (deadline_at IS NULL OR deadline_at > now())
                     FOR UPDATE
                     """,
                     (queue_task_id, worker_id, lease_seconds),
@@ -705,8 +706,9 @@ class PostgresCycleStore:
                     """
                     WITH expired AS (
                         SELECT task_id FROM yj64_task_queue
-                        WHERE state = 'pending' AND deadline_at IS NOT NULL
-                          AND deadline_at <= now()
+                        WHERE state IN ('pending', 'blocked')
+                          AND (blocked_reason IS DISTINCT FROM 'request_outcome_unknown')
+                          AND deadline_at IS NOT NULL AND deadline_at <= now()
                         ORDER BY deadline_at, task_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT %s
