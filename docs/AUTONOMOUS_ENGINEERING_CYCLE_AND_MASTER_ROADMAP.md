@@ -91,6 +91,12 @@ Still required:
 - Verify real persistence, deduplication, queue claims and restart recovery against the live database.
 - Add task history, dependency/parent linkage, artifacts/log references and backup/retention policy as the worker contract matures.
 
+### Model-provider limits and input transport — mandatory part of milestones C/D
+- Implement [MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md): provider-specific context, RPM, TPM, concurrency, payload and quota awareness.
+- Detect/classify 429, Retry-After/reset headers, 413/context overflow, transient failures and permanent auth/billing/configuration errors; persist retry scheduling and release workers instead of sleeping or silently storing errors.
+- Split oversized inputs into ordered, hashed, idempotently acknowledged chunks. Use explicit accumulation/FINALIZE semantics only where endpoint continuity is guaranteed; otherwise reassemble from durable storage before sending a complete fitting request.
+- Do not begin model work until the complete payload manifest and total hash have been verified. Add the provider-limit and chunk-integrity acceptance tests before autonomous qualification.
+
 ### Cycle milestone C — cloud worker and authorized agent
 - Deploy a separate cloud worker that can wake from queued work independently of the user's device.
 - Implement the [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md): durable task/checkpoint state, replaceable model-call sessions, context-budget monitoring, automatic checkpoint-and-continue, and recovery after process/model-call interruption.
