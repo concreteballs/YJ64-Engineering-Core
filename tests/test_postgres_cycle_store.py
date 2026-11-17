@@ -100,7 +100,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(len(cursor.statements), 1)
 
     def test_claim_uses_a_lease_and_skip_locked(self):
-        cursor = FakeCursor(claim_row=(12, "process_ci_event", {"event_id": 73}, 1, 3))
+        cursor = FakeCursor(claim_row=(12, "process_ci_event", {"event_id": 73}, 1, 3, None))
         task = self.store(cursor).claim_next_task("worker-a")
         self.assertEqual(task["task_id"], 12)
         self.assertEqual(task["worker_id"], "worker-a")
@@ -141,13 +141,15 @@ class PostgresCycleStoreTests(unittest.TestCase):
         class CheckpointCursor(FakeCursor):
             def execute(self, query, params):
                 self.statements.append((query, params))
-                if "INSERT INTO yj64_task_checkpoints" in query:
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (42,)
+                elif "INSERT INTO yj64_task_checkpoints" in query:
                     self._fetch = None
                 elif "SELECT checkpoint_hash" in query:
                     self._fetch = (checkpoint["checkpoint_hash"],)
 
         cursor = CheckpointCursor()
-        self.assertFalse(self.store(cursor).save_checkpoint(42, checkpoint))
+        self.assertFalse(self.store(cursor).save_checkpoint(42, "worker-a", checkpoint))
         self.assertEqual(len(cursor.statements), 2)
 
     def test_save_checkpoint_rejects_conflicting_sequence(self):
@@ -169,7 +171,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
                     self._fetch = ("f" * 64,)
 
         with self.assertRaisesRegex(ValueError, "different content"):
-            self.store(ConflictingCursor()).save_checkpoint(42, checkpoint)
+            self.store(ConflictingCursor()).save_checkpoint(42, "worker-a", checkpoint)
 
     def test_load_latest_checkpoint_verifies_integrity(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
@@ -200,6 +202,40 @@ class PostgresCycleStoreTests(unittest.TestCase):
     def test_checkpoint_store_rejects_invalid_queue_id(self):
         with self.assertRaises(ValueError):
             self.store(FakeCursor()).load_latest_checkpoint(True)
+
+
+    def test_claim_returns_latest_verified_checkpoint_slot(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=3, state="checkpointed", task_spec_version="1",
+            task_state={"stage": "resume"}, budgets={}, approvals={},
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        cursor = FakeCursor(
+            claim_row=(12, "process_ci_event", {"event_id": 73}, 2, 3, checkpoint)
+        )
+        task = self.store(cursor).claim_next_task("worker-a")
+        self.assertEqual(task["checkpoint"], checkpoint)
+
+    def test_save_checkpoint_requires_current_live_lease(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=1, state="running", task_spec_version="1",
+            task_state={}, budgets={}, approvals={},
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        class NoLeaseCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                self._fetch = None
+
+        with self.assertRaisesRegex(RuntimeError, "live task lease"):
+            self.store(NoLeaseCursor()).save_checkpoint(42, "worker-a", checkpoint)
 
 
 if __name__ == "__main__":
