@@ -24,7 +24,9 @@ jobs:
             --header "x-goog-api-key: ${GEMINI_API_KEY}" \
             "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1")"
           if [ "$code" != "200" ]; then
-            echo "Gemini API check failed with HTTP $code. Response body suppressed."
+            echo "Gemini API check failed with HTTP $code."
+            message="$(jq -r '.error.message // "No API error message returned."' /tmp/gemini-models.json 2>/dev/null || echo "Could not parse API error.")"
+            printf '%s\n' "$message" | sed "s/${GEMINI_API_KEY}/[REDACTED]/g"
             exit 1
           fi
           if ! jq -e '.models | length > 0' /tmp/gemini-models.json >/dev/null; then
