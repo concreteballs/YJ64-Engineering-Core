@@ -1,0 +1,124 @@
+import json
+import unittest
+
+from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
+
+
+class FakeCursor:
+    def __init__(self, *, has_lease=True, inserted=True, rowcount=1):
+        self.has_lease = has_lease
+        self.inserted = inserted
+        self.rowcount = rowcount
+        self.statements = []
+        self._fetch = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, query, params):
+        self.statements.append((query, params))
+        if "SELECT task_id FROM yj64_task_queue" in query:
+            self._fetch = (12,) if self.has_lease else None
+        elif "INSERT INTO yj64_model_request_attempts" in query:
+            self._fetch = (91,) if self.inserted else None
+        else:
+            self._fetch = None
+
+    def fetchone(self):
+        return self._fetch
+
+
+class FakeConnection:
+    def __init__(self, cursor):
+        self.cursor_value = cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def cursor(self):
+        return self.cursor_value
+
+
+class ProviderAttemptStoreTests(unittest.TestCase):
+    def store(self, cursor):
+        return PostgresCycleStore("postgresql://test", lambda _: FakeConnection(cursor))
+
+    def attempt(self):
+        return {
+            "attempt_number": 2,
+            "provider": "example-provider",
+            "model": "example-model",
+            "endpoint": "/v1/responses",
+            "provider_request_id": "req_123",
+            "error_classification": "rate_limited",
+            "http_status": 429,
+            "headers": {
+                "Retry-After": "45",
+                "X-Request-Id": "req_123",
+                "Authorization": "Bearer must-not-be-stored",
+                "Set-Cookie": "must-not-be-stored",
+            },
+        }
+
+    def test_retry_attempt_is_recorded_and_lease_released(self):
+        cursor = FakeCursor()
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", self.attempt(),
+            {"action": "schedule_retry", "delay_seconds": 45, "reason": "rate limited"},
+        )
+        self.assertEqual(result, {"recorded": True, "duplicate": False, "task_state": "pending"})
+        insert = next(params for query, params in cursor.statements
+                      if "INSERT INTO yj64_model_request_attempts" in query)
+        headers = json.loads(insert[-2])
+        self.assertEqual(headers, {"retry-after": "45", "x-request-id": "req_123"})
+        update = cursor.statements[-1][0]
+        self.assertIn("available_at = now()", update)
+        self.assertIn("lock_owner = NULL", update)
+
+    def test_quota_and_payload_recovery_are_blocked_not_retried_unchanged(self):
+        cursor = FakeCursor()
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", self.attempt(),
+            {"action": "block_until_reset", "delay_seconds": 3600,
+             "reason": "quota exhausted"},
+        )
+        self.assertEqual(result["task_state"], "blocked")
+        self.assertIn("state = 'blocked'", cursor.statements[-1][0])
+
+    def test_duplicate_attempt_does_not_change_task_state(self):
+        cursor = FakeCursor(inserted=False)
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", self.attempt(),
+            {"action": "schedule_retry", "delay_seconds": 30},
+        )
+        self.assertTrue(result["duplicate"])
+        self.assertEqual(len(cursor.statements), 2)
+
+    def test_attempt_requires_live_lease(self):
+        cursor = FakeCursor(has_lease=False)
+        with self.assertRaisesRegex(RuntimeError, "live task lease"):
+            self.store(cursor).record_model_request_attempt(
+                12, "worker-a", self.attempt(),
+                {"action": "schedule_retry", "delay_seconds": 30},
+            )
+
+    def test_attempt_metadata_and_retry_inputs_are_validated(self):
+        with self.assertRaises(ValueError):
+            self.store(FakeCursor()).record_model_request_attempt(
+                12, "worker-a", {}, {"action": "schedule_retry", "delay_seconds": 30}
+            )
+        with self.assertRaises(ValueError):
+            self.store(FakeCursor()).record_model_request_attempt(
+                12, "worker-a", self.attempt(),
+                {"action": "schedule_retry", "delay_seconds": -1},
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
