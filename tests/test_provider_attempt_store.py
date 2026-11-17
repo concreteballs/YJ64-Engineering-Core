@@ -39,6 +39,17 @@ class FakeCursor:
         return self._fetch
 
 
+class ReservationAttemptCursor(FakeCursor):
+    def __init__(self, reservation_state="sending"):
+        super().__init__()
+        self.reservation_state = reservation_state
+
+    def execute(self, query, params):
+        super().execute(query, params)
+        if "SELECT input_tokens_estimated, output_tokens_estimated" in query:
+            self._fetch = (100, 40, 0.025, self.reservation_state)
+
+
 class FakeConnection:
     def __init__(self, cursor):
         self.cursor_value = cursor
@@ -128,6 +139,43 @@ class ProviderAttemptStoreTests(unittest.TestCase):
         )
         self.assertTrue(result["duplicate"])
         self.assertEqual(len(cursor.statements), 2)
+
+    def test_ambiguous_transport_failure_is_quarantined_not_retried(self):
+        cursor = ReservationAttemptCursor()
+        attempt = self.attempt()
+        attempt.update({
+            "reservation_id": "reservation-1",
+            "http_status": None,
+            "error_classification": "transient_transport_error",
+        })
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", attempt,
+            {"action": "schedule_retry", "delay_seconds": 30, "reason": "connection timeout"},
+        )
+        self.assertEqual(result["task_state"], "blocked")
+        reservation_update = next(q for q, _ in cursor.statements
+                                  if "UPDATE yj64_provider_request_reservations" in q)
+        self.assertIn("state = 'unknown'", reservation_update)
+        queue_update, queue_params = cursor.statements[-1]
+        self.assertIn("blocked_reason = %s", queue_update)
+        self.assertEqual(queue_params[0], "request_outcome_unknown")
+
+    def test_provider_http_response_settles_reservation_before_quota_block(self):
+        cursor = ReservationAttemptCursor()
+        attempt = self.attempt()
+        attempt["reservation_id"] = "reservation-1"
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", attempt,
+            {"action": "block_until_reset", "delay_seconds": 60, "reason": "quota exhausted"},
+        )
+        self.assertEqual(result["task_state"], "blocked")
+        reservation_update = next(q for q, _ in cursor.statements
+                                  if "UPDATE yj64_provider_request_reservations" in q)
+        self.assertIn("state = 'failed'", reservation_update)
+        self.assertTrue(any(
+            "consumed_input_tokens = consumed_input_tokens + %s" in q
+            for q, _ in cursor.statements
+        ))
 
     def test_attempt_requires_live_lease(self):
         cursor = FakeCursor(has_lease=False)
