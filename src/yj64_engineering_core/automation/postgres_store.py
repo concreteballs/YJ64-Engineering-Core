@@ -366,6 +366,255 @@ class PostgresCycleStore:
                 )
                 return [row[0] for row in cursor.fetchall()]
 
+    def save_payload_manifest(
+        self, queue_task_id: int, worker_id: str, manifest: dict, chunks: list[dict],
+        lease_seconds: int = 300,
+    ) -> dict:
+        """Persist a complete, hash-verified manifest and its immutable chunks."""
+        from .payload_chunks import assemble_payload
+
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        if not isinstance(manifest, dict) or not isinstance(chunks, list):
+            raise ValueError("manifest and chunks are required")
+        payload_id = manifest.get("payload_id")
+        if not isinstance(payload_id, str) or not payload_id.strip():
+            raise ValueError("manifest payload_id is required")
+        chunk_map = {item.get("chunk_id"): item.get("content") for item in chunks if isinstance(item, dict)}
+        if len(chunk_map) != len(chunks):
+            raise ValueError("chunks contain invalid or duplicate chunk IDs")
+        assemble_payload(manifest, chunk_map)
+        manifest_json = json.dumps(manifest, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running'
+                      AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot persist payload without a live task lease")
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_payload_manifests
+                        (payload_id, queue_task_id, protocol_version, total_chunks,
+                         total_sha256, manifest, state)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, 'receiving')
+                    ON CONFLICT (payload_id) DO NOTHING
+                    RETURNING payload_id
+                    """,
+                    (
+                        payload_id, queue_task_id, manifest["protocol_version"],
+                        manifest["total_chunks"], manifest["total_sha256"], manifest_json,
+                    ),
+                )
+                inserted = cursor.fetchone()
+                if inserted is None:
+                    cursor.execute(
+                        """
+                        SELECT queue_task_id, total_sha256, manifest
+                        FROM yj64_payload_manifests
+                        WHERE payload_id = %s
+                        FOR UPDATE
+                        """,
+                        (payload_id,),
+                    )
+                    existing = cursor.fetchone()
+                    existing_manifest = existing[2] if existing else None
+                    if isinstance(existing_manifest, str):
+                        existing_manifest = json.loads(existing_manifest)
+                    if (
+                        existing is None or existing[0] != queue_task_id
+                        or str(existing[1]).strip() != manifest["total_sha256"]
+                        or existing_manifest != manifest
+                    ):
+                        raise ValueError("payload_id already exists with conflicting manifest")
+
+                for chunk in chunks:
+                    cursor.execute(
+                        """
+                        INSERT INTO yj64_payload_chunks
+                            (payload_id, chunk_id, chunk_index, chunk_sha256,
+                             content, estimated_tokens, character_count)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (
+                            payload_id, chunk["chunk_id"], chunk["chunk_index"],
+                            chunk["chunk_sha256"], chunk["content"],
+                            chunk["estimated_tokens"], len(chunk["content"]),
+                        ),
+                    )
+                    cursor.execute(
+                        """
+                        SELECT chunk_index, chunk_sha256, content
+                        FROM yj64_payload_chunks
+                        WHERE payload_id = %s AND chunk_id = %s
+                        """,
+                        (payload_id, chunk["chunk_id"]),
+                    )
+                    stored = cursor.fetchone()
+                    if (
+                        stored is None or stored[0] != chunk["chunk_index"]
+                        or str(stored[1]).strip() != chunk["chunk_sha256"]
+                        or stored[2] != chunk["content"]
+                    ):
+                        raise ValueError("stored chunk conflicts with immutable payload content")
+
+                return {
+                    "persisted": True,
+                    "payload_id": payload_id,
+                    "total_chunks": manifest["total_chunks"],
+                    "duplicate_manifest": inserted is None,
+                }
+
+    def acknowledge_payload_chunk(self, payload_id: str, acknowledgement: dict) -> dict:
+        """Persist an idempotent acknowledgement only when it matches stored content."""
+        from .payload_chunks import validate_chunk_ack
+
+        if not isinstance(payload_id, str) or not payload_id.strip():
+            raise ValueError("payload_id is required")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT manifest FROM yj64_payload_manifests WHERE payload_id = %s FOR UPDATE",
+                    (payload_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise KeyError("payload manifest does not exist")
+                manifest = row[0]
+                if isinstance(manifest, str):
+                    manifest = json.loads(manifest)
+                ack = validate_chunk_ack(manifest, acknowledgement)
+                cursor.execute(
+                    """
+                    SELECT chunk_sha256 FROM yj64_payload_chunks
+                    WHERE payload_id = %s AND chunk_id = %s
+                    """,
+                    (payload_id, ack["chunk_id"]),
+                )
+                stored = cursor.fetchone()
+                if stored is None or str(stored[0]).strip() != ack["chunk_sha256"]:
+                    raise ValueError("acknowledged chunk is not present in durable storage")
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_payload_chunk_acks
+                        (payload_id, chunk_id, acknowledged_sha256)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (payload_id, chunk_id) DO NOTHING
+                    RETURNING chunk_id
+                    """,
+                    (payload_id, ack["chunk_id"], ack["chunk_sha256"]),
+                )
+                inserted = cursor.fetchone()
+                if inserted is None:
+                    cursor.execute(
+                        """
+                        SELECT acknowledged_sha256 FROM yj64_payload_chunk_acks
+                        WHERE payload_id = %s AND chunk_id = %s
+                        """,
+                        (payload_id, ack["chunk_id"]),
+                    )
+                    previous = cursor.fetchone()
+                    if previous is None or str(previous[0]).strip() != ack["chunk_sha256"]:
+                        raise ValueError("duplicate acknowledgement conflicts with stored hash")
+                return {**ack, "duplicate": inserted is None}
+
+    def assemble_payload_for_model(
+        self, queue_task_id: int, worker_id: str, payload_id: str,
+        *, require_acknowledgements: bool = False, lease_seconds: int = 300,
+    ) -> dict:
+        """Reassemble from durable storage and mark ready only after full hash verification.
+
+        Stateless model endpoints use require_acknowledgements=False: the
+        orchestrator assembles the complete payload locally before one request.
+        Continuity-capable chunk transports can require every remote ACK first.
+        """
+        from .payload_chunks import assemble_payload
+
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(payload_id, str) or not payload_id.strip():
+            raise ValueError("payload_id is required")
+        if not isinstance(require_acknowledgements, bool):
+            raise ValueError("require_acknowledgements must be boolean")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running'
+                      AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot finalize payload without a live task lease")
+                cursor.execute(
+                    """
+                    SELECT manifest FROM yj64_payload_manifests
+                    WHERE payload_id = %s AND queue_task_id = %s
+                    FOR UPDATE
+                    """,
+                    (payload_id, queue_task_id),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise KeyError("payload manifest does not exist for this task")
+                manifest = row[0]
+                if isinstance(manifest, str):
+                    manifest = json.loads(manifest)
+                cursor.execute(
+                    """
+                    SELECT chunk_id, content FROM yj64_payload_chunks
+                    WHERE payload_id = %s ORDER BY chunk_index
+                    """,
+                    (payload_id,),
+                )
+                chunks_by_id = {chunk_id: chunk_content for chunk_id, chunk_content in cursor.fetchall()}
+                if require_acknowledgements:
+                    cursor.execute(
+                        "SELECT chunk_id FROM yj64_payload_chunk_acks WHERE payload_id = %s",
+                        (payload_id,),
+                    )
+                    acknowledged = {item[0] for item in cursor.fetchall()}
+                    expected = {item["chunk_id"] for item in manifest["chunks"]}
+                    if acknowledged != expected:
+                        raise RuntimeError("cannot FINALIZE before every chunk is acknowledged")
+                assembled = assemble_payload(manifest, chunks_by_id)
+                cursor.execute(
+                    """
+                    UPDATE yj64_payload_manifests
+                    SET state = 'ready_for_model', updated_at = now()
+                    WHERE payload_id = %s AND queue_task_id = %s
+                    """,
+                    (payload_id, queue_task_id),
+                )
+                return {
+                    "ready_for_model": True,
+                    "payload_id": payload_id,
+                    "total_sha256": manifest["total_sha256"],
+                    "content": assembled,
+                }
+
     def record_model_request_attempt(
         self, queue_task_id: int, worker_id: str, attempt: dict, decision: dict,
         lease_seconds: int = 300,
