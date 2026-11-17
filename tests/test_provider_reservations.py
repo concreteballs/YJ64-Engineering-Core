@@ -34,7 +34,8 @@ class ReservationCursor:
             self.one = self.duplicate
         elif "FROM yj64_provider_limit_profiles" in query:
             self.one = (
-                10, 1000, 2, 800, 200, True, 1.0, 2.0
+                10, 1000, 2, 800, 200, True, 1.0, 2.0,
+                "provider-a:account", "operator_config", None,
             ) if self.profile else None
         elif "FROM yj64_provider_request_reservations" in query and "SELECT created_at" in query:
             self.many = []
