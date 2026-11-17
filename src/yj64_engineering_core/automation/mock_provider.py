@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Callable, Protocol
+from typing import Callable, Protocol, runtime_checkable
 
 from .provider_adapters import (
     ProviderCapabilities,
@@ -19,6 +19,7 @@ from .provider_adapters import (
 from .provider_budget import ProviderLimitProfile
 
 
+@runtime_checkable
 class ArtifactStore(Protocol):
     """Minimal durable-artifact boundary used by provider adapters."""
 
