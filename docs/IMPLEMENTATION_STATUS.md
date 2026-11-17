@@ -49,11 +49,13 @@ Not yet implemented or demonstrated: checkpoint persistence/runtime, context-bud
 
 ## Model provider limits and chunked input protocol
 
-**Status: Architecture requirement approved and documented; provider adapter/runtime not yet implemented.**
+**Status: Partially implemented — provider error classification and durable attempt ledger are present; provider adapters, live scheduling and chunk transport remain unimplemented.**
 
-[MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) now defines provider-aware context/RPM/TPM/concurrency/payload/quota handling, structured error classification, Retry-After/reset-aware delayed scheduling, adaptive chunking, integrity-checked assembly, explicit accumulation/FINALIZE semantics and mandatory fault tests. It explicitly distinguishes continuity-capable conversations from stateless API requests, which must be reassembled by the orchestrator.
+[MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) remains the governing protocol. New code in `automation/provider_limits.py` classifies rate limits, quota exhaustion, payload/context overflow, transient failures, concurrency limits, permanent configuration failures and unknown errors. It produces bounded retry hints and honors Retry-After/reset headers. `tests/test_provider_limits.py` covers these decisions.
 
-Not yet implemented or demonstrated: provider-specific limit discovery, rate-budget scheduler, durable delayed retries, model error classifier, chunk manifest/storage/acknowledgement/assembler, provider adapters and integration tests. A documented protocol is not evidence that the current worker already handles provider limits.
+The PostgreSQL `yj64_model_request_attempts` table is deployed with RLS enabled, no grants to anon/authenticated, and only SELECT/INSERT for service_role. It stores append-only request metadata, safe allowlisted headers, classification, retry hints and sanitized summaries; it excludes prompts, response bodies and credentials. `PostgresCycleStore.record_model_request_attempt` writes an attempt under a live task lease and atomically releases the lease into pending for a scheduled retry, failed for permanent configuration errors, or blocked for quota waits, payload splitting, context rebuilding and unknown errors. `tests/test_provider_attempt_store.py` covers persistence decisions and lease handling.
+
+**Not yet implemented or demonstrated:** live provider limit discovery, per-provider RPM/TPM/concurrency budgeting, automatic quota-reset unblocking, payload splitting/context reconstruction, chunk manifests/assembly/acknowledgements, provider adapters, and real service-role round-trip tests. The current method blocks rather than blindly resending unchanged oversized payloads. No worker is running.
 
 ## Consolidated work-package status
 
