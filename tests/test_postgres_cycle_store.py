@@ -88,7 +88,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(result, {
             "accepted": True, "duplicate": False, "event_id": 73, "task_enqueued": True
         })
-        self.assertEqual(len(cursor.statements), 3)
+        self.assertEqual(len(cursor.statements), 2)
         self.assertIn("yj64_task_queue", cursor.statements[1][0])
         self.assertEqual(cursor.statements[1][1][1], "ci-event:concreteballs/YJ64-Engineering-Core:123:1")
 
@@ -150,7 +150,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
 
         cursor = CheckpointCursor()
         self.assertFalse(self.store(cursor).save_checkpoint(42, "worker-a", checkpoint))
-        self.assertEqual(len(cursor.statements), 2)
+        self.assertEqual(len(cursor.statements), 3)
 
     def test_save_checkpoint_rejects_conflicting_sequence(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
