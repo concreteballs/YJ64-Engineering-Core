@@ -1135,6 +1135,7 @@ class PostgresCycleStore:
                         "daily_tokens": limits[0], "monthly_tokens": limits[1],
                         "daily_cost_usd": str(limits[2]) if limits[2] is not None else None,
                         "monthly_cost_usd": str(limits[3]) if limits[3] is not None else None,
+                        "daily_requests": limits[4], "monthly_requests": limits[5],
                     },
                     "usage": {
                         "daily_tokens": usage[0], "monthly_tokens": usage[1],
@@ -1495,7 +1496,8 @@ class PostgresCycleStore:
                 cursor.execute(
                     """
                     SELECT daily_token_limit, monthly_token_limit,
-                           daily_cost_limit_usd, monthly_cost_limit_usd
+                           daily_cost_limit_usd, monthly_cost_limit_usd,
+                           daily_request_limit, monthly_request_limit
                     FROM yj64_cycle_usage_budget WHERE budget_id = 1 FOR UPDATE
                     """
                 )
