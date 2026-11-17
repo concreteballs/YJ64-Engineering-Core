@@ -968,7 +968,7 @@ class PostgresCycleStore:
 
     def reserve_provider_capacity(
         self, queue_task_id: int, worker_id: str, idempotency_key: str,
-        *, provider: str, model: str, endpoint: str,
+        *, provider: str, model: str, endpoint: str, payload_sha256: str,
         input_tokens: int, output_tokens: int,
         lease_seconds: int = 300, reservation_ttl_seconds: int = 300,
     ) -> dict:
@@ -991,6 +991,9 @@ class PostgresCycleStore:
             raise ValueError("idempotency_key is required")
         if any(not isinstance(v, str) or not v.strip() for v in (provider, model, endpoint)):
             raise ValueError("provider, model and endpoint are required")
+        import re
+        if not isinstance(payload_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", payload_sha256):
+            raise ValueError("payload_sha256 must be a lowercase SHA-256 hex digest")
         for name, value in (("input_tokens", input_tokens), ("output_tokens", output_tokens)):
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
@@ -1022,7 +1025,8 @@ class PostgresCycleStore:
                 )
                 cursor.execute(
                     """
-                    SELECT reservation_id, state, queue_task_id, provider, model, endpoint
+                    SELECT reservation_id, state, queue_task_id, provider, model, endpoint,
+                           request_payload_sha256
                     FROM yj64_provider_request_reservations
                     WHERE idempotency_key = %s
                     """,
@@ -1030,8 +1034,10 @@ class PostgresCycleStore:
                 )
                 previous = cursor.fetchone()
                 if previous is not None:
-                    if previous[2:] != (queue_task_id, provider, model, endpoint):
+                    if previous[2:6] != (queue_task_id, provider, model, endpoint):
                         raise ValueError("idempotency_key is already bound to a different task or provider request")
+                    if str(previous[6]).strip() != payload_sha256:
+                        raise ValueError("idempotency_key cannot be reused with different request content")
                     return {
                         "reserved": previous[1] == "reserved",
                         "duplicate": True,
@@ -1190,14 +1196,15 @@ class PostgresCycleStore:
                     """
                     INSERT INTO yj64_provider_request_reservations
                         (reservation_id, idempotency_key, queue_task_id, provider, model,
-                         endpoint, capacity_scope, input_tokens_estimated, output_tokens_estimated,
+                         endpoint, capacity_scope, request_payload_sha256,
+                         input_tokens_estimated, output_tokens_estimated,
                          estimated_cost_usd, state, expires_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
                             now() + (%s * interval '1 second'))
                     """,
                     (
                         reservation_id, idempotency_key, queue_task_id, provider, model,
-                        endpoint, capacity_scope, input_tokens, output_tokens,
+                        endpoint, capacity_scope, payload_sha256, input_tokens, output_tokens,
                         estimated_cost or Decimal("0"), reservation_ttl_seconds,
                     ),
                 )
