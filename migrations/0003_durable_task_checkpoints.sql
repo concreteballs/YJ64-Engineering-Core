@@ -21,3 +21,4 @@ CREATE INDEX IF NOT EXISTS yj64_task_checkpoints_latest_idx
 ALTER TABLE yj64_task_checkpoints ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE yj64_task_checkpoints FROM anon, authenticated;
 GRANT SELECT, INSERT ON TABLE yj64_task_checkpoints TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE yj64_task_checkpoints_checkpoint_id_seq TO service_role;
