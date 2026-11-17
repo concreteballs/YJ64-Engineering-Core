@@ -127,5 +127,80 @@ class PostgresCycleStoreTests(unittest.TestCase):
             self.store(FakeCursor()).record_ci_event({"run_id": 1})
 
 
+    def test_save_checkpoint_is_idempotent_for_same_sequence_and_hash(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=1, state="running", task_spec_version="1",
+            task_state={"stage": "design"}, budgets={"tokens": 1000},
+            approvals={"physical_action": False},
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        class CheckpointCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "INSERT INTO yj64_task_checkpoints" in query:
+                    self._fetch = None
+                elif "SELECT checkpoint_hash" in query:
+                    self._fetch = (checkpoint["checkpoint_hash"],)
+
+        cursor = CheckpointCursor()
+        self.assertFalse(self.store(cursor).save_checkpoint(42, checkpoint))
+        self.assertEqual(len(cursor.statements), 2)
+
+    def test_save_checkpoint_rejects_conflicting_sequence(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=1, state="running", task_spec_version="1",
+            task_state={"stage": "design"}, budgets={}, approvals={},
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        class ConflictingCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "INSERT INTO yj64_task_checkpoints" in query:
+                    self._fetch = None
+                elif "SELECT checkpoint_hash" in query:
+                    self._fetch = ("f" * 64,)
+
+        with self.assertRaisesRegex(ValueError, "different content"):
+            self.store(ConflictingCursor()).save_checkpoint(42, checkpoint)
+
+    def test_load_latest_checkpoint_verifies_integrity(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=2, state="checkpointed", task_spec_version="1",
+            task_state={"stage": "review"}, budgets={}, approvals={},
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        class LoadCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                self._fetch = (checkpoint,)
+
+        loaded = self.store(LoadCursor()).load_latest_checkpoint(42)
+        self.assertEqual(loaded, checkpoint)
+
+    def test_load_latest_checkpoint_returns_none_when_missing(self):
+        class EmptyCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                self._fetch = None
+
+        self.assertIsNone(self.store(EmptyCursor()).load_latest_checkpoint(42))
+
+    def test_checkpoint_store_rejects_invalid_queue_id(self):
+        with self.assertRaises(ValueError):
+            self.store(FakeCursor()).load_latest_checkpoint(True)
+
+
 if __name__ == "__main__":
     unittest.main()
