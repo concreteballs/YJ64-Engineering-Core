@@ -6,6 +6,7 @@ A deployment must explicitly construct a WorkerRunner and call run_once().
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Callable, Mapping, Protocol
 
 
@@ -20,8 +21,8 @@ class TaskExecutionResult:
     def __post_init__(self) -> None:
         if self.outcome not in {"completed", "retry", "blocked"}:
             raise ValueError("outcome must be completed, retry or blocked")
-        if not isinstance(self.reason, str):
-            raise ValueError("reason must be a string")
+        if not isinstance(self.reason, str) or (self.reason and not re.fullmatch(r"[a-z][a-z0-9_.:-]{0,119}", self.reason)):
+            raise ValueError("reason must be a safe lowercase classification")
         if (
             not isinstance(self.retry_delay_seconds, int)
             or isinstance(self.retry_delay_seconds, bool)
@@ -120,10 +121,13 @@ class WorkerRunner:
         task_type = task.get("task_type")
         if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id < 1:
             raise RuntimeError("claimed task has an invalid task_id")
+        if not isinstance(task_type, str) or not task_type.strip():
+            blocked = self.store.block_task(task_id, self.worker_id, "invalid_task_type")
+            return {"status": "blocked" if blocked else "lease_lost", "task_id": task_id, "reason": "invalid_task_type", "recovery": recovery}
         handler = self.handlers.get(task_type)
         if handler is None:
             blocked = self.store.block_task(
-                task_id, self.worker_id, "no_handler_registered:" + str(task_type)[:120]
+                task_id, self.worker_id, "no_handler_registered"
             )
             return {
                 "status": "blocked" if blocked else "lease_lost",
