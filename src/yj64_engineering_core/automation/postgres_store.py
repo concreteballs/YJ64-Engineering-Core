@@ -374,6 +374,47 @@ class PostgresCycleStore:
                 return checkpoint
 
 
+    def defer_task_for_capacity(
+        self, task_id: int, worker_id: str, retry_at,
+        reason: str, lease_seconds: int = 300,
+    ) -> bool:
+        """Release a task lease and durably schedule a later capacity recheck."""
+        from datetime import datetime
+
+        if not isinstance(retry_at, datetime) or retry_at.tzinfo is None:
+            raise ValueError("retry_at must be a timezone-aware datetime")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("reason is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET state = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
+                        available_at = CASE WHEN attempts >= max_attempts THEN available_at
+                                             ELSE GREATEST(%s, now()) END,
+                        locked_at = NULL, lock_owner = NULL,
+                        last_error = %s, updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    """,
+                    (retry_at, reason[:1000], task_id, worker_id, lease_seconds),
+                )
+                return cursor.rowcount == 1
+
+    def run_recovery_maintenance(self, limit: int = 100) -> dict:
+        """Run bounded durable recovery work; safe to invoke repeatedly."""
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        quota_tasks = self.recover_due_quota_tasks(limit=limit)
+        expired_reservations = self.expire_unsent_provider_reservations(limit=limit)
+        return {
+            "quota_tasks_requeued": quota_tasks,
+            "unsent_reservations_expired": expired_reservations,
+        }
+
     def recover_due_quota_tasks(self, limit: int = 100) -> list[int]:
         """Requeue only quota-blocked tasks whose known reset time has arrived.
 
