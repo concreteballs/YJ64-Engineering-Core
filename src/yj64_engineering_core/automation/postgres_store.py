@@ -835,6 +835,9 @@ class PostgresCycleStore:
                     "usage": {
                         "daily_tokens": usage[0], "monthly_tokens": usage[1],
                         "daily_cost_usd": str(usage[2]), "monthly_cost_usd": str(usage[3]),
+                        "daily_unknown_cost_requests": usage[4],
+                        "monthly_unknown_cost_requests": usage[5],
+                        "cost_estimate_complete": usage[4] == 0 and usage[5] == 0,
                     },
                     "time_basis": "database_timezone",
                 }
@@ -1175,7 +1178,8 @@ class PostgresCycleStore:
                         SELECT
                             COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
                                       + COALESCE(output_tokens_actual, output_tokens_estimated)), 0),
-                            COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0)
+                            COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0),
+                            COUNT(*) FILTER (WHERE actual_cost_usd IS NULL AND NOT cost_estimate_known)
                         FROM yj64_provider_request_reservations
                         WHERE state <> 'expired'
                           AND created_at >= date_trunc('day', now())
@@ -1187,7 +1191,8 @@ class PostgresCycleStore:
                         SELECT
                             COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
                                       + COALESCE(output_tokens_actual, output_tokens_estimated)), 0),
-                            COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0)
+                            COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0),
+                            COUNT(*) FILTER (WHERE actual_cost_usd IS NULL AND NOT cost_estimate_known)
                         FROM yj64_provider_request_reservations
                         WHERE state <> 'expired'
                           AND created_at >= date_trunc('month', now())
@@ -1200,11 +1205,15 @@ class PostgresCycleStore:
                     if global_budget[1] is not None and monthly[0] + requested_tokens > global_budget[1]:
                         return {"reserved": False, "action": "schedule_retry", "retry_at": monthly_reset_at, "reason": "Global monthly token budget reached; retry after the database-month reset"}
                     if global_budget[2] is not None:
+                        if daily[2] > 0:
+                            return {"reserved": False, "action": "hold_for_review", "reason": "Daily usage contains requests with unknown cost; reconcile before enforcing a cost ceiling"}
                         if estimated_cost is None:
                             return {"reserved": False, "action": "hold_for_review", "reason": "Global cost budget is set but provider pricing is unknown"}
                         if Decimal(str(daily[1])) + estimated_cost > Decimal(str(global_budget[2])):
                             return {"reserved": False, "action": "schedule_retry", "retry_at": daily_reset_at, "reason": "Global daily cost budget reached; retry after the database-day reset"}
                     if global_budget[3] is not None:
+                        if monthly[2] > 0:
+                            return {"reserved": False, "action": "hold_for_review", "reason": "Monthly usage contains requests with unknown cost; reconcile before enforcing a cost ceiling"}
                         if estimated_cost is None:
                             return {"reserved": False, "action": "hold_for_review", "reason": "Global cost budget is set but provider pricing is unknown"}
                         if Decimal(str(monthly[1])) + estimated_cost > Decimal(str(global_budget[3])):
@@ -1217,15 +1226,15 @@ class PostgresCycleStore:
                         (reservation_id, idempotency_key, queue_task_id, provider, model,
                          endpoint, capacity_scope, request_payload_sha256, payload_bytes,
                          input_tokens_estimated, output_tokens_estimated,
-                         estimated_cost_usd, state, expires_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
+                         estimated_cost_usd, cost_estimate_known, state, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
                             now() + (%s * interval '1 second'))
                     """,
                     (
                         reservation_id, idempotency_key, queue_task_id, provider, model,
                         endpoint, capacity_scope, payload_sha256, payload_bytes,
                         input_tokens, output_tokens, estimated_cost or Decimal("0"),
-                        reservation_ttl_seconds,
+                        estimated_cost is not None, reservation_ttl_seconds,
                     ),
                 )
                 cursor.execute(
@@ -1332,7 +1341,7 @@ class PostgresCycleStore:
                 cursor.execute(
                     """
                     SELECT input_tokens_estimated, output_tokens_estimated,
-                           estimated_cost_usd, state
+                           estimated_cost_usd, cost_estimate_known, state
                     FROM yj64_provider_request_reservations
                     WHERE reservation_id = %s AND queue_task_id = %s
                     FOR UPDATE
@@ -1342,9 +1351,9 @@ class PostgresCycleStore:
                 reservation = cursor.fetchone()
                 if reservation is None:
                     raise KeyError("provider reservation does not exist")
-                if reservation[3] in {"completed", "failed", "expired"}:
+                if reservation[4] in {"completed", "failed", "expired"}:
                     return {"settled": True, "duplicate": True, "state": reservation[3]}
-                if reservation[3] not in {"sending", "accepted", "unknown"}:
+                if reservation[4] not in {"sending", "accepted", "unknown"}:
                     raise RuntimeError("provider request was not marked as sent")
                 if outcome == "unknown":
                     cursor.execute(
@@ -1360,7 +1369,7 @@ class PostgresCycleStore:
 
                 actual_input = reservation[0] if input_tokens_actual is None else input_tokens_actual
                 actual_output = reservation[1] if output_tokens_actual is None else output_tokens_actual
-                final_cost = reservation[2] if cost is None else cost
+                final_cost = (reservation[2] if reservation[3] else None) if cost is None else cost
                 cursor.execute(
                     """
                     UPDATE yj64_provider_request_reservations
@@ -1390,7 +1399,7 @@ class PostgresCycleStore:
                     """,
                     (
                         reservation[0], reservation[1], reservation[2],
-                        actual_input, actual_output, final_cost,
+                        actual_input, actual_output, final_cost or 0,
                         queue_task_id, worker_id,
                     ),
                 )
@@ -1545,7 +1554,7 @@ class PostgresCycleStore:
                     cursor.execute(
                         """
                         SELECT input_tokens_estimated, output_tokens_estimated,
-                               estimated_cost_usd, state
+                               estimated_cost_usd, cost_estimate_known, state
                         FROM yj64_provider_request_reservations
                         WHERE reservation_id = %s AND queue_task_id = %s
                         FOR UPDATE
@@ -1553,7 +1562,7 @@ class PostgresCycleStore:
                         (reservation_id, queue_task_id),
                     )
                     reservation = cursor.fetchone()
-                    if reservation is None or reservation[3] not in {"sending", "accepted", "unknown"}:
+                    if reservation is None or reservation[4] not in {"sending", "accepted", "unknown"}:
                         raise RuntimeError("provider attempt is not linked to a sent durable reservation")
                     if attempt.get("http_status") is None:
                         # No response means delivery is ambiguous. Never blindly
@@ -1578,7 +1587,9 @@ class PostgresCycleStore:
                         actual_input = reservation[0] if actual_input is None else actual_input
                         actual_output = reservation[1] if actual_output is None else actual_output
                         actual_cost = attempt.get("actual_cost_usd")
-                        actual_cost = reservation[2] if actual_cost is None else actual_cost
+                        actual_cost = (
+                            reservation[2] if reservation[3] else None
+                        ) if actual_cost is None else actual_cost
                         cursor.execute(
                             """
                             UPDATE yj64_provider_request_reservations
@@ -1608,7 +1619,7 @@ class PostgresCycleStore:
                             """,
                             (
                                 reservation[0], reservation[1], reservation[2],
-                                actual_input, actual_output, actual_cost,
+                                actual_input, actual_output, actual_cost or 0,
                                 queue_task_id, worker_id,
                             ),
                         )
