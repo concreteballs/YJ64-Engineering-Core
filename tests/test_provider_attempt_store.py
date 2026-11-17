@@ -26,7 +26,12 @@ class FakeCursor:
         elif "INSERT INTO yj64_model_request_attempts" in query:
             self._fetch = (91,) if self.inserted else None
         elif "UPDATE yj64_task_queue" in query and "RETURNING state" in query:
-            self._fetch = (self.queue_state_after_update,)
+            state = self.queue_state_after_update
+            if "state = 'blocked'" in query:
+                state = "blocked"
+            elif "state = 'failed'" in query:
+                state = "failed"
+            self._fetch = (state,)
         else:
             self._fetch = None
 
