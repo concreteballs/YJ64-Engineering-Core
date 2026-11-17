@@ -1095,7 +1095,8 @@ class PostgresCycleStore:
                 cursor.execute(
                     """
                     SELECT daily_token_limit, monthly_token_limit,
-                           daily_cost_limit_usd, monthly_cost_limit_usd
+                           daily_cost_limit_usd, monthly_cost_limit_usd,
+                           daily_request_limit, monthly_request_limit
                     FROM yj64_cycle_usage_budget WHERE budget_id = 1
                     """
                 )
@@ -1348,7 +1349,9 @@ class PostgresCycleStore:
                     SELECT state, lock_owner, locked_at,
                            budget_input_tokens, budget_output_tokens, budget_cost_usd,
                            reserved_input_tokens, reserved_output_tokens, reserved_cost_usd,
-                           consumed_input_tokens, consumed_output_tokens, consumed_cost_usd
+                           consumed_input_tokens, consumed_output_tokens, consumed_cost_usd,
+                           deadline_at, max_provider_requests,
+                           provider_requests_reserved, provider_requests_consumed
                     FROM yj64_task_queue
                     WHERE task_id = %s
                     FOR UPDATE
@@ -1424,6 +1427,18 @@ class PostgresCycleStore:
                         "action": "hold_for_review",
                         "reason": "Provider limit profile is stale; refresh it before sending",
                     }
+                if task[12] is not None and task[12] <= database_now:
+                    return {
+                        "reserved": False, "duplicate": False,
+                        "action": "task_deadline_exceeded",
+                        "reason": "Task deadline has elapsed; no further provider requests are allowed",
+                    }
+                if task[13] is not None and task[14] + task[15] >= task[13]:
+                    return {
+                        "reserved": False, "duplicate": False,
+                        "action": "task_budget_exhausted",
+                        "reason": "Task provider-request budget is exhausted",
+                    }
                 cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (capacity_scope,))
                 cursor.execute(
                     """
@@ -1496,7 +1511,8 @@ class PostgresCycleStore:
                             COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
                                       + COALESCE(output_tokens_actual, output_tokens_estimated)), 0),
                             COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0),
-                            COUNT(*) FILTER (WHERE actual_cost_usd IS NULL AND NOT cost_estimate_known)
+                            COUNT(*) FILTER (WHERE actual_cost_usd IS NULL AND NOT cost_estimate_known),
+                            COUNT(*) FILTER (WHERE state <> 'expired')
                         FROM yj64_provider_request_reservations
                         WHERE state <> 'expired'
                           AND created_at >= date_trunc('day', now())
@@ -1509,7 +1525,8 @@ class PostgresCycleStore:
                             COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
                                       + COALESCE(output_tokens_actual, output_tokens_estimated)), 0),
                             COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0),
-                            COUNT(*) FILTER (WHERE actual_cost_usd IS NULL AND NOT cost_estimate_known)
+                            COUNT(*) FILTER (WHERE actual_cost_usd IS NULL AND NOT cost_estimate_known),
+                            COUNT(*) FILTER (WHERE state <> 'expired')
                         FROM yj64_provider_request_reservations
                         WHERE state <> 'expired'
                           AND created_at >= date_trunc('month', now())
@@ -1517,6 +1534,10 @@ class PostgresCycleStore:
                     )
                     monthly = cursor.fetchone()
                     requested_tokens = input_tokens + output_tokens
+                    if global_budget[4] is not None and daily[3] + 1 > global_budget[4]:
+                        return {"reserved": False, "action": "schedule_retry", "retry_at": daily_reset_at, "reason": "Global daily provider-request budget reached"}
+                    if global_budget[5] is not None and monthly[3] + 1 > global_budget[5]:
+                        return {"reserved": False, "action": "schedule_retry", "retry_at": monthly_reset_at, "reason": "Global monthly provider-request budget reached"}
                     if global_budget[0] is not None and daily[0] + requested_tokens > global_budget[0]:
                         return {"reserved": False, "action": "schedule_retry", "retry_at": daily_reset_at, "reason": "Global daily token budget reached; retry after the database-day reset"}
                     if global_budget[1] is not None and monthly[0] + requested_tokens > global_budget[1]:
@@ -1560,6 +1581,7 @@ class PostgresCycleStore:
                     SET reserved_input_tokens = reserved_input_tokens + %s,
                         reserved_output_tokens = reserved_output_tokens + %s,
                         reserved_cost_usd = reserved_cost_usd + %s,
+                        provider_requests_reserved = provider_requests_reserved + 1,
                         updated_at = now()
                     WHERE task_id = %s AND state = 'running' AND lock_owner = %s
                     """,
