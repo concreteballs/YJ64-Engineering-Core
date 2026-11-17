@@ -210,6 +210,281 @@ class PostgresCycleStore:
                 )
                 return cursor.rowcount == 1
 
+    def claim_next_reconciliation_task(
+        self, worker_id: str, lease_seconds: int = 300,
+    ) -> dict | None:
+        """Lease a blocked task only for checking ambiguous provider delivery."""
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH candidate AS (
+                        SELECT task.task_id
+                        FROM yj64_task_queue AS task
+                        WHERE task.state = 'blocked'
+                          AND task.blocked_reason = 'request_outcome_unknown'
+                          AND EXISTS (
+                              SELECT 1 FROM yj64_provider_request_reservations AS reservation
+                              WHERE reservation.queue_task_id = task.task_id
+                                AND reservation.state = 'unknown'
+                          )
+                        ORDER BY task.updated_at, task.task_id
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    )
+                    UPDATE yj64_task_queue AS task
+                    SET state = 'running', locked_at = now(), lock_owner = %s,
+                        updated_at = now()
+                    FROM candidate
+                    WHERE task.task_id = candidate.task_id
+                    RETURNING task.task_id, task.task_type, task.payload,
+                              task.attempts, task.max_attempts,
+                              (SELECT checkpoint FROM yj64_task_checkpoints
+                               WHERE queue_task_id = task.task_id
+                               ORDER BY sequence DESC LIMIT 1)
+                    """,
+                    (worker_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                checkpoint = row[5]
+                if isinstance(checkpoint, str):
+                    checkpoint = json.loads(checkpoint)
+                if checkpoint is not None:
+                    from .checkpoints import verify_checkpoint
+                    verify_checkpoint(checkpoint)
+                return {
+                    "task_id": row[0], "task_type": row[1], "payload": row[2],
+                    "attempts": row[3], "max_attempts": row[4],
+                    "worker_id": worker_id, "checkpoint": checkpoint,
+                    "reconciliation_only": True,
+                }
+
+    def list_unknown_provider_requests(
+        self, queue_task_id: int, worker_id: str, lease_seconds: int = 300,
+    ) -> list[dict]:
+        """Return safe request metadata for provider-side lookup; never return prompts or keys."""
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("reconciliation requires the current task lease")
+                cursor.execute(
+                    """
+                    SELECT reservation_id, idempotency_key, provider, model, endpoint,
+                           request_payload_sha256, provider_request_id, sent_at,
+                           input_tokens_estimated, output_tokens_estimated,
+                           last_error_classification
+                    FROM yj64_provider_request_reservations
+                    WHERE queue_task_id = %s AND state = 'unknown'
+                    ORDER BY sent_at, reservation_id
+                    """,
+                    (queue_task_id,),
+                )
+                columns = (
+                    "reservation_id", "idempotency_key", "provider", "model",
+                    "endpoint", "payload_sha256", "provider_request_id", "sent_at",
+                    "input_tokens_estimated", "output_tokens_estimated",
+                    "last_error_classification",
+                )
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def list_recovered_provider_results(
+        self, queue_task_id: int, worker_id: str, lease_seconds: int = 300,
+    ) -> list[dict]:
+        """Expose only artifact references for provider results recovered during reconciliation."""
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("result lookup requires the current task lease")
+                cursor.execute(
+                    """
+                    SELECT reservation_id, provider, model, request_payload_sha256,
+                           provider_request_id, provider_result_ref, resolution_evidence_ref
+                    FROM yj64_provider_request_reservations
+                    WHERE queue_task_id = %s AND state = 'completed'
+                      AND resolution_kind = 'provider_found'
+                      AND provider_result_ref IS NOT NULL
+                    ORDER BY created_at, reservation_id
+                    """,
+                    (queue_task_id,),
+                )
+                columns = (
+                    "reservation_id", "provider", "model", "payload_sha256",
+                    "provider_request_id", "provider_result_ref", "evidence_ref",
+                )
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def resolve_unknown_provider_request(
+        self, queue_task_id: int, worker_id: str, reservation_id: str,
+        *, outcome: str, evidence_ref: str, provider_result_ref: str | None = None,
+        input_tokens_actual: int | None = None, output_tokens_actual: int | None = None,
+        actual_cost_usd=None, provider_request_id: str | None = None,
+        lease_seconds: int = 300,
+    ) -> dict:
+        """Resolve an ambiguous send only with explicit provider/human evidence."""
+        from decimal import Decimal, InvalidOperation
+
+        if outcome not in {"provider_found", "provider_not_found"}:
+            raise ValueError("outcome must be provider_found or provider_not_found")
+        if not isinstance(evidence_ref, str) or not evidence_ref.strip() or len(evidence_ref) > 1024:
+            raise ValueError("evidence_ref is required and must be at most 1024 characters")
+        if outcome == "provider_found" and (
+            not isinstance(provider_result_ref, str) or not provider_result_ref.strip()
+        ):
+            raise ValueError("provider_found requires a durable provider_result_ref")
+        if outcome == "provider_not_found" and provider_result_ref is not None:
+            raise ValueError("provider_not_found cannot have a provider_result_ref")
+        for name, value in (
+            ("input_tokens_actual", input_tokens_actual),
+            ("output_tokens_actual", output_tokens_actual),
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer or None")
+        cost = None
+        if actual_cost_usd is not None:
+            try:
+                cost = Decimal(str(actual_cost_usd))
+            except (InvalidOperation, ValueError):
+                raise ValueError("actual_cost_usd must be a non-negative decimal")
+            if not cost.is_finite() or cost < 0:
+                raise ValueError("actual_cost_usd must be a non-negative decimal")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("request reconciliation requires the current task lease")
+                cursor.execute(
+                    """
+                    SELECT input_tokens_estimated, output_tokens_estimated,
+                           estimated_cost_usd, cost_estimate_known, state
+                    FROM yj64_provider_request_reservations
+                    WHERE reservation_id = %s AND queue_task_id = %s
+                    FOR UPDATE
+                    """,
+                    (reservation_id, queue_task_id),
+                )
+                reservation = cursor.fetchone()
+                if reservation is None:
+                    raise KeyError("provider reservation does not exist")
+                if reservation[4] != "unknown":
+                    raise RuntimeError("only unknown provider requests can be reconciled")
+                if outcome == "provider_not_found":
+                    actual_input = 0
+                    actual_output = 0
+                    final_cost = Decimal("0")
+                    final_state = "failed"
+                else:
+                    actual_input = reservation[0] if input_tokens_actual is None else input_tokens_actual
+                    actual_output = reservation[1] if output_tokens_actual is None else output_tokens_actual
+                    final_cost = (
+                        (reservation[2] if reservation[3] else None)
+                        if cost is None else cost
+                    )
+                    final_state = "completed"
+                cursor.execute(
+                    """
+                    UPDATE yj64_provider_request_reservations
+                    SET state = %s, input_tokens_actual = %s,
+                        output_tokens_actual = %s, actual_cost_usd = %s,
+                        provider_request_id = COALESCE(%s, provider_request_id),
+                        resolution_kind = %s, resolution_evidence_ref = %s,
+                        provider_result_ref = %s, resolved_at = now(),
+                        finished_at = now(), expires_at = NULL
+                    WHERE reservation_id = %s
+                    """,
+                    (
+                        final_state, actual_input, actual_output, final_cost,
+                        provider_request_id, outcome, evidence_ref,
+                        provider_result_ref, reservation_id,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET reserved_input_tokens = GREATEST(0, reserved_input_tokens - %s),
+                        reserved_output_tokens = GREATEST(0, reserved_output_tokens - %s),
+                        reserved_cost_usd = GREATEST(0, reserved_cost_usd - %s),
+                        consumed_input_tokens = consumed_input_tokens + %s,
+                        consumed_output_tokens = consumed_output_tokens + %s,
+                        consumed_cost_usd = consumed_cost_usd + %s,
+                        updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    """,
+                    (
+                        reservation[0], reservation[1], reservation[2],
+                        actual_input, actual_output, final_cost or 0,
+                        queue_task_id, worker_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("task lease was lost while resolving provider usage")
+                cursor.execute(
+                    """
+                    SELECT count(*) FROM yj64_provider_request_reservations
+                    WHERE queue_task_id = %s AND state = 'unknown'
+                    """,
+                    (queue_task_id,),
+                )
+                remaining_unknown = cursor.fetchone()[0]
+                if remaining_unknown == 0:
+                    cursor.execute(
+                        """
+                        UPDATE yj64_task_queue
+                        SET state = 'pending', available_at = now(),
+                            blocked_reason = NULL, locked_at = NULL, lock_owner = NULL,
+                            last_error = 'Ambiguous provider delivery reconciled; resume from durable result/evidence',
+                            updated_at = now()
+                        WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                        """,
+                        (queue_task_id, worker_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise RuntimeError("task lease was lost while resuming reconciled task")
+                return {
+                    "reservation_state": final_state,
+                    "remaining_unknown_requests": remaining_unknown,
+                    "task_resumed": remaining_unknown == 0,
+                    "provider_result_ref": provider_result_ref,
+                }
+
     def complete_task(self, task_id: int, worker_id: str) -> bool:
         with self._connect() as connection:
             with connection.cursor() as cursor:
