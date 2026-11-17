@@ -110,11 +110,19 @@ class PostgresCycleStore:
                     "received_at": row[9].isoformat() if row[9] is not None else None,
                 }
 
-    def claim_next_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None:
+    def claim_next_task(
+        self, worker_id: str, lease_seconds: int = 300,
+        task_types: list[str] | None = None,
+    ) -> dict | None:
         if not isinstance(worker_id, str) or not worker_id.strip():
             raise ValueError("worker_id is required")
         if not isinstance(lease_seconds, int) or not 30 <= lease_seconds <= 3600:
             raise ValueError("lease_seconds must be between 30 and 3600")
+        if task_types is not None and (
+            not isinstance(task_types, list) or not task_types
+            or any(not isinstance(item, str) or not item.strip() for item in task_types)
+        ):
+            raise ValueError("task_types must be a non-empty list of task type names")
 
         with self._connect() as connection:
             with connection.cursor() as cursor:
@@ -172,6 +180,7 @@ class PostgresCycleStore:
                         SELECT task_id
                         FROM yj64_task_queue
                         WHERE attempts < max_attempts
+                          AND (%s::text[] IS NULL OR task_type = ANY(%s::text[]))
                           AND (
                               (state = 'pending' AND available_at <= now())
                               OR
@@ -195,7 +204,7 @@ class PostgresCycleStore:
                                WHERE queue_task_id = task.task_id
                                ORDER BY sequence DESC LIMIT 1)
                     """,
-                    (lease_seconds, worker_id),
+                    (task_types, task_types, lease_seconds, worker_id),
                 )
                 row = cursor.fetchone()
                 if row is None:
