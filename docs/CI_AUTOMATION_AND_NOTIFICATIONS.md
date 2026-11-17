@@ -1,69 +1,54 @@
 # CI Automation and Completion Notifications
 
-## Current implementation
+## Current verified implementation
 
-The repository has:
-- .github/workflows/tests.yml — Python/FEM/CAD test workflow.
-- .github/workflows/notify-ci-completion.yml — completion-event sender for pushes to main.
-- api/index.py — authenticated Vercel ingress for GitHub Actions completion events.
-- migrations/0001_autonomous_cycle.sql — PostgreSQL schema for durable CI events and queued tasks.
-- src/yj64_engineering_core/automation/postgres_store.py — idempotent event persistence, queue insertion, leased task claiming, bounded retry, completion and blocking primitives.
+- `.github/workflows/tests.yml` runs the Python, FEM and CAD test suite.
+- `.github/workflows/notify-ci-completion.yml` listens for completion of the `Python tests` workflow on pushes to `main`.
+- `scripts/record_ci_completion.py` validates the GitHub `workflow_run` payload and writes the event directly to Supabase PostgreSQL.
+- `src/yj64_engineering_core/automation/postgres_store.py` persists CI events idempotently and enqueues `process_ci_event` tasks in the existing `yj64_task_queue`.
+- `src/yj64_engineering_core/automation/worker.py` provides a one-task-per-invocation worker with leases, recovery, completion, retry and blocked states.
+- `scripts/run_ci_event_worker.py` validates one persisted CI event without executing repository code or making provider calls.
+- `.github/workflows/scheduled-ci-event-worker.yml` starts that bounded worker every five minutes and supports manual dispatch.
 
-The ingress validates repository, branch, workflow, event type, run identity, commit SHA, conclusion and run URL. It then stores the event in PostgreSQL and creates one process_ci_event task. A uniqueness constraint on repository + run_id + run_attempt deduplicates webhook retries.
+The CI completion path no longer depends on the Vercel webhook endpoint. The GitHub Actions workflow uses only the repository secret `YJ64_DATABASE_URL`. The queue remains the single durable queue; no parallel queue was introduced.
 
-The queue supports atomic claims with FOR UPDATE SKIP LOCKED, worker leases, retry limits, completion and blocked states. This is a software foundation; it is not yet a deployed autonomous worker.
+## Current worker safety boundary
 
-## GitHub configuration
+The scheduled worker claims only `process_ci_event` tasks. Other task types are left untouched. Each invocation claims at most one task and has a four-minute job timeout. PostgreSQL leases and `FOR UPDATE SKIP LOCKED` protect concurrent claims.
 
-Add these repository Actions secrets under Settings -> Secrets and variables -> Actions:
-- YJ64_CI_WEBHOOK_URL: canonical HTTPS Vercel production endpoint, currently intended to be https://yj-64-engineering-core-kakq.vercel.app/api.
-- YJ64_CI_WEBHOOK_SECRET: high-entropy random secret shared with the Vercel receiver.
+The current `process_ci_event` handler verifies that the referenced database event exists and that its repository, workflow, branch, conclusion, commit SHA and run URL are within the expected scope. It then acknowledges the event as validated.
 
-Never put either value in source files, workflow YAML, issues, logs or chat messages.
+**This is not yet CI diagnosis or autonomous engineering.** The handler does not fetch GitHub job details or logs, call an LLM, read and select roadmap tasks, modify source code, create commits, or launch engineering jobs. Those capabilities remain disabled until their own handlers, policies and tests are implemented.
 
-## Vercel configuration
+## Required configuration
 
-The Vercel deployment needs:
-- YJ64_CI_WEBHOOK_SECRET: same value as the GitHub Actions secret.
-- YJ64_DATABASE_URL: PostgreSQL connection string for the dedicated YJ64 database.
+The scheduled worker requires the repository Actions secret:
 
-Do not expose the database URL to browser/client code. Use a server-side secret and a provider-supported pooled connection string where appropriate.
+- `YJ64_DATABASE_URL`: PostgreSQL connection string for the YJ64 Supabase database.
 
-The SQL migration in migrations/0001_autonomous_cycle.sql must be applied once to the database before the receiver can persist events. The API intentionally returns a configuration/service error if the database or schema is unavailable; it does not silently downgrade to an in-memory queue.
+Keep the connection string server-side. Never put it in source files, workflow output, issues or chat messages. The worker does not require the old Vercel webhook URL or webhook bearer secret.
 
-## Receiver behaviour
+## Safe development loop — current stage
 
-- GET /api reports service identity and whether a database URL is configured; it does not reveal secrets.
-- POST /api requires the bearer secret, validates the event and persists it.
-- A successful response is HTTP 202 and reports whether the event was a duplicate and whether a processing task was enqueued.
-- Duplicate webhook deliveries do not create duplicate CI events or duplicate processing tasks.
-- The endpoint does not run model inference, execute repository code, modify GitHub or resume this ChatGPT conversation.
+1. GitHub Actions completes the Python test workflow.
+2. The completion workflow validates and persists the event directly to PostgreSQL.
+3. PostgreSQL atomically inserts one deduplicated `process_ci_event` task.
+4. The scheduled worker claims at most one matching task using the existing lease mechanism.
+5. The worker validates the persisted event and acknowledges it, or leaves it blocked with a classified reason.
+6. A later stage will add bounded GitHub run inspection, roadmap task selection, model-provider execution, validation and continuation.
 
-## Safe development loop
+## Remaining activation work
 
-1. GitHub Actions reports completion.
-2. The receiver authenticates, validates, deduplicates and persists the event.
-3. A durable queue task becomes available to a cloud worker.
-4. The worker checks the exact commit, workflow result, job summaries and failure logs.
-5. On success, it selects the next incomplete roadmap task.
-6. On failure, it diagnoses and permits only bounded repair attempts.
-7. Every code change triggers CI again.
-8. Stop on ambiguous requirements, destructive changes, permission requests, paid external calls, purchases, physical actuation or safety-critical decisions.
-9. Preserve task history and record commit/run references; never claim success without a completed successful run.
-
-## Remaining activation and worker work
-
-Not yet complete:
-- Apply the PostgreSQL migration to a real database.
-- Configure and verify the GitHub and Vercel secrets without exposing their values.
-- Verify the production deployment and test an authenticated webhook end to end.
-- Deploy a separate cloud worker that claims queue tasks, reads the roadmap, checks CI details and advances tasks.
-- Configure a model provider through server-side secrets and bounded budgets.
-- Add worker scheduling/wakeup, pause/resume/kill switch, monitoring and external notifications.
-- Demonstrate that the worker continues after the user's phone is offline and recovers after restart.
+- Verify that the scheduled worker runs successfully against the live Supabase queue and processes a real pending CI event.
+- Add a durable audit/result record for worker outcomes.
+- Implement safe GitHub workflow/job inspection and evidence capture.
+- Implement roadmap task selection and session-independent checkpoints.
+- Add provider adapters, server-side secrets, quotas, cost limits and retry policies before any model calls.
+- Add pause/resume/kill switch, monitoring and notifications.
+- Demonstrate that the worker continues while the user's phone is offline and recovers after interruption.
 
 ## Important ChatGPT conversation limitation
 
-A GitHub webhook can notify an external receiver or start a separate cloud agent. It cannot, by itself, resume this exact ChatGPT conversation. A supported ChatGPT background-task/event integration must be connected before automatic continuation inside this chat can be claimed.
+An external worker cannot resume this exact ChatGPT conversation. A separate event/notification bridge is required before automatic continuation inside this chat can be claimed.
 
-The system is therefore currently a partially implemented cloud-cycle foundation, not a fully autonomous loop.
+The current system is a working CI-event persistence pipeline with a bounded scheduled event-validation worker. It is not yet a fully autonomous engineering cycle.
