@@ -49,6 +49,12 @@ The task store is authoritative. Chat transcripts, model summaries, worker memor
 
 A checkpoint must distinguish verified facts, hypotheses, decisions, completed work, pending work and missing evidence. It must preserve exact identifiers and links rather than paraphrasing away critical technical detail.
 
+## 5. Provider limits, rate scheduling and chunked input
+
+The companion [Model Provider Limits and Chunked Request Protocol](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) is mandatory for every model adapter. The orchestrator must detect and classify rate limits, context overflow, oversized payloads, concurrency limits, transient failures and permanent quota/authentication/configuration errors. It must parse provider retry/reset hints, persist a delayed retry time and release the worker rather than wait indefinitely or blindly repeat the same request.
+
+Large inputs must use a durable ordered chunk manifest with stable IDs, per-chunk and total hashes, idempotent acknowledgements and verified reassembly. A model in accumulation mode must be explicitly instructed not to analyze until a verified FINALIZE marker. Stateless API calls do not accumulate context by implication: the orchestrator must reassemble the complete payload itself or use a provider-supported continuity/file mechanism. Partial or integrity-failed input must never be executed.
+
 ## 5. Checkpoint and recovery semantics
 
 - Write checkpoints atomically or with an append-only version plus a verified current pointer.
