@@ -2,6 +2,8 @@
 
 This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PLAN.md. A plan, candidate evaluation or catalogue entry is not an implemented solver.
 
+**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle.
+
 ## Status definitions
 
 - Implemented prototype — executable code and automated tests exist; capability may be deliberately limited.
