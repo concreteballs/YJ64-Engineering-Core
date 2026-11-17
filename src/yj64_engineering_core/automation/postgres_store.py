@@ -788,8 +788,11 @@ class PostgresCycleStore:
                     "time_basis": "database_timezone",
                 }
 
-    def set_provider_limit_profile(self, profile) -> None:
-        """Persist an operator-verified provider/model/endpoint capacity profile."""
+    def set_provider_limit_profile(
+        self, profile, *, capacity_scope: str | None = None,
+        profile_source: str = "operator_config", valid_until=None,
+    ) -> None:
+        """Persist a provider profile; capacity_scope shares account-wide limits across models."""
         from .provider_budget import ProviderLimitProfile
 
         if not isinstance(profile, ProviderLimitProfile):
@@ -800,6 +803,14 @@ class PostgresCycleStore:
             profile.max_output_tokens,
         )):
             raise ValueError("at least one provider capacity limit must be known")
+        if capacity_scope is None:
+            capacity_scope = f"{profile.provider}:{profile.model}:{profile.endpoint}"
+        if not isinstance(capacity_scope, str) or not capacity_scope.strip():
+            raise ValueError("capacity_scope must be a non-empty string")
+        if profile_source not in {"operator_config", "provider_api", "verified_observation"}:
+            raise ValueError("unsupported profile_source")
+        if profile_source != "operator_config" and valid_until is None:
+            raise ValueError("provider-derived profiles require valid_until")
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -809,9 +820,9 @@ class PostgresCycleStore:
                          tokens_per_minute, max_concurrency, max_input_tokens,
                          max_output_tokens, tokens_per_minute_includes_output,
                          input_cost_per_million_usd, output_cost_per_million_usd,
-                         profile_source, observed_at, updated_at)
+                         profile_source, observed_at, valid_until, capacity_scope, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            'operator_config', now(), now())
+                            %s, now(), %s, %s, now())
                     ON CONFLICT (provider, model, endpoint) DO UPDATE SET
                         requests_per_minute = EXCLUDED.requests_per_minute,
                         tokens_per_minute = EXCLUDED.tokens_per_minute,
@@ -821,8 +832,9 @@ class PostgresCycleStore:
                         tokens_per_minute_includes_output = EXCLUDED.tokens_per_minute_includes_output,
                         input_cost_per_million_usd = EXCLUDED.input_cost_per_million_usd,
                         output_cost_per_million_usd = EXCLUDED.output_cost_per_million_usd,
-                        profile_source = 'operator_config',
-                        observed_at = now(), updated_at = now()
+                        profile_source = EXCLUDED.profile_source,
+                        observed_at = now(), valid_until = EXCLUDED.valid_until,
+                        capacity_scope = EXCLUDED.capacity_scope, updated_at = now()
                     """,
                     (
                         profile.provider, profile.model, profile.endpoint,
@@ -831,6 +843,7 @@ class PostgresCycleStore:
                         profile.max_output_tokens, profile.tokens_per_minute_includes_output,
                         profile.input_cost_per_million_usd,
                         profile.output_cost_per_million_usd,
+                        profile_source, valid_until, capacity_scope,
                     ),
                 )
 
@@ -957,7 +970,8 @@ class PostgresCycleStore:
                     SELECT requests_per_minute, tokens_per_minute, max_concurrency,
                            max_input_tokens, max_output_tokens,
                            tokens_per_minute_includes_output,
-                           input_cost_per_million_usd, output_cost_per_million_usd
+                           input_cost_per_million_usd, output_cost_per_million_usd,
+                           capacity_scope, profile_source, valid_until
                     FROM yj64_provider_limit_profiles
                     WHERE provider = %s AND model = %s AND endpoint = %s
                     FOR UPDATE
@@ -980,18 +994,30 @@ class PostgresCycleStore:
                     input_cost_per_million_usd=float(limits[6]) if limits[6] is not None else None,
                     output_cost_per_million_usd=float(limits[7]) if limits[7] is not None else None,
                 )
+                capacity_scope, profile_source, valid_until = limits[8], limits[9], limits[10]
+                cursor.execute("SELECT now()")
+                database_now = cursor.fetchone()[0]
+                if profile_source != "operator_config" and (
+                    valid_until is None or valid_until <= database_now
+                ):
+                    return {
+                        "reserved": False, "duplicate": False,
+                        "action": "hold_for_review",
+                        "reason": "Provider limit profile is stale; refresh it before sending",
+                    }
+                cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (capacity_scope,))
                 cursor.execute(
                     """
                     SELECT created_at, input_tokens_estimated, output_tokens_estimated,
                            state, expires_at, sent_at
                     FROM yj64_provider_request_reservations
-                    WHERE provider = %s AND model = %s AND endpoint = %s
+                    WHERE capacity_scope = %s
                       AND (
-                          sent_at >= now() - interval '60 seconds'
+                          sent_at >= %s - interval '60 seconds'
                           OR state IN ('reserved', 'sending', 'accepted', 'unknown')
                       )
                     """,
-                    (provider, model, endpoint),
+                    (capacity_scope, database_now),
                 )
                 reservations = []
                 for row in cursor.fetchall():
@@ -1000,8 +1026,6 @@ class PostgresCycleStore:
                         "created_at": row[0], "estimated_tokens": token_count,
                         "state": row[3], "expires_at": row[4], "sent_at": row[5],
                     })
-                cursor.execute("SELECT now()")
-                database_now = cursor.fetchone()[0]
                 capacity = plan_provider_capacity(
                     profile, input_tokens=input_tokens, output_tokens=output_tokens,
                     reservations=reservations, now=database_now,
@@ -1088,15 +1112,15 @@ class PostgresCycleStore:
                     """
                     INSERT INTO yj64_provider_request_reservations
                         (reservation_id, idempotency_key, queue_task_id, provider, model,
-                         endpoint, input_tokens_estimated, output_tokens_estimated,
+                         endpoint, capacity_scope, input_tokens_estimated, output_tokens_estimated,
                          estimated_cost_usd, state, expires_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
                             now() + (%s * interval '1 second'))
                     """,
                     (
                         reservation_id, idempotency_key, queue_task_id, provider, model,
-                        endpoint, input_tokens, output_tokens, estimated_cost or Decimal("0"),
-                        reservation_ttl_seconds,
+                        endpoint, capacity_scope, input_tokens, output_tokens,
+                        estimated_cost or Decimal("0"), reservation_ttl_seconds,
                     ),
                 )
                 cursor.execute(
