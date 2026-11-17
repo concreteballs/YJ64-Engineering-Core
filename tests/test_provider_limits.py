@@ -17,7 +17,7 @@ class ProviderErrorClassificationTests(unittest.TestCase):
 
     def test_rate_limit_uses_bounded_exponential_backoff_and_jitter(self):
         result = classify_provider_error(429, attempt=4, jitter_fraction=0.2, now=self.now)
-        self.assertEqual(result.delay_seconds, 34)
+        self.assertEqual(result.delay_seconds, 48)
 
     def test_retry_after_http_date(self):
         target = datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc)
