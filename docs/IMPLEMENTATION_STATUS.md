@@ -55,7 +55,7 @@ Not yet implemented or demonstrated: checkpoint persistence/runtime, context-bud
 
 The PostgreSQL `yj64_model_request_attempts` table is deployed with RLS enabled, no grants to anon/authenticated, and only SELECT/INSERT for service_role. It stores append-only request metadata, safe allowlisted headers, classification, retry hints and sanitized summaries; it excludes prompts, response bodies and credentials. `PostgresCycleStore.record_model_request_attempt` writes an attempt under a live task lease and atomically releases the lease into pending for a scheduled retry, failed for permanent configuration errors, or blocked for quota waits, payload splitting, context rebuilding and unknown errors. `tests/test_provider_attempt_store.py` covers persistence decisions and lease handling.
 
-**Not yet implemented or demonstrated:** live provider limit discovery, per-provider RPM/TPM/concurrency budgeting, automatic quota-reset unblocking, payload splitting/context reconstruction, chunk manifests/assembly/acknowledgements, provider adapters, and real service-role round-trip tests. The current method blocks rather than blindly resending unchanged oversized payloads. No worker is running.
+**Implemented foundation:** quota-blocked tasks now persist an explicit `blocked_reason` and optional `quota_reset_at`. `PostgresCycleStore.recover_due_quota_tasks()` requeues only tasks marked `quota_exhausted` whose known reset time has arrived, uses `FOR UPDATE SKIP LOCKED` for concurrent scheduler safety, and marks due tasks with exhausted retry budgets as failed. Tasks without a reset timestamp and all non-quota blocked tasks remain blocked. Migration `0005_quota_task_recovery.sql` is applied to Supabase. CI run [44116473238](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44116473238) passed for the implementation and tests.\n\n**Not yet implemented or demonstrated:** live provider limit discovery, per-provider RPM/TPM/concurrency budgeting, automatic invocation of the recovery method by a running scheduler, payload splitting/context reconstruction, chunk manifests/assembly/acknowledgements, provider adapters, and real service-role round-trip tests. No worker is running.
 
 ## Consolidated work-package status
 
@@ -115,7 +115,7 @@ A model update retains old versions, exact provenance, test evidence and applica
 
 ## Latest verified CI checkpoint
 
-Commit `69daf7b106e3b3d5e09796ee3c9f8b248a676740` (`fix: exclude source text from document metadata`) completed GitHub Actions run [43893156103](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43893156103) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
+Commit `397a348bda3fc6eb2c53b62762a9d0f31576726d` completed GitHub Actions run [44116473238](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44116473238) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
 
 ## Document intake prototype
 
