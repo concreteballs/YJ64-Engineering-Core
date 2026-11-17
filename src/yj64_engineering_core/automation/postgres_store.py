@@ -1302,6 +1302,12 @@ class PostgresCycleStore:
                 not isinstance(value, int) or isinstance(value, bool) or value < 0
             ):
                 raise ValueError(f"{name} must be a non-negative integer or None")
+        if all(value is None for value in (
+            daily_token_limit, monthly_token_limit,
+            daily_cost_limit_usd, monthly_cost_limit_usd,
+            daily_request_limit, monthly_request_limit,
+        )):
+            raise ValueError("at least one global daily or monthly usage ceiling must be configured")
         costs = []
         for name, value in (
             ("daily_cost_limit_usd", daily_cost_limit_usd),
@@ -1537,6 +1543,11 @@ class PostgresCycleStore:
                     """
                 )
                 global_budget = cursor.fetchone()
+                if global_budget is None or all(value is None for value in global_budget):
+                    return {
+                        "reserved": False, "action": "hold_for_review",
+                        "reason": "No explicit global usage budget is configured; refusing an unbounded provider request",
+                    }
                 if global_budget is not None:
                     cursor.execute(
                         "SELECT date_trunc('day', now()) + interval '1 day', date_trunc('month', now()) + interval '1 month'"
