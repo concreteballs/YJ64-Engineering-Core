@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-from typing import Callable, Mapping, Protocol
+from typing import Callable, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
@@ -21,7 +21,9 @@ class TaskExecutionResult:
     def __post_init__(self) -> None:
         if self.outcome not in {"completed", "retry", "blocked"}:
             raise ValueError("outcome must be completed, retry or blocked")
-        if not isinstance(self.reason, str) or (self.reason and not re.fullmatch(r"[a-z][a-z0-9_.:-]{0,119}", self.reason)):
+        if not isinstance(self.reason, str) or (
+            self.reason and not re.fullmatch(r"[a-z][a-z0-9_.:-]{0,119}", self.reason)
+        ):
             raise ValueError("reason must be a safe lowercase classification")
         if (
             not isinstance(self.retry_delay_seconds, int)
@@ -31,9 +33,56 @@ class TaskExecutionResult:
             raise ValueError("retry_delay_seconds must be between 0 and 86400")
 
 
+@dataclass(frozen=True)
+class ProviderReconciliationDecision:
+    """Evidence-backed resolution of one ambiguous provider request."""
+
+    reservation_id: str
+    outcome: str
+    evidence_ref: str
+    provider_result_ref: str | None = None
+    provider_request_id: str | None = None
+    input_tokens_actual: int | None = None
+    output_tokens_actual: int | None = None
+    actual_cost_usd: str | int | float | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reservation_id, str) or not self.reservation_id.strip():
+            raise ValueError("reservation_id is required")
+        if self.outcome not in {"provider_found", "provider_not_found"}:
+            raise ValueError("invalid reconciliation outcome")
+        for name, value in (
+            ("evidence_ref", self.evidence_ref),
+            ("provider_result_ref", self.provider_result_ref),
+            ("provider_request_id", self.provider_request_id),
+        ):
+            if value is not None and (
+                not isinstance(value, str) or not value.strip() or len(value) > 1024
+            ):
+                raise ValueError(f"{name} must be a non-empty string of at most 1024 characters")
+        if not self.evidence_ref:
+            raise ValueError("evidence_ref is required")
+        if self.outcome == "provider_found" and not self.provider_result_ref:
+            raise ValueError("provider_found requires a durable provider_result_ref")
+        if self.outcome == "provider_not_found" and self.provider_result_ref is not None:
+            raise ValueError("provider_not_found cannot include a provider_result_ref")
+        for name, value in (
+            ("input_tokens_actual", self.input_tokens_actual),
+            ("output_tokens_actual", self.output_tokens_actual),
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer or None")
+
+
 class CycleStore(Protocol):
     def run_recovery_maintenance(self, limit: int = 100) -> dict: ...
     def claim_next_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None: ...
+    def claim_next_reconciliation_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None: ...
+    def list_unknown_provider_requests(self, queue_task_id: int, worker_id: str, lease_seconds: int = 300) -> list[dict]: ...
+    def list_recovered_provider_results(self, queue_task_id: int, worker_id: str, lease_seconds: int = 300) -> list[dict]: ...
+    def resolve_unknown_provider_request(self, queue_task_id: int, worker_id: str, reservation_id: str, **kwargs) -> dict: ...
     def renew_task_lease(self, task_id: int, worker_id: str, lease_seconds: int = 300) -> bool: ...
     def save_checkpoint(self, queue_task_id: int, worker_id: str, checkpoint: dict, lease_seconds: int = 300) -> bool: ...
     def load_latest_checkpoint(self, queue_task_id: int) -> dict | None: ...
@@ -64,16 +113,27 @@ class TaskContext:
     def load_latest_checkpoint(self) -> dict | None:
         return self.store.load_latest_checkpoint(self.task_id)
 
+    def list_recovered_provider_results(self) -> list[dict]:
+        """Return durable result references; task handlers must consume these before issuing new calls."""
+        return self.store.list_recovered_provider_results(
+            self.task_id, self.worker_id, self.lease_seconds
+        )
+
 
 TaskHandler = Callable[[dict, TaskContext], TaskExecutionResult]
+ReconciliationHandler = Callable[
+    [dict, list[dict], list[dict], TaskContext],
+    Sequence[ProviderReconciliationDecision],
+]
 
 
 class WorkerRunner:
     """Execute at most one leased task per explicit invocation.
 
-    Recovery maintenance runs before claiming work. Unknown task types are
-    blocked rather than silently discarded. Handler exceptions are reduced to
-    their class name before persistence so exception text cannot leak secrets.
+    Reconciliation is opt-in. It runs before ordinary work only when an
+    evidence-checking reconciliation handler is configured. No provider request
+    is sent by this runner. Ambiguous requests remain blocked unless the
+    handler returns explicit evidence-backed decisions.
     """
 
     def __init__(
@@ -82,6 +142,7 @@ class WorkerRunner:
         *,
         worker_id: str,
         handlers: Mapping[str, TaskHandler],
+        reconciliation_handler: ReconciliationHandler | None = None,
         lease_seconds: int = 300,
         recovery_limit: int = 100,
     ) -> None:
@@ -104,15 +165,26 @@ class WorkerRunner:
         for task_type, handler in handlers.items():
             if not isinstance(task_type, str) or not task_type.strip() or not callable(handler):
                 raise ValueError("each handler needs a non-empty task type and callable")
+        if reconciliation_handler is not None and not callable(reconciliation_handler):
+            raise ValueError("reconciliation_handler must be callable")
         self.store = store
         self.worker_id = worker_id.strip()
         self.handlers = dict(handlers)
+        self.reconciliation_handler = reconciliation_handler
         self.lease_seconds = lease_seconds
         self.recovery_limit = recovery_limit
 
     def run_once(self) -> dict:
         """Run recovery and process no more than one task; never loops in background."""
         recovery = self.store.run_recovery_maintenance(limit=self.recovery_limit)
+
+        if self.reconciliation_handler is not None:
+            reconciliation_task = self.store.claim_next_reconciliation_task(
+                self.worker_id, self.lease_seconds
+            )
+            if reconciliation_task is not None:
+                return self._reconcile_once(reconciliation_task, recovery)
+
         task = self.store.claim_next_task(self.worker_id, self.lease_seconds)
         if task is None:
             return {"status": "idle", "recovery": recovery}
@@ -191,3 +263,87 @@ class WorkerRunner:
             "reason": "handler_requested_block",
             "recovery": recovery,
         }
+
+    def _reconcile_once(self, task: dict, recovery: dict) -> dict:
+        task_id = task.get("task_id")
+        if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id < 1:
+            raise RuntimeError("claimed reconciliation task has an invalid task_id")
+        context = TaskContext(
+            store=self.store,
+            task_id=task_id,
+            worker_id=self.worker_id,
+            lease_seconds=self.lease_seconds,
+        )
+        try:
+            unknown = self.store.list_unknown_provider_requests(
+                task_id, self.worker_id, self.lease_seconds
+            )
+            recovered = self.store.list_recovered_provider_results(
+                task_id, self.worker_id, self.lease_seconds
+            )
+            decisions = self.reconciliation_handler(task, unknown, recovered, context)
+            if not isinstance(decisions, Sequence) or isinstance(decisions, (str, bytes)):
+                raise TypeError("reconciliation_handler_must_return_a_sequence")
+            allowed_ids = {item.get("reservation_id") for item in unknown}
+            seen_ids = set()
+            for decision in decisions:
+                if not isinstance(decision, ProviderReconciliationDecision):
+                    raise TypeError("invalid_reconciliation_decision")
+                if decision.reservation_id not in allowed_ids:
+                    raise ValueError("decision references a reservation outside the unknown set")
+                if decision.reservation_id in seen_ids:
+                    raise ValueError("duplicate reconciliation decision")
+                seen_ids.add(decision.reservation_id)
+
+            remaining = len(unknown)
+            for decision in decisions:
+                result = self.store.resolve_unknown_provider_request(
+                    task_id,
+                    self.worker_id,
+                    decision.reservation_id,
+                    outcome=decision.outcome,
+                    evidence_ref=decision.evidence_ref,
+                    provider_result_ref=decision.provider_result_ref,
+                    input_tokens_actual=decision.input_tokens_actual,
+                    output_tokens_actual=decision.output_tokens_actual,
+                    actual_cost_usd=decision.actual_cost_usd,
+                    provider_request_id=decision.provider_request_id,
+                    lease_seconds=self.lease_seconds,
+                )
+                remaining = result["remaining_unknown_requests"]
+
+            if remaining == 0 and decisions:
+                # The store atomically releases the lease and requeues the task
+                # after its final unknown reservation is resolved.
+                return {
+                    "status": "reconciled",
+                    "task_id": task_id,
+                    "resolved_count": len(decisions),
+                    "task_resumed": True,
+                    "recovery": recovery,
+                }
+
+            released = self.store.block_task(
+                task_id, self.worker_id, "reconciliation_evidence_incomplete"
+                if decisions else "reconciliation_no_decision"
+            )
+            return {
+                "status": "reconciliation_pending" if released else "lease_lost",
+                "task_id": task_id,
+                "resolved_count": len(decisions),
+                "remaining_unknown_requests": remaining,
+                "recovery": recovery,
+            }
+        except Exception as exc:
+            # Never schedule a retry here: the provider may already have charged
+            # the original request. Release the lease but preserve its blocked state.
+            released = self.store.block_task(
+                task_id, self.worker_id, "reconciliation_handler_error"
+            )
+            return {
+                "status": "reconciliation_pending" if released else "lease_lost",
+                "task_id": task_id,
+                "reason": "reconciliation_handler_error",
+                "error_type": type(exc).__name__,
+                "recovery": recovery,
+            }
