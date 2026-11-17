@@ -85,6 +85,31 @@ class PostgresCycleStore:
                     "task_enqueued": True,
                 }
 
+    def get_ci_event(self, event_id: int) -> dict | None:
+        """Fetch one persisted CI event by its database identity; read-only."""
+        if not isinstance(event_id, int) or isinstance(event_id, bool) or event_id < 1:
+            raise ValueError("event_id must be a positive integer")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT event_id, repository, run_id, run_attempt, workflow,
+                           conclusion, commit_sha, branch, run_url, received_at
+                    FROM yj64_ci_events
+                    WHERE event_id = %s
+                    """,
+                    (event_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "event_id": row[0], "repository": row[1], "run_id": row[2],
+                    "run_attempt": row[3], "workflow": row[4], "conclusion": row[5],
+                    "commit_sha": row[6], "branch": row[7], "run_url": row[8],
+                    "received_at": row[9].isoformat() if row[9] is not None else None,
+                }
+
     def claim_next_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None:
         if not isinstance(worker_id, str) or not worker_id.strip():
             raise ValueError("worker_id is required")
