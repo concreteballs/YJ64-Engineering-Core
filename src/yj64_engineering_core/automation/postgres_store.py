@@ -673,6 +673,121 @@ class PostgresCycleStore:
                     "content": assembled,
                 }
 
+    def set_task_usage_budget(
+        self, task_id: int, *, input_token_limit: int | None = None,
+        output_token_limit: int | None = None, cost_limit_usd=None,
+    ) -> bool:
+        """Configure task budgets before the first attempt or any reservation."""
+        from decimal import Decimal, InvalidOperation
+
+        if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id < 1:
+            raise ValueError("task_id must be a positive integer")
+        for name, value in (
+            ("input_token_limit", input_token_limit),
+            ("output_token_limit", output_token_limit),
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer or None")
+        cost = None
+        if cost_limit_usd is not None:
+            try:
+                cost = Decimal(str(cost_limit_usd))
+            except (InvalidOperation, ValueError):
+                raise ValueError("cost_limit_usd must be a non-negative decimal or None")
+            if not cost.is_finite() or cost < 0:
+                raise ValueError("cost_limit_usd must be a non-negative decimal or None")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET budget_input_tokens = %s, budget_output_tokens = %s,
+                        budget_cost_usd = %s, updated_at = now()
+                    WHERE task_id = %s AND state = 'pending' AND attempts = 0
+                      AND reserved_input_tokens = 0 AND reserved_output_tokens = 0
+                      AND reserved_cost_usd = 0 AND consumed_input_tokens = 0
+                      AND consumed_output_tokens = 0 AND consumed_cost_usd = 0
+                    """,
+                    (input_token_limit, output_token_limit, cost, task_id),
+                )
+                return cursor.rowcount == 1
+
+    def get_task_usage(self, task_id: int) -> dict | None:
+        """Read configured, reserved and consumed task budgets without exposing prompts."""
+        if not isinstance(task_id, int) or isinstance(task_id, bool) or task_id < 1:
+            raise ValueError("task_id must be a positive integer")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT budget_input_tokens, budget_output_tokens, budget_cost_usd,
+                           reserved_input_tokens, reserved_output_tokens, reserved_cost_usd,
+                           consumed_input_tokens, consumed_output_tokens, consumed_cost_usd
+                    FROM yj64_task_queue WHERE task_id = %s
+                    """,
+                    (task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "limits": {"input_tokens": row[0], "output_tokens": row[1], "cost_usd": str(row[2]) if row[2] is not None else None},
+                    "reserved": {"input_tokens": row[3], "output_tokens": row[4], "cost_usd": str(row[5])},
+                    "consumed": {"input_tokens": row[6], "output_tokens": row[7], "cost_usd": str(row[8])},
+                }
+
+    def get_cycle_usage(self) -> dict:
+        """Report daily/monthly global usage and configured ceilings in database time."""
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT daily_token_limit, monthly_token_limit,
+                           daily_cost_limit_usd, monthly_cost_limit_usd
+                    FROM yj64_cycle_usage_budget WHERE budget_id = 1
+                    """
+                )
+                limits = cursor.fetchone()
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE WHEN created_at >= date_trunc('day', now())
+                            AND state <> 'expired'
+                            THEN COALESCE(input_tokens_actual, input_tokens_estimated)
+                               + COALESCE(output_tokens_actual, output_tokens_estimated)
+                            ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', now())
+                            AND state <> 'expired'
+                            THEN COALESCE(input_tokens_actual, input_tokens_estimated)
+                               + COALESCE(output_tokens_actual, output_tokens_estimated)
+                            ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN created_at >= date_trunc('day', now())
+                            AND state <> 'expired'
+                            THEN COALESCE(actual_cost_usd, estimated_cost_usd)
+                            ELSE 0 END), 0),
+                        COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', now())
+                            AND state <> 'expired'
+                            THEN COALESCE(actual_cost_usd, estimated_cost_usd)
+                            ELSE 0 END), 0)
+                    FROM yj64_provider_request_reservations
+                    """
+                )
+                usage = cursor.fetchone()
+                return {
+                    "limits": None if limits is None else {
+                        "daily_tokens": limits[0], "monthly_tokens": limits[1],
+                        "daily_cost_usd": str(limits[2]) if limits[2] is not None else None,
+                        "monthly_cost_usd": str(limits[3]) if limits[3] is not None else None,
+                    },
+                    "usage": {
+                        "daily_tokens": usage[0], "monthly_tokens": usage[1],
+                        "daily_cost_usd": str(usage[2]), "monthly_cost_usd": str(usage[3]),
+                    },
+                    "time_basis": "database_timezone",
+                }
+
     def set_provider_limit_profile(self, profile) -> None:
         """Persist an operator-verified provider/model/endpoint capacity profile."""
         from .provider_budget import ProviderLimitProfile
