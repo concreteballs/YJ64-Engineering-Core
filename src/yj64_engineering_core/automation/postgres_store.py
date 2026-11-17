@@ -947,6 +947,10 @@ class PostgresCycleStore:
                 if task is None or task[0] != "running" or task[1] != worker_id:
                     raise RuntimeError("provider capacity requires the current task lease")
                 cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext(%s))",
+                    ("idempotency:" + idempotency_key,),
+                )
+                cursor.execute(
                     """
                     SELECT reservation_id, state, queue_task_id, provider, model, endpoint
                     FROM yj64_provider_request_reservations
