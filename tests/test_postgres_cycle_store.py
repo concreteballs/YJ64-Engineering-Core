@@ -33,6 +33,9 @@ class FakeCursor:
     def fetchone(self):
         return self._fetch
 
+    def fetchall(self):
+        return []
+
 
 class FakeConnection:
     def __init__(self, cursor):
@@ -127,6 +130,16 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertIn("lock_owner = %s", cursor.statements[0][0])
         self.assertIn("NOT EXISTS", cursor.statements[0][0])
         self.assertIn("yj64_provider_request_reservations", cursor.statements[0][0])
+        self.assertIn("deadline_at IS NULL OR deadline_at > now()", cursor.statements[0][0])
+
+    def test_expire_deadline_tasks_skips_ambiguous_requests(self):
+        cursor = FakeCursor()
+        result = self.store(cursor).expire_deadline_tasks(limit=10)
+        self.assertEqual(result, [])
+        query = cursor.statements[0][0]
+        self.assertIn("state IN ('pending', 'blocked', 'running')", query)
+        self.assertIn("request_outcome_unknown", query)
+        self.assertIn("NOT EXISTS", query)
 
     def test_defer_task_for_capacity_releases_lease_and_sets_retry_time(self):
         from datetime import datetime, timezone
