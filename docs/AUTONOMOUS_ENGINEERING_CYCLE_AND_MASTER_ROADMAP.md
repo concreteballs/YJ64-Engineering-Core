@@ -55,13 +55,13 @@ This document is the execution index for the autonomous development cycle. It se
 - The separate CI completion-webhook delivery run [44098093733](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44098093733) failed with HTTP 503 (persistent_queue_unavailable); URL canonicalization and webhook authentication had already passed, so the previous 401/secret-alignment note is obsolete.
 - Supabase project ggambesixwejgbjwtnhw is active; migrations 0001 and 0002 are applied; both public.yj64_ci_events and public.yj64_task_queue exist with expected columns. The Vercel Production YJ64_DATABASE_URL is configured. Direct Supabase checks confirmed public search_path resolution, INSERT privileges for postgres, and RLS bypass for that role. These checks do not prove that Vercel's live runtime connection can execute the transaction.
 - Actual end-to-end event and task persistence remain unverified because the receiver still returns 503. The receiver now extracts validated SQLSTATE from psycopg .sqlstate or .pgcode before falling back to exception-class mapping, and exposes only a safe diagnostic category. The live 503 remains unresolved; inspect the actual current SQLSTATE/category and correlate it with deployment/run evidence rather than assuming the category alone identifies root cause.
-- The cloud worker and autonomous continuation are not implemented. Passing Python tests do not mean the autonomous cloud loop is operational.
+- The cloud worker and autonomous continuation are not implemented. Session-independent orchestration is a required design gate, not an existing capability. Passing Python tests do not mean the autonomous cloud loop is operational.
 
 ## 2. Current priority: finish the autonomous engineering cycle
 
 Cross-cutting prerequisite: implement the observability and diagnostic foundation defined in [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md), using the assessed [YJ64 monitor prototype](YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md) as a source for portable event and offline-delivery patterns. The common event schema and initial redaction tests now exist; shared ingestion, durable telemetry storage and end-to-end propagation remain outstanding. **No engineering module is fully integrated until it emits the common diagnostic contract and delivers evidence to shared collection or a bounded recoverable spool with visible delivery state.** The current HTTP 503 investigation is an immediate use case: preserve exact safe SQLSTATE/category, deployment identity, correlation IDs and the failing operation before selecting a fix.
 
-Do not start broad implementation of every engineering discipline until this cycle is operational. The cycle must be capable of taking the next incomplete task from this roadmap, executing bounded work, validating it, recording the result and continuing without requiring the user's phone to remain online.
+Do not start broad implementation of every engineering discipline until this cycle is operational. The cycle must be capable of taking the next incomplete task from this roadmap, executing bounded work, validating it, recording the result and continuing without requiring the user's phone to remain online. It must also be independent of any ChatGPT UI conversation or context-window lifetime; see [SESSION_INDEPENDENCE_PROTOCOL.md](SESSION_INDEPENDENCE_PROTOCOL.md).
 
 ### Cycle milestone A — reliable event delivery
 
@@ -93,6 +93,9 @@ Still required:
 
 ### Cycle milestone C — cloud worker and authorized agent
 - Deploy a separate cloud worker that can wake from queued work independently of the user's device.
+- Implement the [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md): durable task/checkpoint state, replaceable model-call sessions, context-budget monitoring, automatic checkpoint-and-continue, and recovery after process/model-call interruption.
+- Each model request receives only the task-scoped context it needs, reconstructed from durable state, verified artifacts and a compact checkpoint; it must not depend on reading the previous ChatGPT conversation.
+- A context rollover creates a new model API request/session automatically. It is not a request for the user to press the ChatGPT “New chat” button.
 - Give it access only to this repository and the authorized main workflow; do not grant unrelated repositories.
 - Connect an explicitly configured model provider through server-side secrets. No model API key is assumed to exist.
 - Worker reads this roadmap and implementation ledger, chooses the next unblocked task, prepares a bounded change, runs local checks and submits the change to the authorized branch.
@@ -101,6 +104,9 @@ Still required:
 
 ### Cycle milestone D — validation and closed-loop continuation
 - On every change, wait for the exact GitHub Actions run associated with its commit.
+- Before a context budget is exhausted, persist a versioned checkpoint containing current task state, completed actions, pending actions, decisions with evidence references, artifact/commit IDs, retry counters, budget consumption and next safe action.
+- Start the next model request from that checkpoint and authoritative task records; retain a link to prior model-call IDs only for audit, never as the sole source of state.
+- Recover expired worker leases and interrupted model calls through idempotency keys and explicit uncertain-outcome reconciliation; do not blindly repeat side effects.
 - On success, record commit, run URL, conclusion and test evidence, then mark the task complete and select the next task.
 - On failure, collect job summaries and logs, classify the cause, and permit only bounded repair attempts.
 - Re-run CI after every repair.
@@ -124,7 +130,9 @@ The autonomous cycle is operational only after a test demonstrates the full sequ
 5. A verified completion event reaches the receiver and is deduplicated.
 6. The worker records the CI result and advances to the next eligible task, or stops with an explicit reason.
 7. Restarting the worker does not lose or duplicate the task.
-8. Pause/kill switch and budget limits are demonstrated.
+8. A forced context-window rollover completes the same task across at least two distinct model-call sessions without manual intervention or loss of evidence.
+9. A worker crash after checkpoint and before/after a model response resumes safely; duplicate delivery is idempotently suppressed or reconciled.
+10. Pause/kill switch and budget limits are demonstrated.
 
 Until all acceptance criteria pass, describe the system as partially implemented, not autonomous.
 
