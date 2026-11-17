@@ -87,6 +87,7 @@ def plan_provider_capacity(
 
     window_start = now - timedelta(seconds=60)
     recent: list[tuple[datetime, int, str, datetime]] = []
+    active_all: list[tuple[datetime, int, str, datetime]] = []
     for item in reservations:
         if not isinstance(item, dict):
             raise ValueError("reservations must contain objects")
@@ -104,15 +105,18 @@ def plan_provider_capacity(
             not isinstance(expires_at, datetime) or expires_at.tzinfo is None
         ):
             raise ValueError("reservation expires_at must be timezone-aware")
+        reservation = (
+            created_at, tokens, state,
+            expires_at or created_at + timedelta(seconds=reservation_ttl_seconds),
+        )
         if created_at >= window_start:
-            recent.append((created_at, tokens, state, expires_at or created_at + timedelta(seconds=reservation_ttl_seconds)))
+            recent.append(reservation)
+        if state in {"reserved", "sending", "accepted"} and reservation[3] > now:
+            active_all.append(reservation)
 
     requests_used = len(recent)
     tokens_used = sum(item[1] for item in recent)
-    active = [
-        item for item in recent
-        if item[2] in {"reserved", "sending", "accepted"} and item[3] > now
-    ]
+    active = active_all
     retry_times: list[datetime] = []
     reasons: list[str] = []
 
