@@ -316,6 +316,56 @@ class PostgresCycleStore:
                 return checkpoint
 
 
+    def recover_due_quota_tasks(self, limit: int = 100) -> list[int]:
+        """Requeue only quota-blocked tasks whose known reset time has arrived.
+
+        Tasks without a reset timestamp remain blocked. Other blocked reasons
+        are never touched. Exhausted task retry budgets become terminal failures.
+        """
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
+            raise ValueError("limit must be between 1 and 1000")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET state = 'failed', blocked_reason = 'retry_budget_exhausted',
+                        last_error = COALESCE(last_error, 'Quota reset reached after final attempt'),
+                        updated_at = now()
+                    WHERE state = 'blocked'
+                      AND blocked_reason = 'quota_exhausted'
+                      AND quota_reset_at IS NOT NULL
+                      AND quota_reset_at <= now()
+                      AND attempts >= max_attempts
+                    """
+                )
+                cursor.execute(
+                    """
+                    WITH due AS (
+                        SELECT task_id
+                        FROM yj64_task_queue
+                        WHERE state = 'blocked'
+                          AND blocked_reason = 'quota_exhausted'
+                          AND quota_reset_at IS NOT NULL
+                          AND quota_reset_at <= now()
+                          AND attempts < max_attempts
+                        ORDER BY quota_reset_at, task_id
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT %s
+                    )
+                    UPDATE yj64_task_queue AS task
+                    SET state = 'pending', available_at = now(),
+                        blocked_reason = NULL, quota_reset_at = NULL,
+                        locked_at = NULL, lock_owner = NULL, updated_at = now()
+                    FROM due
+                    WHERE task.task_id = due.task_id
+                    RETURNING task.task_id
+                    """,
+                    (limit,),
+                )
+                return [row[0] for row in cursor.fetchall()]
+
     def record_model_request_attempt(
         self, queue_task_id: int, worker_id: str, attempt: dict, decision: dict,
         lease_seconds: int = 300,
@@ -443,17 +493,29 @@ class PostgresCycleStore:
                         """,
                         (summary, queue_task_id, worker_id),
                     )
-                else:
-                    # Quota waits, payload splitting, context rebuilding, and
-                    # unknown failures require an explicit orchestrator action.
+                elif action == "block_until_reset":
                     cursor.execute(
                         """
                         UPDATE yj64_task_queue
-                        SET state = 'blocked', locked_at = NULL, lock_owner = NULL,
+                        SET state = 'blocked', blocked_reason = 'quota_exhausted',
+                            quota_reset_at = %s, locked_at = NULL, lock_owner = NULL,
                             last_error = %s, updated_at = now()
                         WHERE task_id = %s AND state = 'running' AND lock_owner = %s
                         """,
-                        (summary, queue_task_id, worker_id),
+                        (attempt.get("quota_reset_at"), summary, queue_task_id, worker_id),
+                    )
+                else:
+                    # Payload splitting, context rebuilding, and unknown failures
+                    # remain blocked for an explicit orchestrator action.
+                    cursor.execute(
+                        """
+                        UPDATE yj64_task_queue
+                        SET state = 'blocked', blocked_reason = %s,
+                            quota_reset_at = NULL, locked_at = NULL, lock_owner = NULL,
+                            last_error = %s, updated_at = now()
+                        WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                        """,
+                        (action, summary, queue_task_id, worker_id),
                     )
                 if cursor.rowcount != 1:
                     raise RuntimeError("task lease was lost while recording provider attempt")
