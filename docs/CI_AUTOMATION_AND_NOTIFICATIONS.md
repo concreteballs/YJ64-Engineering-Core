@@ -19,7 +19,7 @@ The scheduled worker claims only \`process_ci_event\` tasks and processes at mos
 
 For a validated event, the worker retrieves logs for the exact \`run_id\` and \`run_attempt\`, rejects oversized or unsafe archives, redacts credentials, and persists a deterministic payload manifest plus content-addressed chunks. It reassembles the payload and verifies the complete SHA-256 before marking it \`ready_for_model\`. Log contents are explicitly marked as untrusted diagnostic data, not instructions. No repository code from the downloaded archive is executed.
 
-**LLM transmission is not enabled yet.** The live provider send adapter is still missing, and the database currently has no configured provider limit profiles or global usage budget. The logs are durably prepared for a model request, but no model call is made and no automatic code repair is claimed.
+**LLM transmission is not enabled yet.** The Gemini adapter is implemented and covered by offline tests, but it is not wired into the worker. The database currently has no configured provider limit profiles or global usage budget, and the exact model/pricing/limits have not been verified for the connected Gemini project. The logs are durably prepared for a model request, but no generation call is made and no automatic code repair is claimed.
 
 ## Required configuration
 
@@ -39,9 +39,9 @@ Keep database and provider credentials server-side. Never put them in source fil
 
 ## Remaining activation work
 
-- Implement a live provider send adapter with provider-specific token counting and durable response artifacts.
-- Configure verified provider limit profiles and explicit global/task budgets before enabling any model call.
-- Connect provider reservations, idempotency, ambiguous-send reconciliation, rate-limit retry and chunked-input policy to the worker.
+- Verify the selected Gemini model's current metadata, pricing and project-specific limits; configure the verified provider profile and explicit global/task budgets before enabling generation.
+- Wire the Gemini adapter into a separate `analyze_ci_logs` queue handler using the existing provider reservation, ambiguous-send and retry mechanisms.
+- Add the equivalent Mistral adapter later as a quota-aware fallback; preserve split/retry-after-reset behaviour.
 - Consume the prepared CI payload, persist a structured diagnosis and then implement bounded repair/rebuild orchestration.
 - Implement roadmap task selection and session-independent checkpoints.
 - Add pause/resume/kill switch, monitoring and notifications.
