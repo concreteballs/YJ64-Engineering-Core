@@ -53,7 +53,7 @@ def main() -> int:
                     """
                     SELECT current_database(),
                            array_agg(to_regclass('public.' || table_name)::text)
-                    FROM unnest(%s::text[]) AS table_name
+                    FROM unnest(%s::text[]) AS required(table_name)
                     """,
                     (list(REQUIRED_TABLES),),
                 )
