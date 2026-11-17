@@ -6,9 +6,13 @@ from yj64_engineering_core.automation.provider_budget import ProviderLimitProfil
 
 
 class ReservationCursor:
-    def __init__(self, *, profile=True, duplicate=None, task=None):
+    def __init__(self, *, profile=True, duplicate=None, task=None, global_budget_row="default"):
         self.profile = profile
         self.duplicate = duplicate
+        self.global_budget_row = (
+            (10000, 100000, 100, 1000, 100, 1000)
+            if global_budget_row == "default" else global_budget_row
+        )
         self.task = task or (
             "running", "worker-a", None,
             None, None, None, 0, 0, 0, 0, 0, 0,
@@ -57,7 +61,7 @@ class ReservationCursor:
                 datetime(2026, 12, 1, 0, 0, tzinfo=timezone.utc),
             )
         elif "FROM yj64_cycle_usage_budget" in query:
-            self.one = (10000, 100000, 100, 1000, 100, 1000)
+            self.one = self.global_budget_row
         elif "COALESCE(SUM(COALESCE(input_tokens_actual" in query:
             self.one = (0, 0, 0, 0)
         elif "INSERT INTO yj64_provider_request_reservations" in query:
@@ -135,6 +139,25 @@ class ProviderReservationTests(unittest.TestCase):
         )
         self.assertEqual(task_updates_after_first, 1)
         self.assertEqual(task_updates_after_second, 1)
+
+    def test_missing_global_budget_fails_closed(self):
+        cursor = ReservationCursor(global_budget_row=None)
+        result = self.reserve(self.store(cursor))
+        self.assertFalse(result["reserved"])
+        self.assertEqual(result["action"], "hold_for_review")
+        self.assertIn("global usage budget", result["reason"])
+        self.assertFalse(any("INSERT INTO yj64_provider_request_reservations" in q for q, _ in cursor.statements))
+
+    def test_global_daily_request_budget_returns_database_reset_time(self):
+        cursor = ReservationCursor(global_budget_row=(None, None, None, None, 0, None))
+        result = self.reserve(self.store(cursor))
+        self.assertFalse(result["reserved"])
+        self.assertEqual(result["action"], "schedule_retry")
+        self.assertEqual(result["retry_at"], datetime(2026, 11, 18, 0, 0, tzinfo=timezone.utc))
+
+    def test_global_budget_cannot_be_configured_with_every_limit_unbounded(self):
+        with self.assertRaisesRegex(ValueError, "at least one global"):
+            self.store(ReservationCursor()).set_cycle_usage_budget()
 
     def test_missing_provider_profile_fails_closed(self):
         cursor = ReservationCursor(profile=False)
