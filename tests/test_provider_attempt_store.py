@@ -47,7 +47,7 @@ class ReservationAttemptCursor(FakeCursor):
     def execute(self, query, params):
         super().execute(query, params)
         if "SELECT input_tokens_estimated, output_tokens_estimated" in query:
-            self._fetch = (100, 40, 0.025, self.reservation_state)
+            self._fetch = (100, 40, 0.025, True, self.reservation_state)
 
 
 class FakeConnection:
