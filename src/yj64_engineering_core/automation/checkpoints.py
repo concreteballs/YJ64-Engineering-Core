@@ -7,6 +7,7 @@ of authoritative task state; it is not a model transcript or a live session.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 from datetime import datetime, timezone
@@ -61,12 +62,13 @@ def create_checkpoint(
         raise ValueError("task_id is required")
     if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
         raise ValueError("sequence must be a positive integer")
-    if state not in _STATES:
+    if not isinstance(state, str) or state not in _STATES:
         raise ValueError("unsupported task state")
     if not isinstance(task_spec_version, str) or not task_spec_version.strip():
         raise ValueError("task_spec_version is required")
-    if previous_checkpoint_hash is not None and not _SHA256_RE.fullmatch(
-        previous_checkpoint_hash
+    if previous_checkpoint_hash is not None and (
+        not isinstance(previous_checkpoint_hash, str)
+        or not _SHA256_RE.fullmatch(previous_checkpoint_hash)
     ):
         raise ValueError("previous_checkpoint_hash must be a lowercase SHA-256 hash")
     if not isinstance(artifact_refs, (list, tuple)) or any(
@@ -109,6 +111,6 @@ def verify_checkpoint(checkpoint: Mapping[str, Any]) -> bool:
     if not isinstance(supplied_hash, str) or not _SHA256_RE.fullmatch(supplied_hash):
         raise ValueError("checkpoint_hash must be a lowercase SHA-256 hash")
     expected_hash = hashlib.sha256(_canonical_json(data)).hexdigest()
-    if not hashlib.compare_digest(supplied_hash, expected_hash):
+    if not hmac.compare_digest(supplied_hash, expected_hash):
         raise ValueError("checkpoint integrity check failed")
     return True
