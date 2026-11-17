@@ -51,8 +51,15 @@ class ReservationCursor:
             self.one = ("sending",)
         elif "SELECT now()" in query:
             self.one = (datetime(2026, 11, 17, 16, 0, tzinfo=timezone.utc),)
+        elif "SELECT date_trunc('day'" in query:
+            self.one = (
+                datetime(2026, 11, 18, 0, 0, tzinfo=timezone.utc),
+                datetime(2026, 12, 1, 0, 0, tzinfo=timezone.utc),
+            )
         elif "FROM yj64_cycle_usage_budget" in query:
-            self.one = None
+            self.one = (10000, 100000, 100, 1000, 100, 1000)
+        elif "COALESCE(SUM(COALESCE(input_tokens_actual" in query:
+            self.one = (0, 0, 0, 0)
         elif "INSERT INTO yj64_provider_request_reservations" in query:
             self.rowcount = 1
         elif "UPDATE yj64_task_queue" in query:
