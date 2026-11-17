@@ -49,6 +49,10 @@ class FakeStore:
         self.saved = (manifest, chunks)
         return {"persisted": True, "payload_id": manifest["payload_id"]}
 
+    def enqueue_task(self, task_type, payload, dedupe_key, max_attempts=3):
+        self.enqueued = (task_type, payload, dedupe_key, max_attempts)
+        return {"enqueued": True, "duplicate": False, "task_id": 99, "state": "pending"}
+
     def assemble_payload_for_model(
         self, task_id, worker_id, payload_id,
         require_acknowledgements=False, lease_seconds=300,
@@ -142,6 +146,8 @@ class CiLogIngestionTests(unittest.TestCase):
         self.assertIn("[REDACTED]", combined)
         self.assertNotIn("secret-token", combined)
         self.assertEqual(manifest["source_refs"][0], event["run_url"])
+        self.assertEqual(store.enqueued[0], "analyze_ci_logs")
+        self.assertEqual(store.enqueued[1]["event_id"], 42)
 
     def test_missing_github_token_blocks_before_network(self):
         event = {
