@@ -815,13 +815,16 @@ class PostgresCycleStore:
                     raise RuntimeError("provider capacity requires the current task lease")
                 cursor.execute(
                     """
-                    SELECT reservation_id, state FROM yj64_provider_request_reservations
+                    SELECT reservation_id, state, queue_task_id, provider, model, endpoint
+                    FROM yj64_provider_request_reservations
                     WHERE idempotency_key = %s
                     """,
                     (idempotency_key,),
                 )
                 previous = cursor.fetchone()
                 if previous is not None:
+                    if previous[2:] != (queue_task_id, provider, model, endpoint):
+                        raise ValueError("idempotency_key is already bound to a different task or provider request")
                     return {
                         "reserved": previous[1] == "reserved",
                         "duplicate": True,
