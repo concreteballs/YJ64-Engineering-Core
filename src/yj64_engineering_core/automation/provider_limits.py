@@ -126,7 +126,7 @@ def classify_provider_error(
         return RetryDecision("concurrency_limited", "schedule_retry", True, delay,
                              "Reduce concurrency and retry after the indicated delay")
 
-    if status_code in (400, 401, 403, 404, 422) or status_code is None:
+    if status_code in (400, 401, 403, 404, 422):
         return RetryDecision("permanent_provider_error", "fail_or_require_configuration", False, None,
                              "Do not retry invalid request, authentication, permission, or model configuration")
 
