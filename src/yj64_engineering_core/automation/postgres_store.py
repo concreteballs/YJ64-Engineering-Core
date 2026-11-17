@@ -1386,6 +1386,7 @@ class PostgresCycleStore:
                         SET state = 'failed', locked_at = NULL, lock_owner = NULL,
                             last_error = %s, updated_at = now()
                         WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                        RETURNING state
                         """,
                         (summary, queue_task_id, worker_id),
                     )
@@ -1397,6 +1398,7 @@ class PostgresCycleStore:
                             quota_reset_at = %s, locked_at = NULL, lock_owner = NULL,
                             last_error = %s, updated_at = now()
                         WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                        RETURNING state
                         """,
                         (attempt.get("quota_reset_at"), summary, queue_task_id, worker_id),
                     )
@@ -1410,6 +1412,7 @@ class PostgresCycleStore:
                             quota_reset_at = NULL, locked_at = NULL, lock_owner = NULL,
                             last_error = %s, updated_at = now()
                         WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                        RETURNING state
                         """,
                         (block_reason_override or action, summary, queue_task_id, worker_id),
                     )
