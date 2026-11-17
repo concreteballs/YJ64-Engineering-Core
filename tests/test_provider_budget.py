@@ -66,6 +66,15 @@ class ProviderBudgetTests(unittest.TestCase):
         )
         self.assertEqual(tpm_limited.action, "split_or_decompose")
 
+    def test_payload_byte_limit_is_independent_of_token_limit(self):
+        result = plan_provider_capacity(
+            ProviderLimitProfile("p", "m", "/v1", max_input_tokens=1000, max_payload_bytes=100),
+            input_tokens=10, payload_bytes=101, now=self.now,
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.action, "split_or_decompose")
+        self.assertIn("byte", result.reason)
+
     def test_output_limit_is_distinct(self):
         result = plan_provider_capacity(
             ProviderLimitProfile("p", "m", "/v1", max_output_tokens=5),
