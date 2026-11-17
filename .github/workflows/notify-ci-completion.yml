@@ -89,14 +89,22 @@ jobs:
                   }
                   safe_diagnostics = {
                       "database_connection_error",
+                      "database_authentication_error",
                       "database_schema_error",
+                      "database_permission_error",
                       "database_integrity_error",
+                      "database_feature_error",
                       "database_driver_error",
                       "database_operation_error",
                   }
                   if code in allowed:
                       print("Webhook diagnostic: " + code)
-                  if diagnostic in safe_diagnostics:
+                  if diagnostic in safe_diagnostics or (
+                      isinstance(diagnostic, str)
+                      and diagnostic.startswith("database_sqlstate_")
+                      and len(diagnostic) == len("database_sqlstate_") + 5
+                      and diagnostic[-5:].isalnum()
+                  ):
                       print("Database diagnostic: " + diagnostic)
                   if isinstance(sqlstate, str) and len(sqlstate) == 5 and sqlstate.isalnum():
                       print("PostgreSQL SQLSTATE: " + sqlstate)
