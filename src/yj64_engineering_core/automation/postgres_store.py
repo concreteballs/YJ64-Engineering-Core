@@ -200,3 +200,71 @@ class PostgresCycleStore:
                     (str(reason)[:2000], task_id, worker_id),
                 )
                 return cursor.rowcount == 1
+
+    def save_checkpoint(self, queue_task_id: int, checkpoint: dict) -> bool:
+        """Persist a verified checkpoint once; reject conflicting sequence reuse."""
+        from .checkpoints import verify_checkpoint
+
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        verify_checkpoint(checkpoint)
+        if not isinstance(checkpoint, dict):
+            raise ValueError("checkpoint must be an object")
+        payload = json.dumps(checkpoint, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_task_checkpoints
+                        (queue_task_id, sequence, schema_version, checkpoint_hash,
+                         previous_checkpoint_hash, checkpoint)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                    ON CONFLICT (queue_task_id, sequence) DO NOTHING
+                    RETURNING checkpoint_id
+                    """,
+                    (
+                        queue_task_id, checkpoint["sequence"], checkpoint["schema_version"],
+                        checkpoint["checkpoint_hash"], checkpoint["previous_checkpoint_hash"],
+                        payload,
+                    ),
+                )
+                inserted = cursor.fetchone()
+                if inserted is not None:
+                    return True
+                cursor.execute(
+                    """
+                    SELECT checkpoint_hash FROM yj64_task_checkpoints
+                    WHERE queue_task_id = %s AND sequence = %s
+                    """,
+                    (queue_task_id, checkpoint["sequence"]),
+                )
+                existing = cursor.fetchone()
+                if existing is None or existing[0].strip() != checkpoint["checkpoint_hash"]:
+                    raise ValueError("checkpoint sequence already exists with different content")
+                return False
+
+    def load_latest_checkpoint(self, queue_task_id: int) -> dict | None:
+        """Load and integrity-check the newest checkpoint for a queue task."""
+        from .checkpoints import verify_checkpoint
+
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT checkpoint FROM yj64_task_checkpoints
+                    WHERE queue_task_id = %s
+                    ORDER BY sequence DESC
+                    LIMIT 1
+                    """,
+                    (queue_task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                checkpoint = row[0]
+                if isinstance(checkpoint, str):
+                    checkpoint = json.loads(checkpoint)
+                verify_checkpoint(checkpoint)
+                return checkpoint
