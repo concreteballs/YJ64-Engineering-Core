@@ -1,0 +1,34 @@
+name: Gemini API key check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-gemini-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Gemini API access without exposing the key
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            echo "GEMINI_API_KEY secret is missing or empty."
+            exit 1
+          fi
+          code="$(curl --silent --show-error --output /tmp/gemini-models.json --write-out '%{http_code}' \
+            --header "x-goog-api-key: ${GEMINI_API_KEY}" \
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1")"
+          if [ "$code" != "200" ]; then
+            echo "Gemini API check failed with HTTP $code. Response body suppressed."
+            exit 1
+          fi
+          if ! jq -e '.models | length > 0' /tmp/gemini-models.json >/dev/null; then
+            echo "Gemini API responded, but the models list was not valid."
+            exit 1
+          fi
+          echo "Gemini API key is valid and the API is reachable. No generation request was made."
