@@ -327,7 +327,6 @@ class PostgresCycleStore:
                            provider_request_id, provider_result_ref, resolution_evidence_ref
                     FROM yj64_provider_request_reservations
                     WHERE queue_task_id = %s AND state = 'completed'
-                      AND resolution_kind = 'provider_found'
                       AND provider_result_ref IS NOT NULL
                     ORDER BY created_at, reservation_id
                     """,
@@ -1703,7 +1702,8 @@ class PostgresCycleStore:
         self, queue_task_id: int, worker_id: str, reservation_id: str,
         *, outcome: str, input_tokens_actual: int | None = None,
         output_tokens_actual: int | None = None, actual_cost_usd=None,
-        provider_request_id: str | None = None, error_classification: str | None = None,
+        provider_request_id: str | None = None, provider_result_ref: str | None = None,
+        error_classification: str | None = None,
         lease_seconds: int = 300,
     ) -> dict:
         """Close a sent request or conservatively retain an ambiguous one as unknown."""
@@ -1711,6 +1711,15 @@ class PostgresCycleStore:
 
         if outcome not in {"completed", "failed", "unknown"}:
             raise ValueError("outcome must be completed, failed or unknown")
+        if outcome == "completed" and (
+            not isinstance(provider_result_ref, str) or not provider_result_ref.strip()
+            or len(provider_result_ref) > 1024
+        ):
+            raise ValueError("completed provider request requires a durable provider_result_ref")
+        if provider_result_ref is not None and (
+            "?" in provider_result_ref or "#" in provider_result_ref
+        ):
+            raise ValueError("provider_result_ref must be an opaque artifact reference, not a signed URL")
         for name, value in (
             ("input_tokens_actual", input_tokens_actual),
             ("output_tokens_actual", output_tokens_actual),
@@ -1781,13 +1790,15 @@ class PostgresCycleStore:
                     SET state = %s, input_tokens_actual = %s,
                         output_tokens_actual = %s, actual_cost_usd = %s,
                         provider_request_id = COALESCE(%s, provider_request_id),
+                        provider_result_ref = COALESCE(%s, provider_result_ref),
                         last_error_classification = %s,
                         finished_at = now(), expires_at = NULL
                     WHERE reservation_id = %s
                     """,
                     (
                         outcome, actual_input, actual_output, final_cost,
-                        provider_request_id, error_classification, reservation_id,
+                        provider_request_id, provider_result_ref,
+                        error_classification, reservation_id,
                     ),
                 )
                 cursor.execute(
