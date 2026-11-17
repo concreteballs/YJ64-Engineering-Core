@@ -36,6 +36,9 @@ def _safe_database_error_code(exc: Exception) -> str:
         return "database_connection_error"
     if name in {"ProgrammingError", "UndefinedTable", "UndefinedColumn"}:
         return "database_schema_error"
+    sqlstate = getattr(exc, "sqlstate", None)
+    if isinstance(sqlstate, str) and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+        return "database_sqlstate_" + sqlstate
     if name in {"IntegrityError", "UniqueViolation", "CheckViolation"}:
         return "database_integrity_error"
     if name in {"ImportError", "ModuleNotFoundError"}:
@@ -181,7 +184,13 @@ class handler(BaseHTTPRequestHandler):
             self._send_json(
                 503,
                 {"ok": False, "error": "persistent_queue_unavailable",
-                 "diagnostic": _safe_database_error_code(exc)},
+                 "diagnostic": _safe_database_error_code(exc),
+                 "sqlstate": (
+                     getattr(exc, "sqlstate")
+                     if isinstance(getattr(exc, "sqlstate", None), str)
+                     and re.fullmatch(r"[0-9A-Z]{5}", getattr(exc, "sqlstate"))
+                     else None
+                 )},
             )
             return
         self._send_json(
