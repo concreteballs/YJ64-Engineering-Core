@@ -70,7 +70,7 @@ No new or existing engineering module is considered **fully integrated** until i
 1. Finish reliable GitHub Actions completion-event delivery to the authenticated receiver.
 2. Verify actual PostgreSQL persistence in Supabase: event record, durable task, deduplication and queue state.
 3. Verify atomic task claims, leases, bounded retries, completion/blocked states and recovery after worker restart.
-4. Deploy a separate cloud worker that can claim tasks without relying on the phone or an open ChatGPT conversation.
+4. Deploy a separate cloud worker that can claim tasks without relying on the phone, browser, or an open ChatGPT conversation. The worker must comply with the [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md): durable task state is authoritative; model calls are replaceable, bounded sessions; context rollover is automatic and recoverable.
 5. Connect a server-side model provider using a separately configured API key; do not assume a ChatGPT subscription is an API credential.
 6. Make the worker read this strategic plan, the detailed roadmap and implementation ledger; select only the next unblocked task.
 7. Require exact-commit CI validation before a task is marked complete or the next dependent task is started.
@@ -85,6 +85,9 @@ No new or existing engineering module is considered **fully integrated** until i
 - Completion event is authenticated, persisted and deduplicated.
 - The worker records the evidence and advances, or stops with a clear reason.
 - Restart does not lose or duplicate work.
+- Context-window exhaustion triggers a persisted checkpoint and a fresh model request automatically, without a user pressing “New chat”.
+- A new worker process can resume from durable state without access to the previous model conversation.
+- Replayed or uncertain in-flight operations are handled idempotently and do not duplicate external side effects.
 - Pause/kill switch and budget limits are demonstrated.
 
 **Exit gate:** do not call the cycle autonomous until the full acceptance sequence passes. Do not start broad automated module development before this gate.
