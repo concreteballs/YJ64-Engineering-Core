@@ -862,6 +862,10 @@ class PostgresCycleStore:
             raise ValueError("unsupported profile_source")
         if profile_source != "operator_config" and valid_until is None:
             raise ValueError("provider-derived profiles require valid_until")
+        if valid_until is not None and (
+            not hasattr(valid_until, "tzinfo") or valid_until.tzinfo is None
+        ):
+            raise ValueError("valid_until must be timezone-aware")
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
