@@ -247,3 +247,12 @@ The final high-performance stage is a deliberate test mode, not an unrestricted 
 **Database:** the `yj64_task_checkpoints` table is deployed to the YJ64 Supabase project with RLS enabled and server-role-only access. It is empty pending application-level integration. No autonomous worker is running; queue claim/lease, checkpoint save/recovery, provider calls and durable retry scheduling have not yet been proven end to end.
 
 **Next implementation gates:** (1) verify actual database round-trip with a disposable queued task and remove the test data; (2) bind checkpoint save/recovery to task lifecycle and lease ownership; (3) add provider request metadata and durable retry schedule; (4) implement and test provider-limit classification and chunk assembly; (5) only then enable a bounded worker with explicit budgets and stop conditions.
+
+
+## 4.2 Provider failure ledger and retry foundation
+
+**Partially implemented; worker execution remains disabled.** Provider failures are classified into rate limiting, exhausted quota, oversized payload, context overflow, transient service errors, concurrency pressure, permanent authentication/configuration failures and unknown errors. Retry-After and quota reset hints take precedence over bounded exponential backoff. The classifier is pure and deterministic when jitter is supplied by the caller.
+
+A private append-only PostgreSQL attempt ledger records provider/model/endpoint, provider request ID, attempt number, HTTP status, classification, safe allowlisted headers, retry delay/reset metadata and a sanitized summary. It deliberately excludes prompts, response bodies and credentials. Recording an attempt and transitioning the leased task are one database transaction: retryable transient failures return the task to pending at a future available_at and release the worker; quota, oversized/context payload and unknown cases become blocked; permanent configuration failures become failed.
+
+The current implementation is a persistence/classification foundation, not a complete retry scheduler. A future orchestrator must explicitly handle blocked quota reset, construct a smaller request after 413/context overflow, and enforce task/global budgets. Do not run a worker until those transitions and provider adapters are integrated and verified.
