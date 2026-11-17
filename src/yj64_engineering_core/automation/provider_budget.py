@@ -16,6 +16,7 @@ class ProviderLimitProfile:
     max_concurrency: int | None = None
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
+    max_payload_bytes: int | None = None
     tokens_per_minute_includes_output: bool = True
     input_cost_per_million_usd: float | None = None
     output_cost_per_million_usd: float | None = None
@@ -25,7 +26,7 @@ class ProviderLimitProfile:
             raise ValueError("provider, model and endpoint are required")
         for name in (
             "requests_per_minute", "tokens_per_minute", "max_concurrency",
-            "max_input_tokens", "max_output_tokens",
+            "max_input_tokens", "max_output_tokens", "max_payload_bytes",
         ):
             value = getattr(self, name)
             if value is not None and (
@@ -59,6 +60,7 @@ def plan_provider_capacity(
     *,
     input_tokens: int,
     output_tokens: int = 0,
+    payload_bytes: int = 0,
     reservations: Iterable[dict] = (),
     now: datetime | None = None,
     reservation_ttl_seconds: int = 300,
@@ -70,7 +72,10 @@ def plan_provider_capacity(
     """
     if not isinstance(profile, ProviderLimitProfile):
         raise ValueError("profile must be a ProviderLimitProfile")
-    for name, value in (("input_tokens", input_tokens), ("output_tokens", output_tokens)):
+    for name, value in (
+        ("input_tokens", input_tokens), ("output_tokens", output_tokens),
+        ("payload_bytes", payload_bytes),
+    ):
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise ValueError(f"{name} must be a non-negative integer")
     if not isinstance(reservation_ttl_seconds, int) or isinstance(reservation_ttl_seconds, bool) or reservation_ttl_seconds < 1:
@@ -79,6 +84,9 @@ def plan_provider_capacity(
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
 
+    if profile.max_payload_bytes is not None and payload_bytes > profile.max_payload_bytes:
+        return CapacityDecision(False, "split_or_decompose", None,
+                                 "Request body exceeds the provider payload-byte limit", 0, 0, 0)
     if profile.max_input_tokens is not None and input_tokens > profile.max_input_tokens:
         return CapacityDecision(False, "split_or_decompose", None,
                                  "Request exceeds the provider input-token limit", 0, 0, 0)
