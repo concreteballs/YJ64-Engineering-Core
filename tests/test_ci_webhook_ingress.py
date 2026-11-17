@@ -92,6 +92,51 @@ class CiWebhookIngressTests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(result["error"], "unauthorized")
 
+
+    def test_sqlstate_is_checked_before_generic_exception_class(self):
+        class FakeProgrammingError(Exception):
+            pgcode = "42501"
+
+        self.assertEqual(
+            API._safe_database_error_code(FakeProgrammingError("do not expose")),
+            "database_permission_error",
+        )
+        self.assertEqual(API._database_sqlstate(FakeProgrammingError()), "42501")
+
+    def test_sqlstate_attribute_is_supported(self):
+        class FakeDatabaseError(Exception):
+            sqlstate = "42P01"
+
+        self.assertEqual(
+            API._safe_database_error_code(FakeDatabaseError()),
+            "database_schema_error",
+        )
+
+    def test_invalid_sqlstate_is_ignored(self):
+        class FakeDatabaseError(Exception):
+            sqlstate = "not-a-code"
+            pgcode = "bad"
+
+        self.assertIsNone(API._database_sqlstate(FakeDatabaseError()))
+
+    def test_database_failure_returns_safe_sqlstate_without_exception_text(self):
+        class FakeProgrammingError(Exception):
+            pgcode = "42501"
+
+        class FailingStore:
+            def __init__(self, database_url):
+                pass
+
+            def record_ci_event(self, event):
+                raise FakeProgrammingError("sensitive connection detail")
+
+        with patch.object(API, "PostgresCycleStore", FailingStore):
+            status, result = send_request(self.payload())
+        self.assertEqual(status, 503)
+        self.assertEqual(result["diagnostic"], "database_permission_error")
+        self.assertEqual(result["sqlstate"], "42501")
+        self.assertNotIn("sensitive", json.dumps(result))
+
     def test_returns_503_when_database_is_not_configured(self):
         with patch.dict(os.environ, {"YJ64_DATABASE_URL": "", "DATABASE_URL": ""}):
             status, result = send_request(self.payload())
