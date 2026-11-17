@@ -155,13 +155,16 @@ class PostgresCycleStoreTests(unittest.TestCase):
     def test_recovery_maintenance_runs_both_bounded_recovery_operations(self):
         store = self.store(FakeCursor())
         with patch.object(PostgresCycleStore, "recover_due_quota_tasks", return_value=[12]) as quota, \
-             patch.object(PostgresCycleStore, "expire_unsent_provider_reservations", return_value=["r1"]) as expired:
+             patch.object(PostgresCycleStore, "expire_unsent_provider_reservations", return_value=["r1"]) as expired, \
+             patch.object(PostgresCycleStore, "expire_deadline_tasks", return_value=[13]) as deadlines:
             result = store.run_recovery_maintenance(limit=25)
         quota.assert_called_once_with(limit=25)
         expired.assert_called_once_with(limit=25)
+        deadlines.assert_called_once_with(limit=25)
         self.assertEqual(result, {
             "quota_tasks_requeued": [12],
             "unsent_reservations_expired": ["r1"],
+            "deadline_tasks_failed": [13],
         })
 
     def test_fail_retries_with_bounded_delay(self):
