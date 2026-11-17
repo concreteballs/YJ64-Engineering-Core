@@ -12,6 +12,7 @@ class ReservationCursor:
         self.task = task or (
             "running", "worker-a", None,
             None, None, None, 0, 0, 0, 0, 0, 0,
+            None, None, 0, 0,
         )
         self.one = None
         self.many = []
@@ -154,6 +155,7 @@ class ProviderReservationTests(unittest.TestCase):
         cursor = ReservationCursor(task=(
             "running", "worker-a", None,
             50, 100, None, 0, 0, 0, 0, 0, 0,
+            None, None, 0, 0,
         ))
         result = self.reserve(self.store(cursor))
         self.assertFalse(result["reserved"])
