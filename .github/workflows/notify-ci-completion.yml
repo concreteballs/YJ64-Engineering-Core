@@ -33,7 +33,14 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import urllib.error
+          import urllib.parse
           import urllib.request
+
+          target = urllib.parse.urlsplit(os.environ["WEBHOOK_URL"])
+          if target.scheme != "https" or not target.hostname:
+              raise SystemExit("Webhook URL must use HTTPS and include a hostname.")
+          print(f"Webhook target: https://{target.hostname}{target.path or '/'}")
 
           payload = {
               "event": "yj64.ci.completed",
@@ -56,8 +63,15 @@ jobs:
               },
               method="POST",
           )
-          with urllib.request.urlopen(request, timeout=20) as response:
-              if not 200 <= response.status < 300:
-                  raise SystemExit(f"Webhook returned HTTP {response.status}")
-              print(f"Webhook accepted CI event (HTTP {response.status}).")
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  if not 200 <= response.status < 300:
+                      raise SystemExit(f"Webhook returned HTTP {response.status}")
+                  print(f"Webhook accepted CI event (HTTP {response.status}).")
+          except urllib.error.HTTPError as error:
+              print(f"Webhook endpoint returned HTTP {error.code}; target host/path shown above.")
+              raise
+          except urllib.error.URLError as error:
+              print(f"Webhook connection failed: {error.reason}")
+              raise
           PY
