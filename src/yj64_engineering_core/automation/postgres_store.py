@@ -1243,6 +1243,8 @@ class PostgresCycleStore:
         self, *, daily_token_limit: int | None = None,
         monthly_token_limit: int | None = None,
         daily_cost_limit_usd=None, monthly_cost_limit_usd=None,
+        daily_request_limit: int | None = None,
+        monthly_request_limit: int | None = None,
     ) -> None:
         """Set durable global usage ceilings; None means that dimension is uncapped."""
         from decimal import Decimal, InvalidOperation
@@ -1250,6 +1252,14 @@ class PostgresCycleStore:
         for name, value in (
             ("daily_token_limit", daily_token_limit),
             ("monthly_token_limit", monthly_token_limit),
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer or None")
+        for name, value in (
+            ("daily_request_limit", daily_request_limit),
+            ("monthly_request_limit", monthly_request_limit),
         ):
             if value is not None and (
                 not isinstance(value, int) or isinstance(value, bool) or value < 0
@@ -1276,16 +1286,20 @@ class PostgresCycleStore:
                     """
                     INSERT INTO yj64_cycle_usage_budget
                         (budget_id, daily_token_limit, monthly_token_limit,
-                         daily_cost_limit_usd, monthly_cost_limit_usd, updated_at)
-                    VALUES (1, %s, %s, %s, %s, now())
+                         daily_cost_limit_usd, monthly_cost_limit_usd,
+                         daily_request_limit, monthly_request_limit, updated_at)
+                    VALUES (1, %s, %s, %s, %s, %s, %s, now())
                     ON CONFLICT (budget_id) DO UPDATE SET
                         daily_token_limit = EXCLUDED.daily_token_limit,
                         monthly_token_limit = EXCLUDED.monthly_token_limit,
                         daily_cost_limit_usd = EXCLUDED.daily_cost_limit_usd,
                         monthly_cost_limit_usd = EXCLUDED.monthly_cost_limit_usd,
+                        daily_request_limit = EXCLUDED.daily_request_limit,
+                        monthly_request_limit = EXCLUDED.monthly_request_limit,
                         updated_at = now()
                     """,
-                    (daily_token_limit, monthly_token_limit, costs[0], costs[1]),
+                    (daily_token_limit, monthly_token_limit, costs[0], costs[1],
+                     daily_request_limit, monthly_request_limit),
                 )
 
     def reserve_provider_capacity(
