@@ -215,7 +215,7 @@ class PostgresCycleStore:
         self, queue_task_id: int, worker_id: str, checkpoint: dict,
         lease_seconds: int = 300,
     ) -> bool:
-        """Persist a verified checkpoint only while the caller owns a live lease."""
+        """Persist a verified, sequential checkpoint only under a live task lease."""
         from .checkpoints import verify_checkpoint
 
         if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
@@ -244,11 +244,41 @@ class PostgresCycleStore:
                     raise RuntimeError("cannot checkpoint without a live task lease")
                 cursor.execute(
                     """
+                    SELECT checkpoint_hash FROM yj64_task_checkpoints
+                    WHERE queue_task_id = %s AND sequence = %s
+                    """,
+                    (queue_task_id, checkpoint["sequence"]),
+                )
+                existing_sequence = cursor.fetchone()
+                if existing_sequence is not None:
+                    if existing_sequence[0].strip() == checkpoint["checkpoint_hash"]:
+                        return False
+                    raise ValueError("checkpoint sequence already exists with different content")
+                cursor.execute(
+                    """
+                    SELECT sequence, checkpoint_hash FROM yj64_task_checkpoints
+                    WHERE queue_task_id = %s
+                    ORDER BY sequence DESC LIMIT 1
+                    FOR UPDATE
+                    """,
+                    (queue_task_id,),
+                )
+                latest = cursor.fetchone()
+                if latest is None:
+                    expected_sequence, expected_previous_hash = 1, None
+                else:
+                    expected_sequence = latest[0] + 1
+                    expected_previous_hash = latest[1].strip()
+                if checkpoint["sequence"] != expected_sequence:
+                    raise ValueError("checkpoint sequence must immediately follow the latest checkpoint")
+                if checkpoint["previous_checkpoint_hash"] != expected_previous_hash:
+                    raise ValueError("checkpoint previous hash does not match the latest checkpoint")
+                cursor.execute(
+                    """
                     INSERT INTO yj64_task_checkpoints
                         (queue_task_id, sequence, schema_version, checkpoint_hash,
                          previous_checkpoint_hash, checkpoint)
                     VALUES (%s, %s, %s, %s, %s, %s::jsonb)
-                    ON CONFLICT (queue_task_id, sequence) DO NOTHING
                     RETURNING checkpoint_id
                     """,
                     (
@@ -257,20 +287,7 @@ class PostgresCycleStore:
                         payload,
                     ),
                 )
-                inserted = cursor.fetchone()
-                if inserted is not None:
-                    return True
-                cursor.execute(
-                    """
-                    SELECT checkpoint_hash FROM yj64_task_checkpoints
-                    WHERE queue_task_id = %s AND sequence = %s
-                    """,
-                    (queue_task_id, checkpoint["sequence"]),
-                )
-                existing = cursor.fetchone()
-                if existing is None or existing[0].strip() != checkpoint["checkpoint_hash"]:
-                    raise ValueError("checkpoint sequence already exists with different content")
-                return False
+                return cursor.fetchone() is not None
 
     def load_latest_checkpoint(self, queue_task_id: int) -> dict | None:
         """Load and integrity-check the newest checkpoint for a queue task."""
