@@ -856,6 +856,35 @@ class PostgresCycleStore:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
+                    SELECT capacity_scope FROM yj64_provider_limit_profiles
+                    WHERE provider = %s AND model = %s AND endpoint = %s
+                    FOR UPDATE
+                    """,
+                    (profile.provider, profile.model, profile.endpoint),
+                )
+                existing_profile = cursor.fetchone()
+                old_scope = existing_profile[0] if existing_profile else None
+                for scope in sorted({capacity_scope, old_scope} - {None}):
+                    cursor.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext(%s))", (scope,)
+                    )
+                if old_scope is not None and old_scope != capacity_scope:
+                    cursor.execute(
+                        """
+                        SELECT 1 FROM yj64_provider_request_reservations
+                        WHERE capacity_scope = %s
+                          AND (sent_at >= now() - interval '60 seconds'
+                               OR state IN ('reserved', 'sending', 'accepted', 'unknown'))
+                        LIMIT 1
+                        """,
+                        (old_scope,),
+                    )
+                    if cursor.fetchone() is not None:
+                        raise RuntimeError(
+                            "cannot change quota scope while recent or active reservations exist"
+                        )
+                cursor.execute(
+                    """
                     INSERT INTO yj64_provider_limit_profiles
                         (provider, model, endpoint, requests_per_minute,
                          tokens_per_minute, max_concurrency, max_input_tokens,
