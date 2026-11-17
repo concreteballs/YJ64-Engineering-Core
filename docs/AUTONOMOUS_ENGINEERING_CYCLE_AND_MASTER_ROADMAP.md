@@ -49,10 +49,11 @@ This document is the execution index for the autonomous development cycle. It se
 - PostgreSQL store with idempotent CI event persistence, one processing task per event, atomic leased claims, bounded retries, completion and blocked states.
 - Vercel receiver now persists accepted events and enqueues a process_ci_event task when PostgreSQL is configured; it does not run a model or repository code.
 - Tests for event persistence, duplicate suppression, lease claiming, completion, retry and ingress validation.
-- Latest verified main test run at this reconciliation: [43981929835](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43981929835), conclusion success, commit 2a3245a91d4fc50e4fce441c498ce5b33c135a24.
-- The separate CI completion-webhook delivery run [43981930959](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/43981930959) failed with HTTP 401 Unauthorized. GitHub has both sender secrets configured, but the receiver rejected the bearer token. The two secret values must be aligned; values must not be exposed.
-- PostgreSQL database, migration application, Vercel environment configuration and end-to-end persistence are not yet verified. The cloud worker and autonomous continuation are not implemented.
-- This confirms software tests passed; it does not mean the autonomous cloud loop is operational.
+- Latest verified Python test run: [44097061043](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44097061043), conclusion success, commit 3a390ae44f5b16dc197f740403ef64c38f6d5118.
+- The separate CI completion-webhook delivery run [44098093733](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44098093733) failed with HTTP 503 (persistent_queue_unavailable); URL canonicalization and webhook authentication had already passed, so the previous 401/secret-alignment note is obsolete.
+- Supabase project ggambesixwejgbjwtnhw is active; migrations 0001 and 0002 are applied; both public.yj64_ci_events and public.yj64_task_queue exist with expected columns. The Vercel Production YJ64_DATABASE_URL is configured. Direct Supabase checks confirmed public search_path resolution, INSERT privileges for postgres, and RLS bypass for that role. These checks do not prove that Vercel's live runtime connection can execute the transaction.
+- Actual end-to-end event and task persistence remain unverified because the receiver still returns 503. The current database_schema_error label is too coarse: it classifies ProgrammingError before inspecting SQLSTATE and does not check pgcode. Next diagnostic change: safely extract SQLSTATE from .sqlstate or .pgcode, classify the validated code first, and expose no exception text or credentials.
+- The cloud worker and autonomous continuation are not implemented. Passing Python tests do not mean the autonomous cloud loop is operational.
 
 ## 2. Current priority: finish the autonomous engineering cycle
 
@@ -66,10 +67,10 @@ Implemented in code:
 - Idempotent persistence design and duplicate protection.
 
 Still required:
-- Align GitHub YJ64_CI_WEBHOOK_SECRET with the Vercel YJ64_CI_WEBHOOK_SECRET; the latest delivery test returned HTTP 401.
-- Verify the canonical Vercel production URL and deployed version.
-- Verify the receiver returns an authenticated 202 after database setup.
-- Record and verify successful end-to-end delivery; do not treat configured secrets as proof of delivery.
+- Authentication and canonical URL checks have passed in the latest diagnostic sequence; do not repeat secret rotation without new evidence.
+- Verify the currently deployed Vercel version and preserve the successful authentication evidence.
+- Resolve the PostgreSQL 503 using precise SQLSTATE diagnostics; then verify the receiver returns HTTP 202.
+- Record and verify successful end-to-end delivery and actual event/task rows; do not treat configured secrets or table existence as proof of delivery.
 
 ### Cycle milestone B — durable task state
 
@@ -81,8 +82,8 @@ Implemented in code:
 - Automated tests using a controlled database double.
 
 Still required:
-- Create/connect the production PostgreSQL database and apply migrations/0001_autonomous_cycle.sql.
-- Configure YJ64_DATABASE_URL in Vercel using a server-side pooled connection string.
+- Production Supabase PostgreSQL project exists and migrations 0001/0002 are applied; Vercel Production YJ64_DATABASE_URL is configured.
+- Resolve the live receiver's HTTP 503. Its current database_schema_error diagnostic is not conclusive: inspect .sqlstate and .pgcode before generic exception names, then retain only validated SQLSTATE/category in safe diagnostics.
 - Verify real persistence, deduplication, queue claims and restart recovery against the live database.
 - Add task history, dependency/parent linkage, artifacts/log references and backup/retention policy as the worker contract matures.
 
@@ -156,3 +157,66 @@ Every roadmap item must be broken into small tasks with prerequisites, acceptanc
 - Prefer additive, reversible changes and small commits.
 - Every completed task must link its code commit, tests, CI run and limitations.
 - Update this roadmap and IMPLEMENTATION_STATUS.md as part of the same task that changes implementation status.
+
+
+## 5. Robotics learning, motion skills and high-dynamic qualification
+
+**Status: planned architecture; no visual imitation-learning runtime, motion-token store, humanoid whole-body controller or high-dynamic proving ground is claimed implemented.** This work is to be added after the autonomous cycle foundation is operational and alongside the robotics discipline pack.
+
+### 5.1 Human Motion Learning & Adaptive Skill Acquisition
+
+A dedicated cross-cutting discipline learns from human demonstrations and observation, then transfers validated skills to the robot's own morphology:
+- Visual perception extracts body pose, joint/segment trajectories, timing, contacts, object interactions and uncertainty. Raw video is not the skill representation.
+- Motion retargeting maps human movement to the robot's own links, joints, actuator limits, mass properties and coordinate frames; it must not assume human/robot proportions or degrees of freedom are identical.
+- Imitation learning builds an initial candidate skill from demonstration; iterative practice compares observed robot motion with the target and updates parameters.
+- Skill abstraction extracts reusable principles (weight transfer, balance recovery, sequencing, momentum transfer, braking and contact strategy) rather than storing only a named routine such as boxing or walking.
+- Skill transfer is conditional: a learned principle may be reused in another task only after checking morphology, contact, environment, loads, uncertainty and safety envelope.
+- Observational learning from public environments should default to on-device/ephemeral perception and retain generalized, non-identifying motion features rather than raw video or identity. Retention, consent, privacy and deletion policy must be explicit.
+
+### 5.2 Spatial Motion Token (SMT) — compact executable skill representation
+
+Create a versioned **Spatial Motion Token** format, not an LLM word token and not a raw video clip. An SMT is a compact, indexed, machine-readable motion primitive that can be retrieved and dispatched quickly by the perception/control stack without asking a language model to re-derive the movement.
+
+Each token should include:
+- stable skill ID, version, content hash, provenance and evidence/validation level;
+- semantic intent and task context (e.g. step, pivot, evade, recover balance, carry object);
+- robot morphology/kinematic profile and coordinate-frame references;
+- phase sequence, time parameters, joint/segment trajectories and allowable variation;
+- centre-of-mass path, support/contact sequence, momentum/torque/energy envelope and actuator demand;
+- required objects/surfaces, free-space/collision constraints and environmental preconditions;
+- force, speed, acceleration, thermal and duty-cycle limits plus abort/recovery behaviour;
+- confidence, known failure modes, tested envelope, compatible robot configurations and links to simulation/experiment evidence.
+
+SMTs should support parameterized primitives and composition into longer skills. Runtime retrieval uses perception/context matching; a deterministic low-level controller executes the selected primitive with live feedback. Tokens are not blindly replayed: preconditions, collision checks, stability and current actuator health must be verified first. Fast execution must not depend on live LLM inference.
+
+### 5.3 Progressive training and full-performance proving ground
+
+Training must not stop at permanently reduced speed or force. The qualification plan must progress from low-energy supervised trials through intermediate envelopes to the robot's specified full operating envelope for the maneuver, including full rated speed/force where the hardware and test fixture are qualified.
+
+The final high-performance stage is a deliberate test mode, not an unrestricted everyday mode:
+- a human supervisor observes, gives demonstrations/corrections and can pause or abort immediately; the supervisor remains outside the robot's motion/impact envelope or behind a suitable barrier;
+- a purpose-built proving ground uses impact-absorbing floor mats, inflatable/energy-absorbing obstacles, protected boundaries, controlled clearances, and replaceable sacrificial fixtures; mats/inflatables alone are not assumed sufficient for a heavy/high-energy robot;
+- use appropriate restraint/tether/overhead support, remote emergency stop, independent power isolation, safety-rated speed/force limits where needed, exclusion zones, protective barriers and instrumented load/temperature/position monitoring;
+- progress through documented test gates. Full-performance trials are permitted only for a specific maneuver after its structure, actuators, thermal limits, stopping distance, fixture and recovery behaviour have been assessed;
+- do not remove emergency stops, containment, interlocks or human-exclusion protections to create a no-limits test. The aim is to reach full rated maneuver performance inside a qualified, controlled test envelope, not to exceed design limits or expose people to impact;
+- retain each trial's conditions, sensor traces, token version, supervisor feedback, result and any updated limits. A failed or out-of-envelope trial returns the skill to review.
+
+### 5.4 Training and transfer sequence
+
+1. Human demonstration and perception/pose extraction.
+2. Candidate SMT generation and morphology-aware retargeting.
+3. Physics checks and simulation with explicit uncertainty/evidence labels.
+4. Low-energy supervised physical rehearsal with fall/impact protection.
+5. Incremental envelope expansion with measured acceptance criteria.
+6. Supervised full-rated performance trials in the qualified proving ground.
+7. Store a validated SMT version and publish reusable subskills to the shared skill library.
+8. Permit transfer to another task only after context and safety-envelope checks.
+
+### 5.5 Integration points
+
+- Dynamic Maneuvering & Momentum Management: centre-of-mass, angular momentum, whole-body dynamics and reusable movement primitives.
+- Artificial Muscle Engineering: actuator force/velocity/thermal/duty-cycle envelopes and damage indicators.
+- Robot Geometry and shared physics: morphology, mass/inertia, joint limits, contact and collision geometry.
+- Control Systems: real-time feedback, balance, contact and deterministic execution.
+- Safety & Environment Interaction: people/object separation, force limits, stop/recovery and test-zone interlocks.
+- Shared Autonomous Engineering Cycle: queues simulation/training jobs, stores artifacts, records provenance and triggers next stages; it is the common orchestration layer, not a separate loop embedded in the learning module.
