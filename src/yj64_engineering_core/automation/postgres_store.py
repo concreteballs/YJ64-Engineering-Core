@@ -1113,6 +1113,10 @@ class PostgresCycleStore:
                 global_budget = cursor.fetchone()
                 if global_budget is not None:
                     cursor.execute(
+                        "SELECT date_trunc('day', now()) + interval '1 day', date_trunc('month', now()) + interval '1 month'"
+                    )
+                    daily_reset_at, monthly_reset_at = cursor.fetchone()
+                    cursor.execute(
                         """
                         SELECT
                             COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
@@ -1138,19 +1142,19 @@ class PostgresCycleStore:
                     monthly = cursor.fetchone()
                     requested_tokens = input_tokens + output_tokens
                     if global_budget[0] is not None and daily[0] + requested_tokens > global_budget[0]:
-                        return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global daily token budget would be exceeded"}
+                        return {"reserved": False, "action": "schedule_retry", "retry_at": daily_reset_at, "reason": "Global daily token budget reached; retry after the database-day reset"}
                     if global_budget[1] is not None and monthly[0] + requested_tokens > global_budget[1]:
-                        return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global monthly token budget would be exceeded"}
+                        return {"reserved": False, "action": "schedule_retry", "retry_at": monthly_reset_at, "reason": "Global monthly token budget reached; retry after the database-month reset"}
                     if global_budget[2] is not None:
                         if estimated_cost is None:
                             return {"reserved": False, "action": "hold_for_review", "reason": "Global cost budget is set but provider pricing is unknown"}
                         if Decimal(str(daily[1])) + estimated_cost > Decimal(str(global_budget[2])):
-                            return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global daily cost budget would be exceeded"}
+                            return {"reserved": False, "action": "schedule_retry", "retry_at": daily_reset_at, "reason": "Global daily cost budget reached; retry after the database-day reset"}
                     if global_budget[3] is not None:
                         if estimated_cost is None:
                             return {"reserved": False, "action": "hold_for_review", "reason": "Global cost budget is set but provider pricing is unknown"}
                         if Decimal(str(monthly[1])) + estimated_cost > Decimal(str(global_budget[3])):
-                            return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global monthly cost budget would be exceeded"}
+                            return {"reserved": False, "action": "schedule_retry", "retry_at": monthly_reset_at, "reason": "Global monthly cost budget reached; retry after the database-month reset"}
 
                 reservation_id = str(uuid4())
                 cursor.execute(
