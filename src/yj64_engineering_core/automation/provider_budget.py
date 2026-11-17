@@ -163,7 +163,19 @@ def plan_provider_capacity(
             reasons.append("tokens-per-minute budget is full")
 
     if profile.max_concurrency is not None and len(active) >= profile.max_concurrency:
-        retry_times.append(min(item[3] for item in active))
+        if any(item[2] == "unknown" for item in active):
+            return CapacityDecision(
+                False, "hold_for_review", None,
+                "An earlier provider request has an unknown outcome and occupies concurrency until reconciled",
+                requests_used, tokens_used, len(active),
+            )
+        known_expiries = [item[3] for item in active if item[2] == "reserved"]
+        if known_expiries:
+            retry_times.append(min(known_expiries))
+        else:
+            # Sent requests remain active until explicitly settled. Recheck
+            # through the scheduler; never expire them by wall-clock timeout.
+            retry_times.append(now + timedelta(seconds=5))
         reasons.append("provider concurrency limit is full")
 
     if retry_times:
