@@ -501,6 +501,7 @@ class PostgresCycleStore:
                     SET state = 'completed', locked_at = NULL, lock_owner = NULL,
                         updated_at = now()
                     WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND (deadline_at IS NULL OR deadline_at > now())
                       AND NOT EXISTS (
                           SELECT 1 FROM yj64_provider_request_reservations AS reservation
                           WHERE reservation.queue_task_id = yj64_task_queue.task_id
@@ -706,16 +707,22 @@ class PostgresCycleStore:
                     """
                     WITH expired AS (
                         SELECT task_id FROM yj64_task_queue
-                        WHERE state IN ('pending', 'blocked')
-                          AND (blocked_reason IS DISTINCT FROM 'request_outcome_unknown')
+                        WHERE state IN ('pending', 'blocked', 'running')
+                          AND blocked_reason IS DISTINCT FROM 'request_outcome_unknown'
                           AND deadline_at IS NOT NULL AND deadline_at <= now()
+                          AND NOT EXISTS (
+                              SELECT 1 FROM yj64_provider_request_reservations AS reservation
+                              WHERE reservation.queue_task_id = yj64_task_queue.task_id
+                                AND reservation.state IN ('reserved', 'sending', 'accepted', 'unknown')
+                          )
                         ORDER BY deadline_at, task_id
                         FOR UPDATE SKIP LOCKED
                         LIMIT %s
                     )
                     UPDATE yj64_task_queue AS task
                     SET state = 'failed', blocked_reason = 'task_deadline_exceeded',
-                        last_error = 'Task deadline elapsed before execution',
+                        lock_owner = NULL, locked_at = NULL,
+                        last_error = 'Task deadline elapsed before completion',
                         updated_at = now()
                     FROM expired
                     WHERE task.task_id = expired.task_id
