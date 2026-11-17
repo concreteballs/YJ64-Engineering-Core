@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+import re
 from typing import Mapping
 
 
@@ -24,29 +25,50 @@ def _headers_map(headers: Mapping[str, object] | None) -> dict[str, str]:
     return {str(k).lower(): str(v).strip() for k, v in (headers or {}).items()}
 
 
+def _parse_reset_delay(raw: str, now: datetime) -> int | None:
+    try:
+        value = float(raw)
+        seconds = value - now.timestamp() if value > 1_000_000_000 else value
+        return max(0, min(86400, int(seconds)))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    try:
+        when = parsedate_to_datetime(raw)
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return max(0, min(86400, int((when - now).total_seconds())))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    try:
+        when = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return max(0, min(86400, int((when - now).total_seconds())))
+    except (TypeError, ValueError, OverflowError):
+        pass
+    # Common provider reset durations: 1s, 6m0s, 1h2m3s.
+    match = re.fullmatch(
+        r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?",
+        raw.strip().lower(),
+    )
+    if match and any(match.groups()):
+        hours, minutes, seconds = (float(part or 0) for part in match.groups())
+        return max(0, min(86400, int(hours * 3600 + minutes * 60 + seconds)))
+    return None
+
+
 def _retry_after(headers: dict[str, str], now: datetime) -> int | None:
-    raw = headers.get("retry-after")
-    if raw:
-        try:
-            return max(0, min(86400, int(float(raw))))
-        except ValueError:
-            try:
-                when = parsedate_to_datetime(raw)
-                if when.tzinfo is None:
-                    when = when.replace(tzinfo=timezone.utc)
-                return max(0, min(86400, int((when - now).total_seconds())))
-            except (TypeError, ValueError, OverflowError):
-                pass
-    for key in ("x-ratelimit-reset", "ratelimit-reset", "x-quota-reset"):
+    keys = (
+        "retry-after", "x-ratelimit-reset", "ratelimit-reset", "x-quota-reset",
+        "x-ratelimit-reset-requests", "x-ratelimit-reset-tokens",
+        "anthropic-ratelimit-requests-reset", "anthropic-ratelimit-tokens-reset",
+    )
+    for key in keys:
         raw = headers.get(key)
         if raw:
-            try:
-                value = float(raw)
-                # Epoch seconds are common; relative seconds are also accepted.
-                seconds = value - now.timestamp() if value > 1_000_000_000 else value
-                return max(0, min(86400, int(seconds)))
-            except (TypeError, ValueError, OverflowError):
-                continue
+            delay = _parse_reset_delay(raw, now)
+            if delay is not None:
+                return delay
     return None
 
 
