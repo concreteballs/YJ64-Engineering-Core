@@ -9,7 +9,8 @@ Authorized branch: `main`
 
 ```mermaid
 flowchart TD
-  A["1. Finish the shared autonomous cycle"] --> B["2. Complete Chemistry module with its specialist agent"]
+  O["0. Build shared Observability & Diagnostics"] --> A["1. Finish the shared autonomous cycle"]
+  A --> B["2. Complete Chemistry module with its specialist agent"]
   B --> C["3. Connect the parallel Robotics agent/chat"]
   C --> D["4. Run a real multi-agent collaboration pilot"]
   D --> E["5. Automate artificial-muscle material discovery"]
@@ -19,7 +20,39 @@ flowchart TD
   H --> I["9. Expand the same operating model to the wider YJ64 roadmap"]
 ```
 
-The graph is a dependency order, not a claim that every stage is already implemented. Work may overlap where prerequisites are satisfied, but later stages must not be called operational before their acceptance checks pass.
+Stage 0 is a cross-cutting foundation and runs in parallel with the autonomous cycle; every later stage inherits its instrumentation requirements. The graph is a dependency order, not a claim that every stage is already implemented. Work may overlap where prerequisites are satisfied, but later stages must not be called operational before their acceptance checks pass.
+
+---
+
+## 0. Build shared Observability & Diagnostics
+**Goal:** every task, build, agent handoff and solver execution must leave enough correlated evidence to identify what failed and where, instead of debugging blindly.
+
+<details>
+<summary>Open implementation steps and acceptance criteria</summary>
+
+### Implementation
+1. Define a versioned structured event/error schema and mandatory secret-redaction rules.
+2. Propagate trace, span, correlation, task, workflow, job, commit and deployment identifiers across every service boundary.
+3. Standardize structured logs and safe error classification; preserve validated SQLSTATE, HTTP status, exit code and sanitized stack/log references.
+4. Generate a bounded diagnostic bundle for failed/suspicious tasks: exact versions, failed step, logs, retry history, queue state, artifact hashes and environment fingerprint.
+5. Add metrics for success/failure, latency, queue age/depth, retries, leases, worker health, solver duration, resource use and cost.
+6. Add end-to-end distributed traces across CI → webhook → database/queue → dispatcher → worker → agent/module → solver → artifact → validation.
+7. Add dependency-aware readiness checks, alerts and an operator drill-down view.
+8. Add evidence-based diagnostic triage that ranks hypotheses, asks for the cheapest missing evidence and proposes minimal fixes with regression tests.
+9. Add fault-injection tests for database/schema/auth failures, duplicate events, expired leases, worker crashes, solver timeouts, invalid artifacts and telemetry outages.
+10. Enforce telemetry retention, access controls, sampling, cardinality limits, redaction and storage/token/cost budgets.
+
+### Acceptance
+- One task/run ID reveals the complete execution path and exact failed stage.
+- Failures have stable categories and useful diagnostic evidence, or an explicit evidence-gap report.
+- Logs, metrics and traces correlate across components.
+- Automated tests prove secrets are redacted.
+- Stuck work and repeated failures trigger actionable alerts.
+- A fault-injection exercise localizes a failure and validates the smallest justified fix without blind retries.
+
+**Existing foundation:** the webhook API already has limited safe SQLSTATE classification. This is not yet the shared observability subsystem. See [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md).
+
+</details>
 
 ---
 
