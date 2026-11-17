@@ -392,13 +392,23 @@ class PostgresCycleStore:
                 cursor.execute(
                     """
                     UPDATE yj64_task_queue
-                    SET state = CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,
-                        available_at = CASE WHEN attempts >= max_attempts THEN available_at
-                                             ELSE GREATEST(%s, now()) END,
+                    SET state = CASE
+                            WHEN capacity_deferrals + 1 >= max_capacity_deferrals THEN 'blocked'
+                            ELSE 'pending'
+                        END,
+                        available_at = GREATEST(%s, now()),
+                        attempts = GREATEST(0, attempts - 1),
+                        capacity_deferrals = capacity_deferrals + 1,
+                        blocked_reason = CASE
+                            WHEN capacity_deferrals + 1 >= max_capacity_deferrals
+                            THEN 'capacity_deferral_budget_exhausted'
+                            ELSE NULL
+                        END,
                         locked_at = NULL, lock_owner = NULL,
                         last_error = %s, updated_at = now()
                     WHERE task_id = %s AND state = 'running' AND lock_owner = %s
                       AND locked_at >= now() - (%s * interval '1 second')
+                      AND capacity_deferrals < max_capacity_deferrals
                     """,
                     (retry_at, reason[:1000], task_id, worker_id, lease_seconds),
                 )
