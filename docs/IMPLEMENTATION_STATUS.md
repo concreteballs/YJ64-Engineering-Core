@@ -59,7 +59,7 @@ Quota-blocked tasks persist an explicit `blocked_reason` and optional `quota_res
 
 The chunk foundation is implemented in `automation/payload_chunks.py`: deterministic line-aware splitting with a caller-supplied token counter, stable chunk IDs, per-chunk and total SHA-256 hashes, acknowledgement validation, exact reassembly and an explicit FINALIZE envelope. `PostgresCycleStore.save_payload_manifest`, `acknowledge_payload_chunk` and `assemble_payload_for_model` persist manifests/chunks/acknowledgements and mark a payload `ready_for_model` only after integrity verification. For stateless endpoints, the orchestrator can assemble the full payload locally from durable storage before making one complete model request. The three payload tables are deployed with RLS enabled, no anon/authenticated access, and service_role-only privileges. Migrations `0005_quota_task_recovery.sql` and `0006_durable_payload_chunks.sql` are applied. Provider capacity/budget/reconciliation migrations `0007`–`0017` are also applied; they add durable profiles, shared quota scopes, profile expiry, request-payload identity, body-size ceilings and bounded capacity deferrals.
 
-CI run [44122919875](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44122919875) passed for the chunking, durable-storage and quota-recovery code, including unit/FEM/CAD integration tests and yacht-hull artifact generation.
+CI run [44123775757](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44123775757) passed for the chunking, durable-storage and quota-recovery code, including unit/FEM/CAD integration tests and yacht-hull artifact generation.
 
 A provider adapter contract now exists in `automation/provider_adapters.py`: it requires exact serialized-body hashing, provider-specific token counting, explicit capabilities for idempotency/lookup, durable response-artifact persistence, and authoritative lookup outcomes. It is an interface contract only; no live HTTP adapter or credentials are wired.
 
@@ -126,7 +126,7 @@ A model update retains old versions, exact provenance, test evidence and applica
 
 ## Latest verified CI checkpoint
 
-Commit `639dae903f39e95744f48f2b9f2823c28fb01f4e` completed GitHub Actions run [44122919875](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44122919875) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
+Commit `639dae903f39e95744f48f2b9f2823c28fb01f4e` completed GitHub Actions run [44123775757](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44123775757) with conclusion `success`. All workflow steps passed, including unit/FEM/CAD integration tests and the 12 m yacht-hull demonstration artifact generation. This verifies the repository state at that commit; it does not imply that planned subsystems are complete.
 
 ## Document intake prototype
 
