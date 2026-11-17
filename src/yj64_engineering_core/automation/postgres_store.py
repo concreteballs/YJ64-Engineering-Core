@@ -1000,9 +1000,11 @@ class PostgresCycleStore:
                         "created_at": row[0], "estimated_tokens": token_count,
                         "state": row[3], "expires_at": row[4], "sent_at": row[5],
                     })
+                cursor.execute("SELECT now()")
+                database_now = cursor.fetchone()[0]
                 capacity = plan_provider_capacity(
                     profile, input_tokens=input_tokens, output_tokens=output_tokens,
-                    reservations=reservations,
+                    reservations=reservations, now=database_now,
                 )
                 if not capacity.allowed:
                     return {
