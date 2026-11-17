@@ -110,6 +110,65 @@ class PostgresCycleStore:
                     "received_at": row[9].isoformat() if row[9] is not None else None,
                 }
 
+    def enqueue_task(
+        self, task_type: str, payload: dict, dedupe_key: str,
+        *, max_attempts: int = 3,
+    ) -> dict:
+        """Idempotently enqueue one allowlisted internal task in the existing queue."""
+        allowed_types = {"process_ci_event", "analyze_ci_logs"}
+        if task_type not in allowed_types:
+            raise ValueError("task_type is not allowlisted")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be an object")
+        if (
+            not isinstance(dedupe_key, str)
+            or not re.fullmatch(r"[A-Za-z0-9:._-]{1,240}", dedupe_key)
+        ):
+            raise ValueError("dedupe_key must be a bounded safe identifier")
+        if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or not 1 <= max_attempts <= 10:
+            raise ValueError("max_attempts must be between 1 and 10")
+        payload_json = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_task_queue
+                        (task_type, payload, dedupe_key, max_attempts)
+                    VALUES (%s, %s::jsonb, %s, %s)
+                    ON CONFLICT (dedupe_key) DO NOTHING
+                    RETURNING task_id
+                    """,
+                    (task_type, payload_json, dedupe_key, max_attempts),
+                )
+                inserted = cursor.fetchone()
+                if inserted is not None:
+                    return {
+                        "enqueued": True, "duplicate": False,
+                        "task_id": inserted[0], "state": "pending",
+                    }
+                cursor.execute(
+                    """
+                    SELECT task_id, task_type, payload, state
+                    FROM yj64_task_queue
+                    WHERE dedupe_key = %s
+                    """,
+                    (dedupe_key,),
+                )
+                existing = cursor.fetchone()
+                if (
+                    existing is None
+                    or existing[1] != task_type
+                    or existing[2] != payload
+                ):
+                    raise ValueError("dedupe_key already exists with conflicting task content")
+                return {
+                    "enqueued": False, "duplicate": True,
+                    "task_id": existing[0], "state": existing[3],
+                }
+
     def claim_next_task(
         self, worker_id: str, lease_seconds: int = 300,
         task_types: list[str] | None = None,
