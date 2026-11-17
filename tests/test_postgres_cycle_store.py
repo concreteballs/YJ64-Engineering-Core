@@ -125,6 +125,8 @@ class PostgresCycleStoreTests(unittest.TestCase):
         cursor = FakeCursor(rowcount=1)
         self.assertTrue(self.store(cursor).complete_task(12, "worker-a"))
         self.assertIn("lock_owner = %s", cursor.statements[0][0])
+        self.assertIn("NOT EXISTS", cursor.statements[0][0])
+        self.assertIn("yj64_provider_request_reservations", cursor.statements[0][0])
 
     def test_fail_retries_with_bounded_delay(self):
         cursor = FakeCursor(returned_state="pending")
