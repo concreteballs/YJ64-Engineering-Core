@@ -821,7 +821,11 @@ class PostgresCycleStore:
                         COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', now())
                             AND state <> 'expired'
                             THEN COALESCE(actual_cost_usd, estimated_cost_usd)
-                            ELSE 0 END), 0)
+                            ELSE 0 END), 0),
+                        COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now())
+                            AND state <> 'expired' AND actual_cost_usd IS NULL AND NOT cost_estimate_known),
+                        COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now())
+                            AND state <> 'expired' AND actual_cost_usd IS NULL AND NOT cost_estimate_known)
                     FROM yj64_provider_request_reservations
                     """
                 )
@@ -1352,7 +1356,7 @@ class PostgresCycleStore:
                 if reservation is None:
                     raise KeyError("provider reservation does not exist")
                 if reservation[4] in {"completed", "failed", "expired"}:
-                    return {"settled": True, "duplicate": True, "state": reservation[3]}
+                    return {"settled": True, "duplicate": True, "state": reservation[4]}
                 if reservation[4] not in {"sending", "accepted", "unknown"}:
                     raise RuntimeError("provider request was not marked as sent")
                 if outcome == "unknown":
