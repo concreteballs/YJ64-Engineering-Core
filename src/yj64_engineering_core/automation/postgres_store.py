@@ -615,6 +615,521 @@ class PostgresCycleStore:
                     "content": assembled,
                 }
 
+    def set_provider_limit_profile(self, profile) -> None:
+        """Persist an operator-verified provider/model/endpoint capacity profile."""
+        from .provider_budget import ProviderLimitProfile
+
+        if not isinstance(profile, ProviderLimitProfile):
+            raise ValueError("profile must be a ProviderLimitProfile")
+        if not any((
+            profile.requests_per_minute, profile.tokens_per_minute,
+            profile.max_concurrency, profile.max_input_tokens,
+            profile.max_output_tokens,
+        )):
+            raise ValueError("at least one provider capacity limit must be known")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_provider_limit_profiles
+                        (provider, model, endpoint, requests_per_minute,
+                         tokens_per_minute, max_concurrency, max_input_tokens,
+                         max_output_tokens, tokens_per_minute_includes_output,
+                         input_cost_per_million_usd, output_cost_per_million_usd,
+                         profile_source, observed_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            'operator_config', now(), now())
+                    ON CONFLICT (provider, model, endpoint) DO UPDATE SET
+                        requests_per_minute = EXCLUDED.requests_per_minute,
+                        tokens_per_minute = EXCLUDED.tokens_per_minute,
+                        max_concurrency = EXCLUDED.max_concurrency,
+                        max_input_tokens = EXCLUDED.max_input_tokens,
+                        max_output_tokens = EXCLUDED.max_output_tokens,
+                        tokens_per_minute_includes_output = EXCLUDED.tokens_per_minute_includes_output,
+                        input_cost_per_million_usd = EXCLUDED.input_cost_per_million_usd,
+                        output_cost_per_million_usd = EXCLUDED.output_cost_per_million_usd,
+                        profile_source = 'operator_config',
+                        observed_at = now(), updated_at = now()
+                    """,
+                    (
+                        profile.provider, profile.model, profile.endpoint,
+                        profile.requests_per_minute, profile.tokens_per_minute,
+                        profile.max_concurrency, profile.max_input_tokens,
+                        profile.max_output_tokens, profile.tokens_per_minute_includes_output,
+                        profile.input_cost_per_million_usd,
+                        profile.output_cost_per_million_usd,
+                    ),
+                )
+
+    def set_cycle_usage_budget(
+        self, *, daily_token_limit: int | None = None,
+        monthly_token_limit: int | None = None,
+        daily_cost_limit_usd=None, monthly_cost_limit_usd=None,
+    ) -> None:
+        """Set durable global usage ceilings; None means that dimension is uncapped."""
+        from decimal import Decimal, InvalidOperation
+
+        for name, value in (
+            ("daily_token_limit", daily_token_limit),
+            ("monthly_token_limit", monthly_token_limit),
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer or None")
+        costs = []
+        for name, value in (
+            ("daily_cost_limit_usd", daily_cost_limit_usd),
+            ("monthly_cost_limit_usd", monthly_cost_limit_usd),
+        ):
+            if value is None:
+                costs.append(None)
+                continue
+            try:
+                parsed = Decimal(str(value))
+            except (InvalidOperation, ValueError):
+                raise ValueError(f"{name} must be a non-negative decimal or None")
+            if not parsed.is_finite() or parsed < 0:
+                raise ValueError(f"{name} must be a non-negative decimal or None")
+            costs.append(parsed)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_cycle_usage_budget
+                        (budget_id, daily_token_limit, monthly_token_limit,
+                         daily_cost_limit_usd, monthly_cost_limit_usd, updated_at)
+                    VALUES (1, %s, %s, %s, %s, now())
+                    ON CONFLICT (budget_id) DO UPDATE SET
+                        daily_token_limit = EXCLUDED.daily_token_limit,
+                        monthly_token_limit = EXCLUDED.monthly_token_limit,
+                        daily_cost_limit_usd = EXCLUDED.daily_cost_limit_usd,
+                        monthly_cost_limit_usd = EXCLUDED.monthly_cost_limit_usd,
+                        updated_at = now()
+                    """,
+                    (daily_token_limit, monthly_token_limit, costs[0], costs[1]),
+                )
+
+    def reserve_provider_capacity(
+        self, queue_task_id: int, worker_id: str, idempotency_key: str,
+        *, provider: str, model: str, endpoint: str,
+        input_tokens: int, output_tokens: int,
+        lease_seconds: int = 300, reservation_ttl_seconds: int = 300,
+    ) -> dict:
+        """Atomically check budgets/limits and reserve one provider request.
+
+        The provider profile row serializes reservations for one model/endpoint;
+        the singleton global budget row serializes spend/token ceilings across
+        providers. No profile means fail closed. Idempotency prevents duplicate
+        reservations after worker restarts.
+        """
+        from decimal import Decimal
+        from uuid import uuid4
+        from .provider_budget import ProviderLimitProfile, plan_provider_capacity
+
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+            raise ValueError("idempotency_key is required")
+        if any(not isinstance(v, str) or not v.strip() for v in (provider, model, endpoint)):
+            raise ValueError("provider, model and endpoint are required")
+        for name, value in (("input_tokens", input_tokens), ("output_tokens", output_tokens)):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        if not isinstance(reservation_ttl_seconds, int) or isinstance(reservation_ttl_seconds, bool) or not 1 <= reservation_ttl_seconds <= 3600:
+            raise ValueError("reservation_ttl_seconds must be between 1 and 3600")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT state, lock_owner, locked_at,
+                           budget_input_tokens, budget_output_tokens, budget_cost_usd,
+                           reserved_input_tokens, reserved_output_tokens, reserved_cost_usd,
+                           consumed_input_tokens, consumed_output_tokens, consumed_cost_usd
+                    FROM yj64_task_queue
+                    WHERE task_id = %s
+                    FOR UPDATE
+                    """,
+                    (queue_task_id,),
+                )
+                task = cursor.fetchone()
+                if task is None or task[0] != "running" or task[1] != worker_id:
+                    raise RuntimeError("provider capacity requires the current task lease")
+                cursor.execute(
+                    """
+                    SELECT reservation_id, state FROM yj64_provider_request_reservations
+                    WHERE idempotency_key = %s
+                    """,
+                    (idempotency_key,),
+                )
+                previous = cursor.fetchone()
+                if previous is not None:
+                    return {
+                        "reserved": previous[1] == "reserved",
+                        "duplicate": True,
+                        "reservation_id": previous[0],
+                        "state": previous[1],
+                    }
+
+                cursor.execute(
+                    """
+                    SELECT requests_per_minute, tokens_per_minute, max_concurrency,
+                           max_input_tokens, max_output_tokens,
+                           tokens_per_minute_includes_output,
+                           input_cost_per_million_usd, output_cost_per_million_usd
+                    FROM yj64_provider_limit_profiles
+                    WHERE provider = %s AND model = %s AND endpoint = %s
+                    FOR UPDATE
+                    """,
+                    (provider, model, endpoint),
+                )
+                limits = cursor.fetchone()
+                if limits is None:
+                    return {
+                        "reserved": False, "duplicate": False,
+                        "action": "hold_for_review",
+                        "reason": "No verified provider limit profile is configured",
+                    }
+                profile = ProviderLimitProfile(
+                    provider, model, endpoint,
+                    requests_per_minute=limits[0], tokens_per_minute=limits[1],
+                    max_concurrency=limits[2], max_input_tokens=limits[3],
+                    max_output_tokens=limits[4],
+                    tokens_per_minute_includes_output=limits[5],
+                    input_cost_per_million_usd=float(limits[6]) if limits[6] is not None else None,
+                    output_cost_per_million_usd=float(limits[7]) if limits[7] is not None else None,
+                )
+                cursor.execute(
+                    """
+                    SELECT created_at, input_tokens_estimated, output_tokens_estimated,
+                           state, expires_at, sent_at
+                    FROM yj64_provider_request_reservations
+                    WHERE provider = %s AND model = %s AND endpoint = %s
+                      AND (
+                          sent_at >= now() - interval '60 seconds'
+                          OR state IN ('reserved', 'sending', 'accepted', 'unknown')
+                      )
+                    """,
+                    (provider, model, endpoint),
+                )
+                reservations = []
+                for row in cursor.fetchall():
+                    token_count = row[1] + (row[2] if profile.tokens_per_minute_includes_output else 0)
+                    reservations.append({
+                        "created_at": row[0], "estimated_tokens": token_count,
+                        "state": row[3], "expires_at": row[4], "sent_at": row[5],
+                    })
+                capacity = plan_provider_capacity(
+                    profile, input_tokens=input_tokens, output_tokens=output_tokens,
+                    reservations=reservations,
+                )
+                if not capacity.allowed:
+                    return {
+                        "reserved": False, "duplicate": False,
+                        "action": capacity.action, "retry_at": capacity.retry_at,
+                        "reason": capacity.reason,
+                    }
+
+                if profile.input_cost_per_million_usd is None or profile.output_cost_per_million_usd is None:
+                    estimated_cost = None
+                else:
+                    estimated_cost = (
+                        Decimal(input_tokens) * Decimal(str(profile.input_cost_per_million_usd))
+                        + Decimal(output_tokens) * Decimal(str(profile.output_cost_per_million_usd))
+                    ) / Decimal(1_000_000)
+
+                budget_input, budget_output, budget_cost = task[3], task[4], task[5]
+                reserved_input, reserved_output, reserved_cost = task[6], task[7], Decimal(str(task[8]))
+                consumed_input, consumed_output, consumed_cost = task[9], task[10], Decimal(str(task[11]))
+                if budget_input is not None and consumed_input + reserved_input + input_tokens > budget_input:
+                    return {"reserved": False, "action": "task_budget_exhausted", "reason": "Task input-token budget would be exceeded"}
+                if budget_output is not None and consumed_output + reserved_output + output_tokens > budget_output:
+                    return {"reserved": False, "action": "task_budget_exhausted", "reason": "Task output-token budget would be exceeded"}
+                if budget_cost is not None:
+                    if estimated_cost is None:
+                        return {"reserved": False, "action": "hold_for_review", "reason": "Task cost budget is set but provider pricing is unknown"}
+                    if consumed_cost + reserved_cost + estimated_cost > Decimal(str(budget_cost)):
+                        return {"reserved": False, "action": "task_budget_exhausted", "reason": "Task cost budget would be exceeded"}
+
+                cursor.execute(
+                    """
+                    SELECT daily_token_limit, monthly_token_limit,
+                           daily_cost_limit_usd, monthly_cost_limit_usd
+                    FROM yj64_cycle_usage_budget WHERE budget_id = 1 FOR UPDATE
+                    """
+                )
+                global_budget = cursor.fetchone()
+                if global_budget is not None:
+                    cursor.execute(
+                        """
+                        SELECT
+                            COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
+                                      + COALESCE(output_tokens_actual, output_tokens_estimated)), 0),
+                            COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0)
+                        FROM yj64_provider_request_reservations
+                        WHERE state <> 'expired'
+                          AND created_at >= date_trunc('day', now())
+                        """
+                    )
+                    daily = cursor.fetchone()
+                    cursor.execute(
+                        """
+                        SELECT
+                            COALESCE(SUM(COALESCE(input_tokens_actual, input_tokens_estimated)
+                                      + COALESCE(output_tokens_actual, output_tokens_estimated)), 0),
+                            COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd)), 0)
+                        FROM yj64_provider_request_reservations
+                        WHERE state <> 'expired'
+                          AND created_at >= date_trunc('month', now())
+                        """
+                    )
+                    monthly = cursor.fetchone()
+                    requested_tokens = input_tokens + output_tokens
+                    if global_budget[0] is not None and daily[0] + requested_tokens > global_budget[0]:
+                        return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global daily token budget would be exceeded"}
+                    if global_budget[1] is not None and monthly[0] + requested_tokens > global_budget[1]:
+                        return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global monthly token budget would be exceeded"}
+                    if global_budget[2] is not None:
+                        if estimated_cost is None:
+                            return {"reserved": False, "action": "hold_for_review", "reason": "Global cost budget is set but provider pricing is unknown"}
+                        if Decimal(str(daily[1])) + estimated_cost > Decimal(str(global_budget[2])):
+                            return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global daily cost budget would be exceeded"}
+                    if global_budget[3] is not None:
+                        if estimated_cost is None:
+                            return {"reserved": False, "action": "hold_for_review", "reason": "Global cost budget is set but provider pricing is unknown"}
+                        if Decimal(str(monthly[1])) + estimated_cost > Decimal(str(global_budget[3])):
+                            return {"reserved": False, "action": "global_budget_exhausted", "reason": "Global monthly cost budget would be exceeded"}
+
+                reservation_id = str(uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_provider_request_reservations
+                        (reservation_id, idempotency_key, queue_task_id, provider, model,
+                         endpoint, input_tokens_estimated, output_tokens_estimated,
+                         estimated_cost_usd, state, expires_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'reserved',
+                            now() + (%s * interval '1 second'))
+                    """,
+                    (
+                        reservation_id, idempotency_key, queue_task_id, provider, model,
+                        endpoint, input_tokens, output_tokens, estimated_cost or Decimal("0"),
+                        reservation_ttl_seconds,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET reserved_input_tokens = reserved_input_tokens + %s,
+                        reserved_output_tokens = reserved_output_tokens + %s,
+                        reserved_cost_usd = reserved_cost_usd + %s,
+                        updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    """,
+                    (
+                        input_tokens, output_tokens, estimated_cost or Decimal("0"),
+                        queue_task_id, worker_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("task lease was lost while reserving provider capacity")
+                return {
+                    "reserved": True, "duplicate": False,
+                    "reservation_id": reservation_id,
+                    "idempotency_key": idempotency_key,
+                    "estimated_cost_usd": str(estimated_cost) if estimated_cost is not None else None,
+                    "state": "reserved",
+                }
+
+    def mark_provider_request_sending(
+        self, queue_task_id: int, worker_id: str, reservation_id: str,
+        lease_seconds: int = 300,
+    ) -> bool:
+        """Mark the point after which a timeout may mean the provider received it."""
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot send provider request without a live task lease")
+                cursor.execute(
+                    """
+                    UPDATE yj64_provider_request_reservations
+                    SET state = 'sending', sent_at = COALESCE(sent_at, now()), expires_at = NULL
+                    WHERE reservation_id = %s AND queue_task_id = %s
+                      AND state IN ('reserved', 'sending')
+                      AND (expires_at IS NULL OR expires_at > now())
+                    RETURNING state
+                    """,
+                    (reservation_id, queue_task_id),
+                )
+                return cursor.fetchone() is not None
+
+    def finish_provider_request(
+        self, queue_task_id: int, worker_id: str, reservation_id: str,
+        *, outcome: str, input_tokens_actual: int | None = None,
+        output_tokens_actual: int | None = None, actual_cost_usd=None,
+        provider_request_id: str | None = None, error_classification: str | None = None,
+        lease_seconds: int = 300,
+    ) -> dict:
+        """Close a sent request or conservatively retain an ambiguous one as unknown."""
+        from decimal import Decimal, InvalidOperation
+
+        if outcome not in {"completed", "failed", "unknown"}:
+            raise ValueError("outcome must be completed, failed or unknown")
+        for name, value in (
+            ("input_tokens_actual", input_tokens_actual),
+            ("output_tokens_actual", output_tokens_actual),
+        ):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError(f"{name} must be a non-negative integer or None")
+        cost = None
+        if actual_cost_usd is not None:
+            try:
+                cost = Decimal(str(actual_cost_usd))
+            except (InvalidOperation, ValueError):
+                raise ValueError("actual_cost_usd must be a non-negative decimal")
+            if not cost.is_finite() or cost < 0:
+                raise ValueError("actual_cost_usd must be a non-negative decimal")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot settle provider usage without a live task lease")
+                cursor.execute(
+                    """
+                    SELECT input_tokens_estimated, output_tokens_estimated,
+                           estimated_cost_usd, state
+                    FROM yj64_provider_request_reservations
+                    WHERE reservation_id = %s AND queue_task_id = %s
+                    FOR UPDATE
+                    """,
+                    (reservation_id, queue_task_id),
+                )
+                reservation = cursor.fetchone()
+                if reservation is None:
+                    raise KeyError("provider reservation does not exist")
+                if reservation[3] in {"completed", "failed", "expired"}:
+                    return {"settled": True, "duplicate": True, "state": reservation[3]}
+                if reservation[3] not in {"sending", "accepted", "unknown"}:
+                    raise RuntimeError("provider request was not marked as sent")
+                if outcome == "unknown":
+                    cursor.execute(
+                        """
+                        UPDATE yj64_provider_request_reservations
+                        SET state = 'unknown', last_error_classification = %s,
+                            provider_request_id = COALESCE(%s, provider_request_id)
+                        WHERE reservation_id = %s
+                        """,
+                        (error_classification, provider_request_id, reservation_id),
+                    )
+                    return {"settled": False, "duplicate": False, "state": "unknown", "requires_reconciliation": True}
+
+                actual_input = reservation[0] if input_tokens_actual is None else input_tokens_actual
+                actual_output = reservation[1] if output_tokens_actual is None else output_tokens_actual
+                final_cost = reservation[2] if cost is None else cost
+                cursor.execute(
+                    """
+                    UPDATE yj64_provider_request_reservations
+                    SET state = %s, input_tokens_actual = %s,
+                        output_tokens_actual = %s, actual_cost_usd = %s,
+                        provider_request_id = COALESCE(%s, provider_request_id),
+                        last_error_classification = %s,
+                        finished_at = now(), expires_at = NULL
+                    WHERE reservation_id = %s
+                    """,
+                    (
+                        outcome, actual_input, actual_output, final_cost,
+                        provider_request_id, error_classification, reservation_id,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET reserved_input_tokens = GREATEST(0, reserved_input_tokens - %s),
+                        reserved_output_tokens = GREATEST(0, reserved_output_tokens - %s),
+                        reserved_cost_usd = GREATEST(0, reserved_cost_usd - %s),
+                        consumed_input_tokens = consumed_input_tokens + %s,
+                        consumed_output_tokens = consumed_output_tokens + %s,
+                        consumed_cost_usd = consumed_cost_usd + %s,
+                        updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    """,
+                    (
+                        reservation[0], reservation[1], reservation[2],
+                        actual_input, actual_output, final_cost,
+                        queue_task_id, worker_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("task lease was lost while settling provider usage")
+                return {"settled": True, "duplicate": False, "state": outcome}
+
+    def expire_unsent_provider_reservations(self, limit: int = 100) -> list[str]:
+        """Release only reservations that expired before any network send began."""
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    WITH expired AS (
+                        SELECT reservation_id, queue_task_id,
+                               input_tokens_estimated, output_tokens_estimated,
+                               estimated_cost_usd
+                        FROM yj64_provider_request_reservations
+                        WHERE state = 'reserved' AND expires_at <= now()
+                        ORDER BY expires_at, reservation_id
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT %s
+                    ), released AS (
+                        UPDATE yj64_provider_request_reservations AS reservation
+                        SET state = 'expired', finished_at = now()
+                        FROM expired
+                        WHERE reservation.reservation_id = expired.reservation_id
+                        RETURNING expired.reservation_id, expired.queue_task_id,
+                                  expired.input_tokens_estimated, expired.output_tokens_estimated,
+                                  expired.estimated_cost_usd
+                    )
+                    UPDATE yj64_task_queue AS task
+                    SET reserved_input_tokens = GREATEST(0, task.reserved_input_tokens - released.input_tokens_estimated),
+                        reserved_output_tokens = GREATEST(0, task.reserved_output_tokens - released.output_tokens_estimated),
+                        reserved_cost_usd = GREATEST(0, task.reserved_cost_usd - released.estimated_cost_usd),
+                        updated_at = now()
+                    FROM released
+                    WHERE task.task_id = released.queue_task_id
+                    RETURNING released.reservation_id
+                    """,
+                    (limit,),
+                )
+                return [row[0] for row in cursor.fetchall()]
+
     def record_model_request_attempt(
         self, queue_task_id: int, worker_id: str, attempt: dict, decision: dict,
         lease_seconds: int = 300,
