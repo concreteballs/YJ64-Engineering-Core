@@ -27,6 +27,10 @@ class FakeStore:
         self.saved = (manifest, chunks)
         return {"persisted": True}
 
+    def enqueue_task(self, task_type, payload, dedupe_key, max_attempts=3):
+        self.enqueued = (task_type, payload, dedupe_key, max_attempts)
+        return {"enqueued": True, "duplicate": False, "task_id": 99, "state": "pending"}
+
     def assemble_payload_for_model(self, task_id, worker_id, payload_id, **kwargs):
         manifest, _ = self.saved
         return {"ready_for_model": True, "total_sha256": manifest["total_sha256"]}
@@ -66,6 +70,8 @@ class CiEventWorkerTests(unittest.TestCase):
         self.assertEqual(result, TaskExecutionResult("completed"))
         self.assertEqual(store.requested, [42])
         self.assertIsNotNone(store.saved)
+        self.assertEqual(store.enqueued[0], "analyze_ci_logs")
+        self.assertEqual(store.enqueued[1]["payload_id"], store.saved[0]["payload_id"])
 
     def test_missing_event_is_blocked(self):
         result = process_ci_event(
