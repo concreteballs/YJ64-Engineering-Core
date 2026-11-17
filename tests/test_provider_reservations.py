@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 
 from yj64_engineering_core.automation.postgres_store import PostgresCycleStore
 
@@ -37,6 +38,8 @@ class ReservationCursor:
             ) if self.profile else None
         elif "FROM yj64_provider_request_reservations" in query and "SELECT created_at" in query:
             self.many = []
+        elif "SELECT now()" in query:
+            self.one = (datetime(2026, 11, 17, 16, 0, tzinfo=timezone.utc),)
         elif "FROM yj64_cycle_usage_budget" in query:
             self.one = None
         elif "INSERT INTO yj64_provider_request_reservations" in query:
