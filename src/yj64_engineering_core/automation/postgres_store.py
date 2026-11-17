@@ -131,13 +131,22 @@ class PostgresCycleStore:
                     FROM candidate
                     WHERE task.task_id = candidate.task_id
                     RETURNING task.task_id, task.task_type, task.payload,
-                              task.attempts, task.max_attempts
+                              task.attempts, task.max_attempts,
+                              (SELECT checkpoint FROM yj64_task_checkpoints
+                               WHERE queue_task_id = task.task_id
+                               ORDER BY sequence DESC LIMIT 1)
                     """,
                     (lease_seconds, worker_id),
                 )
                 row = cursor.fetchone()
                 if row is None:
                     return None
+                checkpoint = row[5]
+                if isinstance(checkpoint, str):
+                    checkpoint = json.loads(checkpoint)
+                if checkpoint is not None:
+                    from .checkpoints import verify_checkpoint
+                    verify_checkpoint(checkpoint)
                 return {
                     "task_id": row[0],
                     "task_type": row[1],
@@ -145,6 +154,7 @@ class PostgresCycleStore:
                     "attempts": row[3],
                     "max_attempts": row[4],
                     "worker_id": worker_id,
+                    "checkpoint": checkpoint,
                 }
 
     def complete_task(self, task_id: int, worker_id: str) -> bool:
@@ -201,18 +211,37 @@ class PostgresCycleStore:
                 )
                 return cursor.rowcount == 1
 
-    def save_checkpoint(self, queue_task_id: int, checkpoint: dict) -> bool:
-        """Persist a verified checkpoint once; reject conflicting sequence reuse."""
+    def save_checkpoint(
+        self, queue_task_id: int, worker_id: str, checkpoint: dict,
+        lease_seconds: int = 300,
+    ) -> bool:
+        """Persist a verified checkpoint only while the caller owns a live lease."""
         from .checkpoints import verify_checkpoint
 
         if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
             raise ValueError("queue_task_id must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
         verify_checkpoint(checkpoint)
         if not isinstance(checkpoint, dict):
             raise ValueError("checkpoint must be an object")
         payload = json.dumps(checkpoint, sort_keys=True, separators=(",", ":"), allow_nan=False)
         with self._connect() as connection:
             with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running'
+                      AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot checkpoint without a live task lease")
                 cursor.execute(
                     """
                     INSERT INTO yj64_task_checkpoints
