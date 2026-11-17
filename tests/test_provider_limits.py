@@ -67,6 +67,12 @@ class ProviderErrorClassificationTests(unittest.TestCase):
         result = classify_provider_error(499, "provider returned unusual response")
         self.assertEqual(result.action, "hold_for_review")
 
+    def test_statusless_transport_timeout_is_retryable(self):
+        result = classify_provider_error(None, "request timeout", attempt=2, now=self.now)
+        self.assertEqual(result.classification, "transient_transport_error")
+        self.assertEqual(result.delay_seconds, 10)
+        self.assertTrue(result.retryable)
+
     def test_statusless_unclassified_failure_is_held_for_review(self):
         result = classify_provider_error(None, "provider returned an unstructured error")
         self.assertEqual(result.classification, "unknown_provider_error")
