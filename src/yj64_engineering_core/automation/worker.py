@@ -194,9 +194,12 @@ class WorkerRunner:
             if reconciliation_task is not None:
                 return self._reconcile_once(reconciliation_task, recovery)
 
-        task = self.store.claim_next_task(
-            self.worker_id, self.lease_seconds, self.allowed_task_types
-        )
+        if self.allowed_task_types is None:
+            task = self.store.claim_next_task(self.worker_id, self.lease_seconds)
+        else:
+            task = self.store.claim_next_task(
+                self.worker_id, self.lease_seconds, self.allowed_task_types
+            )
         if task is None:
             return {"status": "idle", "recovery": recovery}
 
