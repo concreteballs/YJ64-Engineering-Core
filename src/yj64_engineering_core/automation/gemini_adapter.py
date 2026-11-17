@@ -72,6 +72,15 @@ class GeminiGenerateContentAdapter:
         if not isinstance(max_response_bytes, int) or isinstance(max_response_bytes, bool) or max_response_bytes < 1024:
             raise ValueError("max_response_bytes must be at least 1024")
 
+        if (
+            limit_profile.input_cost_per_million_usd is None
+            or limit_profile.output_cost_per_million_usd is None
+            or limit_profile.max_input_tokens is None
+            or limit_profile.max_output_tokens is None
+            or limit_profile.max_payload_bytes is None
+            or limit_profile.max_concurrency is None
+        ):
+            raise ValueError("Gemini profile must include verified token/byte/concurrency limits and pricing")
         self.model = model.strip()
         self.profile = limit_profile
         self._artifacts = artifact_store
@@ -135,6 +144,13 @@ class GeminiGenerateContentAdapter:
         ):
             raise ValueError("request provider/model/endpoint does not match this adapter")
         body = self._decode_request(request.payload)
+        generation_config = body.get("generationConfig")
+        configured_output = (
+            generation_config.get("maxOutputTokens")
+            if isinstance(generation_config, dict) else None
+        )
+        if configured_output != request.max_output_tokens:
+            raise ValueError("request max_output_tokens must match generationConfig.maxOutputTokens")
         try:
             response_body, status, headers = self._post(
                 self._model_url("generateContent"), request.payload
@@ -178,11 +194,13 @@ class GeminiGenerateContentAdapter:
         input_tokens = self._nonnegative_int(usage.get("promptTokenCount"))
         candidate_tokens = self._nonnegative_int(usage.get("candidatesTokenCount"))
         thinking_tokens = self._nonnegative_int(usage.get("thoughtsTokenCount"))
-        output_tokens = (
-            candidate_tokens + thinking_tokens
-            if candidate_tokens is not None and thinking_tokens is not None
-            else candidate_tokens
-        )
+        total_tokens = self._nonnegative_int(usage.get("totalTokenCount"))
+        if input_tokens is not None and total_tokens is not None and total_tokens >= input_tokens:
+            output_tokens = total_tokens - input_tokens
+        elif candidate_tokens is not None and thinking_tokens is not None:
+            output_tokens = candidate_tokens + thinking_tokens
+        else:
+            output_tokens = candidate_tokens
         actual_cost = self._actual_cost(input_tokens, output_tokens)
         response_id = parsed.get("responseId")
         if not isinstance(response_id, str) or not response_id.strip():
