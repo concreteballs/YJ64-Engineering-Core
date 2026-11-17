@@ -81,7 +81,7 @@ class ProviderAttemptStoreTests(unittest.TestCase):
         headers = json.loads(insert[-2])
         self.assertEqual(headers, {"retry-after": "45", "x-request-id": "req_123"})
         update = cursor.statements[-1][0]
-        self.assertIn("available_at = now()", update)
+        self.assertIn("available_at = CASE", update)
         self.assertIn("lock_owner = NULL", update)
 
     def test_endpoint_query_string_is_not_persisted(self):
