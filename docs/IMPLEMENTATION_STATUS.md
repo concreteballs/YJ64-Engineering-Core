@@ -63,6 +63,8 @@ CI run [44122919875](https://github.com/concreteballs/YJ64-Engineering-Core/acti
 
 A provider adapter contract now exists in `automation/provider_adapters.py`: it requires exact serialized-body hashing, provider-specific token counting, explicit capabilities for idempotency/lookup, durable response-artifact persistence, and authoritative lookup outcomes. It is an interface contract only; no live HTTP adapter or credentials are wired.
 
+The admission path now fails closed if no global daily/monthly usage ceiling has been explicitly configured. The current Supabase project has zero provider profiles, zero global budget rows and zero reservations; therefore no model request can yet be admitted through this path.
+
 **Not yet implemented or demonstrated:** provider-specific API adapters and live limit/pricing discovery; initial verified provider profiles and global/task budget configuration; automatic scheduler invocation of quota recovery, reservation expiry and capacity admission; provider-specific rate-window semantics and account-wide quota mapping; concrete provider adapters that implement the contract, persist successful response artifacts before settlement, verify idempotency/retrieval and produce trusted reconciliation evidence; actual provider chunk transport/remote acknowledgement; provider-specific tokenizers and provider-specific rate-window semantics; real service-role application round-trip tests; and end-to-end model execution gated on FINALIZE. No worker is running.
 
 
