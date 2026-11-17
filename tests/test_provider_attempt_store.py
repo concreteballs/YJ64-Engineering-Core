@@ -50,6 +50,13 @@ class ReservationAttemptCursor(FakeCursor):
             self._fetch = (100, 40, 0.025, True, self.reservation_state)
 
 
+class FinishReservationCursor(FakeCursor):
+    def execute(self, query, params):
+        super().execute(query, params)
+        if "SELECT input_tokens_estimated, output_tokens_estimated" in query:
+            self._fetch = (100, 40, 0.025, True, "sending")
+
+
 class FakeConnection:
     def __init__(self, cursor):
         self.cursor_value = cursor
@@ -180,6 +187,31 @@ class ProviderAttemptStoreTests(unittest.TestCase):
             "consumed_input_tokens = consumed_input_tokens + %s" in q
             for q, _ in cursor.statements
         ))
+
+    def test_successful_provider_call_requires_durable_result_artifact(self):
+        cursor = FinishReservationCursor()
+        with self.assertRaisesRegex(ValueError, "durable provider_result_ref"):
+            self.store(cursor).finish_provider_request(
+                12, "worker-a", "reservation-1", outcome="completed"
+            )
+        result = self.store(cursor).finish_provider_request(
+            12, "worker-a", "reservation-1", outcome="completed",
+            provider_result_ref="artifact://model-results/task-12-response",
+            input_tokens_actual=95, output_tokens_actual=27,
+        )
+        self.assertTrue(result["settled"])
+        update, params = next((q, params) for q, params in cursor.statements
+                              if "UPDATE yj64_provider_request_reservations" in q
+                              and "provider_result_ref = COALESCE" in q)
+        self.assertIn("provider_result_ref = COALESCE", update)
+        self.assertEqual(params[5], "artifact://model-results/task-12-response")
+
+    def test_successful_provider_result_rejects_signed_url(self):
+        with self.assertRaisesRegex(ValueError, "signed URL"):
+            self.store(FinishReservationCursor()).finish_provider_request(
+                12, "worker-a", "reservation-1", outcome="completed",
+                provider_result_ref="https://storage.test/file?token=secret",
+            )
 
     def test_attempt_requires_live_lease(self):
         cursor = FakeCursor(has_lease=False)
