@@ -33,6 +33,12 @@ class ProviderErrorClassificationTests(unittest.TestCase):
         self.assertFalse(result.retryable)
         self.assertEqual(result.delay_seconds, 120)
 
+    def test_daily_and_monthly_limits_are_blocked(self):
+        for message in ("requests per day limit reached", "exceeded your current quota"):
+            result = classify_provider_error(429, message, now=self.now)
+            self.assertEqual(result.action, "block_until_reset")
+            self.assertFalse(result.retryable)
+
     def test_payload_too_large_requires_split(self):
         result = classify_provider_error(413, "request too large")
         self.assertEqual(result.action, "split_or_decompose")
