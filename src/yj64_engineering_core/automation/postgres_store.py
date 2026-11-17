@@ -26,7 +26,9 @@ class PostgresCycleStore:
             import psycopg
         except ImportError as exc:
             raise RuntimeError("psycopg is not installed") from exc
-        return psycopg.connect(self.database_url)
+        # Supabase transaction-pooler connections must not rely on session-scoped
+        # prepared statements. Disable psycopg auto-prepare for pooler compatibility.
+        return psycopg.connect(self.database_url, prepare_threshold=None)
 
     def record_ci_event(self, event: dict) -> dict:
         required = (
