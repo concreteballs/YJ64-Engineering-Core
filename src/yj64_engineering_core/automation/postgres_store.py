@@ -93,6 +93,40 @@ class PostgresCycleStore:
 
         with self._connect() as connection:
             with connection.cursor() as cursor:
+                # A request that may have reached the provider is not safe to replay
+                # merely because the worker lease expired. Quarantine it first.
+                cursor.execute(
+                    """
+                    UPDATE yj64_provider_request_reservations AS reservation
+                    SET state = 'unknown',
+                        last_error_classification = COALESCE(
+                            last_error_classification, 'worker_lease_expired'
+                        )
+                    FROM yj64_task_queue AS task
+                    WHERE reservation.queue_task_id = task.task_id
+                      AND task.state = 'running'
+                      AND task.locked_at < now() - (%s * interval '1 second')
+                      AND reservation.state IN ('sending', 'accepted')
+                    """,
+                    (lease_seconds,),
+                )
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue AS task
+                    SET state = 'blocked', blocked_reason = 'request_outcome_unknown',
+                        lock_owner = NULL, locked_at = NULL,
+                        last_error = 'Worker lease expired after provider send; reconcile before retry',
+                        updated_at = now()
+                    WHERE task.state = 'running'
+                      AND task.locked_at < now() - (%s * interval '1 second')
+                      AND EXISTS (
+                          SELECT 1 FROM yj64_provider_request_reservations AS reservation
+                          WHERE reservation.queue_task_id = task.task_id
+                            AND reservation.state = 'unknown'
+                      )
+                    """,
+                    (lease_seconds,),
+                )
                 cursor.execute(
                     """
                     UPDATE yj64_task_queue
@@ -156,6 +190,25 @@ class PostgresCycleStore:
                     "worker_id": worker_id,
                     "checkpoint": checkpoint,
                 }
+
+    def renew_task_lease(
+        self, task_id: int, worker_id: str, lease_seconds: int = 300,
+    ) -> bool:
+        """Renew a lease only while it is still owned and has not already expired."""
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET locked_at = now(), updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    """,
+                    (task_id, worker_id, lease_seconds),
+                )
+                return cursor.rowcount == 1
 
     def complete_task(self, task_id: int, worker_id: str) -> bool:
         with self._connect() as connection:
