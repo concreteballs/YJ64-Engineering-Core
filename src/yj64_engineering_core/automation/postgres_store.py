@@ -1053,6 +1053,7 @@ class PostgresCycleStore:
                       AND reserved_input_tokens = 0 AND reserved_output_tokens = 0
                       AND reserved_cost_usd = 0 AND consumed_input_tokens = 0
                       AND consumed_output_tokens = 0 AND consumed_cost_usd = 0
+                      AND provider_requests_reserved = 0 AND provider_requests_consumed = 0
                     """,
                     (input_token_limit, output_token_limit, cost, max_provider_requests, deadline_at, task_id),
                 )
