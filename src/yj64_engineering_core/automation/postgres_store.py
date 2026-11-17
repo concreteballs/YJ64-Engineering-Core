@@ -1629,16 +1629,44 @@ class PostgresCycleStore:
                     raise RuntimeError("cannot send provider request without a live task lease")
                 cursor.execute(
                     """
+                    SELECT state FROM yj64_provider_request_reservations
+                    WHERE reservation_id = %s AND queue_task_id = %s
+                    FOR UPDATE
+                    """,
+                    (reservation_id, queue_task_id),
+                )
+                reservation = cursor.fetchone()
+                if reservation is None:
+                    return False
+                if reservation[0] == "sending":
+                    return True
+                if reservation[0] != "reserved":
+                    return False
+                cursor.execute(
+                    """
                     UPDATE yj64_provider_request_reservations
                     SET state = 'sending', sent_at = COALESCE(sent_at, now()), expires_at = NULL
                     WHERE reservation_id = %s AND queue_task_id = %s
-                      AND state IN ('reserved', 'sending')
-                      AND (expires_at IS NULL OR expires_at > now())
+                      AND state = 'reserved' AND (expires_at IS NULL OR expires_at > now())
                     RETURNING state
                     """,
                     (reservation_id, queue_task_id),
                 )
-                return cursor.fetchone() is not None
+                if cursor.fetchone() is None:
+                    return False
+                cursor.execute(
+                    """
+                    UPDATE yj64_task_queue
+                    SET provider_requests_reserved = GREATEST(0, provider_requests_reserved - 1),
+                        provider_requests_consumed = provider_requests_consumed + 1,
+                        updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                    """,
+                    (queue_task_id, worker_id),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("task lease was lost while consuming provider request budget")
+                return True
 
     def finish_provider_request(
         self, queue_task_id: int, worker_id: str, reservation_id: str,
@@ -1783,6 +1811,7 @@ class PostgresCycleStore:
                     SET reserved_input_tokens = GREATEST(0, task.reserved_input_tokens - released.input_tokens_estimated),
                         reserved_output_tokens = GREATEST(0, task.reserved_output_tokens - released.output_tokens_estimated),
                         reserved_cost_usd = GREATEST(0, task.reserved_cost_usd - released.estimated_cost_usd),
+                        provider_requests_reserved = GREATEST(0, task.provider_requests_reserved - 1),
                         updated_at = now()
                     FROM released
                     WHERE task.task_id = released.queue_task_id
