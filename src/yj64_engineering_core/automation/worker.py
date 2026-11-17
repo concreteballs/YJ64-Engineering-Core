@@ -78,7 +78,7 @@ class ProviderReconciliationDecision:
 
 class CycleStore(Protocol):
     def run_recovery_maintenance(self, limit: int = 100) -> dict: ...
-    def claim_next_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None: ...
+    def claim_next_task(self, worker_id: str, lease_seconds: int = 300, task_types: list[str] | None = None) -> dict | None: ...
     def claim_next_reconciliation_task(self, worker_id: str, lease_seconds: int = 300) -> dict | None: ...
     def list_unknown_provider_requests(self, queue_task_id: int, worker_id: str, lease_seconds: int = 300) -> list[dict]: ...
     def list_recovered_provider_results(self, queue_task_id: int, worker_id: str, lease_seconds: int = 300) -> list[dict]: ...
@@ -145,6 +145,7 @@ class WorkerRunner:
         reconciliation_handler: ReconciliationHandler | None = None,
         lease_seconds: int = 300,
         recovery_limit: int = 100,
+        allowed_task_types: list[str] | None = None,
     ) -> None:
         if not isinstance(worker_id, str) or not worker_id.strip():
             raise ValueError("worker_id is required")
@@ -167,12 +168,20 @@ class WorkerRunner:
                 raise ValueError("each handler needs a non-empty task type and callable")
         if reconciliation_handler is not None and not callable(reconciliation_handler):
             raise ValueError("reconciliation_handler must be callable")
+        if allowed_task_types is not None and (
+            not isinstance(allowed_task_types, list) or not allowed_task_types
+            or any(not isinstance(item, str) or not item.strip() for item in allowed_task_types)
+        ):
+            raise ValueError("allowed_task_types must be a non-empty list of task type names")
+        if allowed_task_types is not None and not set(handlers).issuperset(allowed_task_types):
+            raise ValueError("every allowed task type must have a registered handler")
         self.store = store
         self.worker_id = worker_id.strip()
         self.handlers = dict(handlers)
         self.reconciliation_handler = reconciliation_handler
         self.lease_seconds = lease_seconds
         self.recovery_limit = recovery_limit
+        self.allowed_task_types = list(allowed_task_types) if allowed_task_types is not None else None
 
     def run_once(self) -> dict:
         """Run recovery and process no more than one task; never loops in background."""
@@ -185,7 +194,9 @@ class WorkerRunner:
             if reconciliation_task is not None:
                 return self._reconcile_once(reconciliation_task, recovery)
 
-        task = self.store.claim_next_task(self.worker_id, self.lease_seconds)
+        task = self.store.claim_next_task(
+            self.worker_id, self.lease_seconds, self.allowed_task_types
+        )
         if task is None:
             return {"status": "idle", "recovery": recovery}
 
