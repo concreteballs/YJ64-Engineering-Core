@@ -95,7 +95,7 @@ def plan_provider_capacity(
         if not isinstance(created_at, datetime) or created_at.tzinfo is None:
             raise ValueError("reservation created_at must be timezone-aware")
         state = str(item.get("state", "reserved"))
-        if state not in {"reserved", "sending", "accepted", "completed"}:
+        if state not in {"reserved", "sending", "accepted", "completed", "failed", "unknown"}:
             continue
         tokens = item.get("estimated_tokens", 0)
         if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens < 0:
@@ -109,9 +109,19 @@ def plan_provider_capacity(
             created_at, tokens, state,
             expires_at or created_at + timedelta(seconds=reservation_ttl_seconds),
         )
-        if created_at >= window_start:
-            recent.append(reservation)
-        if state in {"reserved", "sending", "accepted"} and reservation[3] > now:
+        sent_at = item.get("sent_at")
+        if sent_at is not None and (
+            not isinstance(sent_at, datetime) or sent_at.tzinfo is None
+        ):
+            raise ValueError("reservation sent_at must be timezone-aware")
+        # An unsent reservation consumes concurrency, but not RPM/TPM.
+        # Once the request may have left the process, sent_at is authoritative.
+        rolling_at = sent_at
+        if rolling_at is None and state in {"completed", "failed"}:
+            rolling_at = created_at  # compatibility with historical test inputs
+        if rolling_at is not None and rolling_at >= window_start:
+            recent.append((rolling_at, tokens, state, reservation[3]))
+        if state in {"reserved", "sending", "accepted", "unknown"} and reservation[3] > now:
             active_all.append(reservation)
 
     requests_used = len(recent)
