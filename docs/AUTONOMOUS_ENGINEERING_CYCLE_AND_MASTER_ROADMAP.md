@@ -4,7 +4,7 @@ Last reconciled: 2026-11-17
 Repository: concreteballs/YJ64-Engineering-Core
 Authorized branch: main
 
-This document is the execution index for the autonomous development cycle. It separates verified implementation from planned work. The detailed subsystem ledger remains in IMPLEMENTATION_STATUS.md; this file records the current control-loop priority and the order in which the remaining master plan should be executed.
+This document is the execution index for the autonomous development cycle. It separates verified implementation from planned work. The detailed subsystem ledger remains in IMPLEMENTATION_STATUS.md; this file records the current control-loop priority and the order in which the remaining master plan should be executed. The mandatory [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md) defines how task state survives model-context rollover, worker restart and the end of any user-facing chat.
 
 **Strategic programme index:** see [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) for the expandable strategic graph and the implementation checklists beneath each major stage. This document remains the detailed autonomous-cycle execution plan.
 
