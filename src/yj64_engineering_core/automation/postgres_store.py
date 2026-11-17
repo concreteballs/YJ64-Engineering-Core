@@ -1519,9 +1519,9 @@ class PostgresCycleStore:
                         (queue_task_id, attempt_number, provider, model, endpoint,
                          provider_request_id, error_classification, http_status,
                          retry_after_seconds, quota_reset_at, scheduled_retry_at,
-                         safe_headers, error_summary)
+                         reservation_id, safe_headers, error_summary)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            %s::jsonb, %s)
+                            %s, %s::jsonb, %s)
                     ON CONFLICT DO NOTHING
                     RETURNING attempt_id
                     """,
@@ -1531,7 +1531,8 @@ class PostgresCycleStore:
                         attempt.get("provider_request_id"),
                         str(attempt["error_classification"])[:128],
                         attempt.get("http_status"), delay, attempt.get("quota_reset_at"),
-                        scheduled_at, json.dumps(safe_headers, separators=(",", ":")), summary,
+                        scheduled_at, attempt.get("reservation_id"),
+                        json.dumps(safe_headers, separators=(",", ":")), summary,
                     ),
                 )
                 inserted = cursor.fetchone()
