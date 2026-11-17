@@ -150,7 +150,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
 
         cursor = CheckpointCursor()
         self.assertFalse(self.store(cursor).save_checkpoint(42, "worker-a", checkpoint))
-        self.assertEqual(len(cursor.statements), 3)
+        self.assertEqual(len(cursor.statements), 2)
 
     def test_save_checkpoint_rejects_conflicting_sequence(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
@@ -238,6 +238,55 @@ class PostgresCycleStoreTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "live task lease"):
             self.store(NoLeaseCursor()).save_checkpoint(42, "worker-a", checkpoint)
+
+
+    def test_save_checkpoint_requires_contiguous_sequence_and_previous_hash(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=2, state="running", task_spec_version="1",
+            task_state={"stage": "next"}, budgets={}, approvals={},
+            previous_checkpoint_hash="a" * 64,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        class BrokenChainCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (42,)
+                elif "SELECT checkpoint_hash" in query:
+                    self._fetch = None
+                elif "SELECT sequence, checkpoint_hash" in query:
+                    self._fetch = (1, "b" * 64)
+
+        with self.assertRaisesRegex(ValueError, "previous hash"):
+            self.store(BrokenChainCursor()).save_checkpoint(42, "worker-a", checkpoint)
+
+    def test_save_first_checkpoint_persists_after_live_lease(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from datetime import datetime, timezone
+
+        checkpoint = create_checkpoint(
+            task_id="task-a", sequence=1, state="running", task_spec_version="1",
+            task_state={"stage": "start"}, budgets={}, approvals={},
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+        class InsertCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (42,)
+                elif "SELECT checkpoint_hash" in query or "SELECT sequence, checkpoint_hash" in query:
+                    self._fetch = None
+                elif "INSERT INTO yj64_task_checkpoints" in query:
+                    self._fetch = (99,)
+
+        cursor = InsertCursor()
+        self.assertTrue(self.store(cursor).save_checkpoint(42, "worker-a", checkpoint))
+        self.assertEqual(len(cursor.statements), 4)
 
 
 if __name__ == "__main__":
