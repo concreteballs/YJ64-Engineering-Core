@@ -32,6 +32,8 @@ class FakeStorageHTTP:
     def __call__(self, request, timeout):
         self.requests.append((request, timeout))
         key = request.full_url.split("/storage/v1/object/")[-1]
+        if key.startswith("authenticated/"):
+            key = key[len("authenticated/"):]
         if request.method == "POST":
             if key in self.objects:
                 raise urllib.error.HTTPError(
