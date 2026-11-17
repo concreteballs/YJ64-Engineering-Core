@@ -104,12 +104,22 @@ class PostgresCycleStoreTests(unittest.TestCase):
         task = self.store(cursor).claim_next_task("worker-a")
         self.assertEqual(task["task_id"], 12)
         self.assertEqual(task["worker_id"], "worker-a")
-        self.assertIn("FOR UPDATE SKIP LOCKED", cursor.statements[1][0])
+        self.assertTrue(any("FOR UPDATE SKIP LOCKED" in query for query, _ in cursor.statements))
         self.assertEqual(task["attempts"], 1)
 
     def test_claim_validates_lease(self):
         with self.assertRaises(ValueError):
             self.store(FakeCursor()).claim_next_task("worker-a", lease_seconds=2)
+
+    def test_renew_task_lease_requires_current_owner(self):
+        cursor = FakeCursor(rowcount=1)
+        self.assertTrue(self.store(cursor).renew_task_lease(12, "worker-a"))
+        self.assertIn("lock_owner = %s", cursor.statements[0][0])
+        self.assertIn("locked_at >=", cursor.statements[0][0])
+
+    def test_renew_task_lease_rejects_invalid_duration(self):
+        with self.assertRaises(ValueError):
+            self.store(FakeCursor()).renew_task_lease(12, "worker-a", 5)
 
     def test_complete_requires_current_lease_owner(self):
         cursor = FakeCursor(rowcount=1)
