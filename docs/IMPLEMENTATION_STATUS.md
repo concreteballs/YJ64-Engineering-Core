@@ -39,6 +39,14 @@ Implementation specification: [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OB
 
 ---
 
+## Session Independence Protocol
+
+**Status: Architecture requirement approved and documented; runtime implementation not yet present.**
+
+The [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md) is now a mandatory acceptance requirement for the Autonomous Engineering Cycle. The authoritative state must live in durable task records and versioned checkpoints, not in a ChatGPT conversation or a model context window. Context rollover must automatically start a fresh model request from persisted state. Worker restart, expired leases and uncertain model-call outcomes must recover safely with idempotency and evidence reconciliation.
+
+Not yet implemented or demonstrated: checkpoint persistence/runtime, context-budget monitor and automatic rollover, worker recovery, model-call idempotency/reconciliation, and the forced-rollover acceptance test. The protocol does not mean this ChatGPT conversation can automatically continue itself or that the current cloud worker already exists.
+
 ## Consolidated work-package status
 
 | Work package | Status | Existing implementation | Main remaining work |
