@@ -2,7 +2,7 @@
 
 This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PLAN.md. A plan, candidate evaluation or catalogue entry is not an implemented solver.
 
-**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md) defines the cross-cutting monitoring/diagnostics foundation. [YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md](YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md) assesses the existing Android monitor prototype and its migration path. [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle.
+**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md) defines the cross-cutting monitoring/diagnostics foundation. [YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md](YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md) assesses the existing Android monitor prototype and its migration path. [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle. [SESSION_INDEPENDENCE_PROTOCOL.md](SESSION_INDEPENDENCE_PROTOCOL.md) defines the mandatory durable-state and automatic context-rollover requirements.
 
 ## Status definitions
 
