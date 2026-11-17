@@ -117,7 +117,7 @@ class ProviderReservationTests(unittest.TestCase):
             original(query, params)
             if "FROM yj64_provider_limit_profiles" in query:
                 cursor.one = (
-                    10, 1000, 2, 800, 200, True, 1.0, 2.0,
+                    10, 1000, 2, 800, 200, 2000000, True, 1.0, 2.0,
                     "provider-a:account", "provider_api",
                     datetime(2026, 11, 17, 15, 59, tzinfo=timezone.utc),
                 )
