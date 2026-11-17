@@ -35,12 +35,12 @@ Keep database and provider credentials server-side. Never put them in source fil
 3. PostgreSQL atomically inserts one deduplicated \`process_ci_event\` task.
 4. The scheduled worker claims at most one matching task using the existing lease mechanism.
 5. The worker fetches the exact run-attempt logs, redacts and bounds them, then persists a verified payload.
-6. The payload is ready for a future provider adapter; it is not yet transmitted to an LLM.
+6. The payload is ready for the provider adapter, and a durable `analyze_ci_logs` task is queued. The analysis worker is not yet enabled, so the payload is not transmitted to an LLM.
 
 ## Remaining activation work
 
 - Verify the selected Gemini model's current metadata, pricing and project-specific limits; configure the verified provider profile and explicit global/task budgets before enabling generation.
-- Wire the Gemini adapter into a separate `analyze_ci_logs` queue handler using the existing provider reservation, ambiguous-send and retry mechanisms.
+- Wire the Gemini adapter into a separate `analyze_ci_logs` queue handler using the existing provider reservation, ambiguous-send and retry mechanisms. The queued task must remain unclaimed until the provider profile and global budget are configured.
 - Add the equivalent Mistral adapter later as a quota-aware fallback; preserve split/retry-after-reset behaviour.
 - Consume the prepared CI payload, persist a structured diagnosis and then implement bounded repair/rebuild orchestration.
 - Implement roadmap task selection and session-independent checkpoints.
