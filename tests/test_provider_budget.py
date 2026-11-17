@@ -52,7 +52,7 @@ class ProviderBudgetTests(unittest.TestCase):
         )
         self.assertFalse(result.allowed)
         self.assertEqual(result.active_requests, 1)
-        self.assertEqual(result.retry_at, self.now + timedelta(seconds=20))
+        self.assertEqual(result.retry_at, self.now + timedelta(seconds=5))
 
     def test_single_request_over_input_or_tpm_limit_must_be_split(self):
         input_limited = plan_provider_capacity(
