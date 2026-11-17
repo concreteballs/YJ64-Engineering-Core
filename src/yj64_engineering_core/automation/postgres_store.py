@@ -353,10 +353,17 @@ class PostgresCycleStore:
             raise ValueError("outcome must be provider_found or provider_not_found")
         if not isinstance(evidence_ref, str) or not evidence_ref.strip() or len(evidence_ref) > 1024:
             raise ValueError("evidence_ref is required and must be at most 1024 characters")
+        if "?" in evidence_ref or "#" in evidence_ref:
+            raise ValueError("evidence_ref must be an opaque reference, not a signed URL")
         if outcome == "provider_found" and (
             not isinstance(provider_result_ref, str) or not provider_result_ref.strip()
+            or len(provider_result_ref) > 1024
         ):
             raise ValueError("provider_found requires a durable provider_result_ref")
+        if provider_result_ref is not None and (
+            "?" in provider_result_ref or "#" in provider_result_ref
+        ):
+            raise ValueError("provider_result_ref must be an opaque artifact reference, not a signed URL")
         if outcome == "provider_not_found" and provider_result_ref is not None:
             raise ValueError("provider_not_found cannot have a provider_result_ref")
         for name, value in (
