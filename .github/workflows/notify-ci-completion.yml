@@ -78,7 +78,7 @@ jobs:
                   body = json.loads(error.read().decode("utf-8"))
                   code = body.get("error") if isinstance(body, dict) else None
                   diagnostic = body.get("diagnostic") if isinstance(body, dict) else None
-              sqlstate = body.get("sqlstate") if isinstance(body, dict) else None
+                  sqlstate = body.get("sqlstate") if isinstance(body, dict) else None
                   allowed = {
                       "webhook_not_configured",
                       "database_not_configured",
@@ -98,6 +98,8 @@ jobs:
                       print("Webhook diagnostic: " + code)
                   if diagnostic in safe_diagnostics:
                       print("Database diagnostic: " + diagnostic)
+                  if isinstance(sqlstate, str) and len(sqlstate) == 5 and sqlstate.isalnum():
+                      print("PostgreSQL SQLSTATE: " + sqlstate)
               except (UnicodeDecodeError, json.JSONDecodeError):
                   print("Webhook diagnostic body was not recognized.")
               raise
