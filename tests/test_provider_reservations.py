@@ -88,6 +88,8 @@ class ProviderReservationTests(unittest.TestCase):
         self.assertFalse(result["duplicate"])
         self.assertTrue(any("FOR UPDATE" in q and "yj64_task_queue" in q for q, _ in cursor.statements))
         self.assertTrue(any("FOR UPDATE" in q and "yj64_provider_limit_profiles" in q for q, _ in cursor.statements))
+        self.assertTrue(any("pg_advisory_xact_lock" in q for q, _ in cursor.statements))
+        self.assertTrue(any("WHERE capacity_scope = %s" in q for q, _ in cursor.statements))
         self.assertTrue(any("INSERT INTO yj64_provider_request_reservations" in q for q, _ in cursor.statements))
 
     def test_missing_provider_profile_fails_closed(self):
@@ -105,6 +107,24 @@ class ProviderReservationTests(unittest.TestCase):
         self.assertTrue(result["duplicate"])
         self.assertEqual(result["reservation_id"], "reservation-1")
         self.assertFalse(any("INSERT INTO yj64_provider_request_reservations" in q for q, _ in cursor.statements))
+
+    def test_stale_provider_derived_profile_fails_closed(self):
+        cursor = ReservationCursor()
+        cursor.profile = True
+        original = cursor.execute
+        def execute(query, params=None):
+            original(query, params)
+            if "FROM yj64_provider_limit_profiles" in query:
+                cursor.one = (
+                    10, 1000, 2, 800, 200, True, 1.0, 2.0,
+                    "provider-a:account", "provider_api",
+                    datetime(2026, 11, 17, 15, 59, tzinfo=timezone.utc),
+                )
+        cursor.execute = execute
+        result = self.reserve(self.store(cursor))
+        self.assertFalse(result["reserved"])
+        self.assertEqual(result["action"], "hold_for_review")
+        self.assertIn("stale", result["reason"])
 
     def test_idempotency_key_cannot_be_reused_for_another_task(self):
         cursor = ReservationCursor(
