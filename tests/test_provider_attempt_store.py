@@ -144,5 +144,22 @@ class ProviderAttemptStoreTests(unittest.TestCase):
             )
 
 
+    def test_quota_block_persists_reset_timestamp_on_queue(self):
+        cursor = FakeCursor()
+        attempt = self.attempt()
+        attempt["error_classification"] = "quota_exhausted"
+        attempt["quota_reset_at"] = "2026-11-18T00:00:00+00:00"
+        result = self.store(cursor).record_model_request_attempt(
+            12, "worker-a", attempt,
+            {"action": "block_until_reset", "delay_seconds": 3600,
+             "reason": "monthly quota exhausted"},
+        )
+        self.assertEqual(result["task_state"], "blocked")
+        update_query, update_params = cursor.statements[-1]
+        self.assertIn("blocked_reason = 'quota_exhausted'", update_query)
+        self.assertIn("quota_reset_at = %s", update_query)
+        self.assertEqual(update_params[0], "2026-11-18T00:00:00+00:00")
+
+
 if __name__ == "__main__":
     unittest.main()
