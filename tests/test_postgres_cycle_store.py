@@ -128,6 +128,39 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertIn("NOT EXISTS", cursor.statements[0][0])
         self.assertIn("yj64_provider_request_reservations", cursor.statements[0][0])
 
+    def test_defer_task_for_capacity_releases_lease_and_sets_retry_time(self):
+        from datetime import datetime, timezone
+        cursor = FakeCursor(rowcount=1)
+        retry_at = datetime(2026, 11, 17, 18, 0, tzinfo=timezone.utc)
+        result = self.store(cursor).defer_task_for_capacity(
+            12, "worker-a", retry_at, "RPM window full"
+        )
+        self.assertTrue(result)
+        query, params = cursor.statements[0]
+        self.assertIn("available_at", query)
+        self.assertIn("GREATEST(%s, now())", query)
+        self.assertIn("lock_owner = NULL", query)
+        self.assertEqual(params[0], retry_at)
+
+    def test_task_capacity_deferral_rejects_naive_datetime(self):
+        from datetime import datetime
+        with self.assertRaises(ValueError):
+            self.store(FakeCursor()).defer_task_for_capacity(
+                12, "worker-a", datetime(2026, 11, 17), "rate limit"
+            )
+
+    def test_recovery_maintenance_runs_both_bounded_recovery_operations(self):
+        store = self.store(FakeCursor())
+        with patch.object(PostgresCycleStore, "recover_due_quota_tasks", return_value=[12]) as quota, \
+             patch.object(PostgresCycleStore, "expire_unsent_provider_reservations", return_value=["r1"]) as expired:
+            result = store.run_recovery_maintenance(limit=25)
+        quota.assert_called_once_with(limit=25)
+        expired.assert_called_once_with(limit=25)
+        self.assertEqual(result, {
+            "quota_tasks_requeued": [12],
+            "unsent_reservations_expired": ["r1"],
+        })
+
     def test_fail_retries_with_bounded_delay(self):
         cursor = FakeCursor(returned_state="pending")
         state = self.store(cursor).fail_task(12, "worker-a", "temporary error", 90)
