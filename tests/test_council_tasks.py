@@ -148,6 +148,7 @@ class CouncilTaskTests(unittest.TestCase):
                 "request_id": "request-123",
                 "session_id": "session-123",
                 "parent_task_id": 9,
+                "resume_request_id": "council-resume:test-key",
                 "submitted_at": "2026-11-18T12:00:00Z",
                 "correlation_id": "task-12345678",
                 "idempotency_key": "idem-key-12345678",
@@ -230,6 +231,7 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(result, TaskExecutionResult("completed"))
         self.assertEqual(context.store.enqueued[0]["task_type"], POLL_TASK)
         self.assertEqual(context.store.enqueued[0]["payload"]["poll_generation"], 1)
+        self.assertEqual(context.store.enqueued[0]["payload"]["resume_request_id"], "council-resume:test-key")
 
     def test_completed_session_persists_artifact_and_hands_off_result(self):
         context = FakeContext()
@@ -243,6 +245,7 @@ class CouncilTaskTests(unittest.TestCase):
         handoff = context.store.enqueued[0]
         self.assertEqual(handoff["task_type"], RESULT_READY_TASK)
         self.assertEqual(handoff["payload"]["substantive_outcome"], "unresolved_disagreement")
+        self.assertEqual(handoff["payload"]["resume_request_id"], "council-resume:test-key")
         self.assertIn("supabase-storage://", handoff["payload"]["result_artifact_ref"])
         self.assertEqual(handoff["payload"]["browser_agent_envelope"]["message_type"], "council_result")
         loaded = load_council_result_artifact(
