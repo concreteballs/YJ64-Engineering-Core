@@ -1138,6 +1138,216 @@ class PostgresCycleStore:
                     "content": assembled,
                 }
 
+    def get_payload_for_analysis(self, source_task_id: int, payload_id: str) -> str:
+        """Read and hash-verify a ready-for-model payload without changing its state."""
+        from .payload_chunks import assemble_payload
+
+        if not isinstance(source_task_id, int) or isinstance(source_task_id, bool) or source_task_id < 1:
+            raise ValueError("source_task_id must be a positive integer")
+        if not isinstance(payload_id, str) or not payload_id.strip():
+            raise ValueError("payload_id is required")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT manifest, state FROM yj64_payload_manifests
+                    WHERE payload_id = %s AND queue_task_id = %s
+                    """,
+                    (payload_id, source_task_id),
+                )
+                row = cursor.fetchone()
+                if row is None or row[1] != "ready_for_model":
+                    raise KeyError("verified ready-for-model payload was not found")
+                manifest = row[0]
+                if isinstance(manifest, str):
+                    manifest = json.loads(manifest)
+                cursor.execute(
+                    """
+                    SELECT chunk_id, content FROM yj64_payload_chunks
+                    WHERE payload_id = %s ORDER BY chunk_index
+                    """,
+                    (payload_id,),
+                )
+                chunks = {chunk_id: content for chunk_id, content in cursor.fetchall()}
+                return assemble_payload(manifest, chunks)
+
+    def get_ci_log_analysis(self, analysis_task_id: int) -> dict | None:
+        """Read a durable structured CI analysis by its unique analysis task."""
+        if not isinstance(analysis_task_id, int) or isinstance(analysis_task_id, bool) or analysis_task_id < 1:
+            raise ValueError("analysis_task_id must be a positive integer")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT source_task_id, event_id, payload_id, provider, model,
+                           provider_reservation_id, provider_request_id,
+                           provider_response_artifact_ref, analysis_artifact_ref,
+                           analysis_sha256, analysis_status, analysis_json,
+                           input_tokens, output_tokens, actual_cost_usd
+                    FROM yj64_ci_log_analyses
+                    WHERE analysis_task_id = %s
+                    """,
+                    (analysis_task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                report = row[11]
+                if isinstance(report, str):
+                    report = json.loads(report)
+                return {
+                    "source_task_id": row[0], "event_id": row[1],
+                    "payload_id": row[2], "provider": row[3], "model": row[4],
+                    "provider_reservation_id": row[5], "provider_request_id": row[6],
+                    "provider_response_artifact_ref": row[7],
+                    "analysis_artifact_ref": row[8],
+                    "analysis_sha256": str(row[9]).strip(),
+                    "analysis_status": row[10], "analysis_json": report,
+                    "input_tokens": row[12], "output_tokens": row[13],
+                    "actual_cost_usd": str(row[14]),
+                }
+
+    def get_latest_provider_reservation(
+        self, queue_task_id: int, *, provider: str, model: str, endpoint: str,
+    ) -> dict | None:
+        """Read the latest provider reservation so retries never replay an ambiguous send."""
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        if any(not isinstance(value, str) or not value.strip() for value in (provider, model, endpoint)):
+            raise ValueError("provider, model and endpoint are required")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT reservation_id, idempotency_key, state, provider_request_id,
+                           provider_result_ref, input_tokens_estimated,
+                           output_tokens_estimated, input_tokens_actual,
+                           output_tokens_actual, actual_cost_usd,
+                           last_error_classification
+                    FROM yj64_provider_request_reservations
+                    WHERE queue_task_id = %s AND provider = %s
+                      AND model = %s AND endpoint = %s
+                    ORDER BY created_at DESC, reservation_id DESC
+                    LIMIT 1
+                    """,
+                    (queue_task_id, provider, model, endpoint),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "reservation_id": row[0], "idempotency_key": row[1],
+                    "state": row[2], "provider_request_id": row[3],
+                    "provider_result_ref": row[4],
+                    "input_tokens_estimated": row[5],
+                    "output_tokens_estimated": row[6],
+                    "input_tokens_actual": row[7],
+                    "output_tokens_actual": row[8],
+                    "actual_cost_usd": str(row[9]) if row[9] is not None else None,
+                    "last_error_classification": row[10],
+                }
+
+    def save_ci_log_analysis(
+        self, *, analysis_task_id: int, worker_id: str, lease_seconds: int,
+        source_task_id: int, event_id: int, payload_id: str,
+        provider: str, model: str, provider_reservation_id: str,
+        provider_request_id: str | None, provider_response_artifact_ref: str,
+        analysis_artifact_ref: str, analysis_sha256: str,
+        analysis_status: str, analysis_json: dict, input_tokens: int,
+        output_tokens: int, actual_cost_usd="0",
+    ) -> dict:
+        """Persist a structured analysis under the live task lease, idempotently."""
+        import hashlib
+        import re
+
+        for name, value in (("analysis_task_id", analysis_task_id),
+                            ("source_task_id", source_task_id), ("event_id", event_id)):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        if any(not isinstance(value, str) or not value.strip() for value in (
+            payload_id, provider, model, provider_reservation_id,
+            provider_response_artifact_ref, analysis_artifact_ref,
+        )):
+            raise ValueError("analysis identity and artifact references are required")
+        if any("?" in value or "#" in value for value in (
+            provider_response_artifact_ref, analysis_artifact_ref,
+        )):
+            raise ValueError("analysis artifact references must be opaque, not signed URLs")
+        if not isinstance(analysis_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", analysis_sha256):
+            raise ValueError("analysis_sha256 must be a lowercase SHA-256 digest")
+        if analysis_status not in {"completed", "invalid_response"}:
+            raise ValueError("unsupported analysis_status")
+        if not isinstance(analysis_json, dict):
+            raise ValueError("analysis_json must be an object")
+        if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
+               for value in (input_tokens, output_tokens)):
+            raise ValueError("token counts must be non-negative integers")
+        report_json = json.dumps(
+            analysis_json, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        actual_hash = hashlib.sha256(report_json.encode("utf-8")).hexdigest()
+        if actual_hash != analysis_sha256:
+            raise ValueError("analysis_sha256 does not match canonical analysis JSON")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (analysis_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot persist CI analysis without a live task lease")
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_ci_log_analyses
+                        (analysis_task_id, source_task_id, event_id, payload_id,
+                         provider, model, provider_reservation_id, provider_request_id,
+                         provider_response_artifact_ref, analysis_artifact_ref,
+                         analysis_sha256, analysis_status, analysis_json,
+                         input_tokens, output_tokens, actual_cost_usd)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s::jsonb, %s, %s, %s)
+                    ON CONFLICT (analysis_task_id) DO NOTHING
+                    """,
+                    (
+                        analysis_task_id, source_task_id, event_id, payload_id,
+                        provider, model, provider_reservation_id, provider_request_id,
+                        provider_response_artifact_ref, analysis_artifact_ref,
+                        analysis_sha256, analysis_status, report_json,
+                        input_tokens, output_tokens, actual_cost_usd,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    SELECT analysis_sha256, analysis_artifact_ref, analysis_status
+                    FROM yj64_ci_log_analyses WHERE analysis_task_id = %s
+                    """,
+                    (analysis_task_id,),
+                )
+                saved = cursor.fetchone()
+                if saved is None or (
+                    str(saved[0]).strip() != analysis_sha256
+                    or saved[1] != analysis_artifact_ref
+                    or saved[2] != analysis_status
+                ):
+                    raise ValueError("analysis task already has conflicting durable output")
+                return {
+                    "persisted": True, "analysis_task_id": analysis_task_id,
+                    "analysis_sha256": analysis_sha256,
+                    "analysis_artifact_ref": analysis_artifact_ref,
+                    "analysis_status": analysis_status,
+                }
+
     def set_task_usage_budget(
         self, task_id: int, *, input_token_limit: int | None = None,
         output_token_limit: int | None = None, cost_limit_usd=None,
