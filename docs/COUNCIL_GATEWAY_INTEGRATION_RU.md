@@ -81,7 +81,7 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 
 - automation/browser_agent_bridge.py — создание и проверка существующих сообщений yj64.browser-agent-envelope.v1 типов council_request и council_result.
 - automation/council_gateway.py — HTTPS-клиент, машинная аутентификация, лимиты, проверка протокола, идентификаторов и структуры результата.
-- automation/council_tasks.py — постановка запроса, асинхронный polling, checkpoints, сохранение результата и handoff.
+- automation/council_tasks.py — постановка запроса, асинхронный polling, checkpoints, сохранение результата, handoff и load_council_result_artifact(...) для агента-потребителя.
 - scripts/run_council_gateway_worker.py — одношаговый worker.
 - .github/workflows/scheduled-council-gateway-worker.yml — запуск worker по расписанию.
 - schemas/council-api-v1.schema.json — JSON Schema контракта.
@@ -100,7 +100,7 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 4. Идентификаторы сохраняются в checkpoint, создаётся poll task, текущий worker освобождается.
 5. Каждый poll worker делает один запрос статуса. Если сессия ещё выполняется, он создаёт следующее поколение poll task и завершает текущую задачу.
 6. После завершения результат проверяется и сохраняется как immutable artifact в существующем private Supabase Storage.
-7. Создаётся council_result_ready со ссылкой на artifact и envelope council_result, привязанный к исходной задаче. Инженерный агент должен прочитать результат, самостоятельно проверить утверждения по коду, тестам и CI и только затем продолжить исходную задачу.
+7. Создаётся council_result_ready со ссылкой на artifact и envelope council_result, привязанный к исходной задаче. Агент-потребитель вызывает load_council_result_artifact(...): функция проверяет envelope и совпадение request/session ID, затем читает private artifact. После этого агент самостоятельно проверяет утверждения по коду, тестам и CI и только затем продолжает исходную задачу.
 
 ## Настройка GitHub Actions secrets
 
