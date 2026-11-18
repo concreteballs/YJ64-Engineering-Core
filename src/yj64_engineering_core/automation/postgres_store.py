@@ -1220,7 +1220,7 @@ class PostgresCycleStore:
                 cursor.execute(
                     """
                     SELECT reservation_id, idempotency_key, state, provider_request_id,
-                           provider_result_ref, input_tokens_estimated,
+                           provider_result_ref, request_payload_sha256, input_tokens_estimated,
                            output_tokens_estimated, input_tokens_actual,
                            output_tokens_actual, actual_cost_usd,
                            last_error_classification
@@ -1239,12 +1239,13 @@ class PostgresCycleStore:
                     "reservation_id": row[0], "idempotency_key": row[1],
                     "state": row[2], "provider_request_id": row[3],
                     "provider_result_ref": row[4],
-                    "input_tokens_estimated": row[5],
-                    "output_tokens_estimated": row[6],
-                    "input_tokens_actual": row[7],
-                    "output_tokens_actual": row[8],
-                    "actual_cost_usd": str(row[9]) if row[9] is not None else None,
-                    "last_error_classification": row[10],
+                    "request_payload_sha256": str(row[5]).strip(),
+                    "input_tokens_estimated": row[6],
+                    "output_tokens_estimated": row[7],
+                    "input_tokens_actual": row[8],
+                    "output_tokens_actual": row[9],
+                    "actual_cost_usd": str(row[10]) if row[10] is not None else None,
+                    "last_error_classification": row[11],
                 }
 
     def save_ci_log_analysis(
