@@ -142,6 +142,14 @@ The autonomous cycle is operational only after a test demonstrates the full sequ
 
 Until all acceptance criteria pass, describe the system as partially implemented, not autonomous.
 
+## Cross-program architecture plans (approved additions; staged, not implemented)
+
+The autonomous cycle will also provide the bounded implementation/validation bridge for the following approved plans. These do not replace the cycle milestones or authorize parallel duplicate engines:
+
+- [Consensus, Decision Integrity and Evidence-Based Engineering](CONSENSUS_DECISION_INTEGRITY_AND_EVIDENCE_PLAN.md): reusable consensus/critique, independent secret voting, private domain competence estimates, evidence-integrity checks and validation feedback. Round supervision/repetition control remains in the application.
+- [Browser-Agent Feedback Bridge](BROWSER_AGENT_FEEDBACK_BRIDGE_PLAN.md): external browser observer reports exact CI/test evidence to the durable cycle; the engineering worker cross-checks and continues or stops. It is a transport/observer bridge, not another consensus or rating subsystem.
+- [Versioned Browser-Agent Envelope](../schemas/browser-agent-envelope.schema.json): initial machine-readable message envelope contract. It is a schema foundation only; no live bridge or browser-agent integration is claimed.
+
 ## 3. Master engineering roadmap after the cycle is operational
 
 The worker must use docs/IMPLEMENTATION_STATUS.md as the detailed source of truth, avoid recreating completed foundations, and execute the remaining work in dependency order:
