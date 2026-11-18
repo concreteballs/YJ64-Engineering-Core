@@ -89,6 +89,8 @@ Lifecycle:
 6. On completion, the structured result is validated, stored in the existing private content-addressed Supabase artifact store, and referenced by a `council_result_ready` queue item. The handoff also contains a `council_result` browser-agent envelope bound to the original task reference.
 7. The engineering-agent workflow consumes that handoff through `load_council_result_artifact(...)`, which validates the result envelope and request/session identity before loading the private artifact. The agent independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
 
+The current Engineering Core repository contains CI-event workers, but the audit did not find a general autonomous-agent continuation runner that claims `council_result_ready`. The durable handoff and result loader are implemented; the agent runner must claim this task type, call `load_council_result_artifact(...)`, and resume the parent workflow. Until that consumer is wired in, the handoff is persisted but the original engineering task is not automatically resumed.
+
 The Gateway never treats the council's conclusion as proof that a patch is correct. The consumer must validate the result and preserve the distinction between consensus, qualified consensus, unresolved disagreement, and insufficient evidence.
 
 ## Runtime configuration
