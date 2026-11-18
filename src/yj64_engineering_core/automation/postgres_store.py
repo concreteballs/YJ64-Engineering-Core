@@ -749,12 +749,13 @@ class PostgresCycleStore:
                             "parent_task_id": parent_task_id, "state": parent[0]}
                 if parent[0] != "waiting":
                     return {"accepted": False, "duplicate": False, "reason": "parent_not_waiting"}
-                cursor.execute("""SELECT checkpoint FROM yj64_task_checkpoints
+                cursor.execute("""SELECT sequence, checkpoint_hash, checkpoint
+                    FROM yj64_task_checkpoints
                     WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1""", (parent_task_id,))
                 latest = cursor.fetchone()
                 if latest is None:
                     return {"accepted": False, "duplicate": False, "reason": "parent_checkpoint_missing"}
-                checkpoint = latest[0]
+                checkpoint = latest[2]
                 if isinstance(checkpoint, str):
                     checkpoint = json.loads(checkpoint)
                 expected = checkpoint.get("task_state", {}).get("expected_council_request_id")
@@ -769,12 +770,53 @@ class PostgresCycleStore:
                      json.dumps({"source": "council_result_ready"}, separators=(",", ":"))))
                 inserted = cursor.fetchone()
                 if inserted is None:
-                    cursor.execute("""SELECT result_task_id, result_artifact_ref, result_sha256
+                    cursor.execute("""SELECT result_task_id, result_artifact_ref, result_sha256, resume_event_id
                         FROM yj64_task_resume_events WHERE parent_task_id = %s AND council_request_id = %s""",
                         (parent_task_id, council_request_id))
                     existing = cursor.fetchone()
-                    if existing is None or existing != (result_task_id, result_artifact_ref, result_sha256):
+                    if existing is None or existing[:3] != (result_task_id, result_artifact_ref, result_sha256):
                         raise ValueError("council resume identity conflicts with an existing event")
+                    resume_event_id = existing[3]
+                else:
+                    resume_event_id = inserted[0]
+
+                # Put the verified result reference into the parent's own checkpoint
+                # before re-queueing it. The resumed handler can consume it without
+                # querying an out-of-band event table.
+                from .checkpoints import create_checkpoint
+                parent_state = dict(checkpoint.get("task_state", {}))
+                parent_state["stage"] = "council_result_received"
+                parent_state["council_resume_event"] = {
+                    "resume_event_id": resume_event_id,
+                    "council_request_id": council_request_id,
+                    "result_task_id": result_task_id,
+                    "result_artifact_ref": result_artifact_ref,
+                    "result_sha256": result_sha256,
+                }
+                artifact_refs = list(checkpoint.get("artifact_refs", []))
+                if result_artifact_ref not in artifact_refs:
+                    artifact_refs.append(result_artifact_ref)
+                resumed_checkpoint = create_checkpoint(
+                    task_id=str(parent_task_id),
+                    sequence=latest[0] + 1,
+                    state="checkpointed",
+                    task_spec_version=checkpoint["task_spec_version"],
+                    task_state=parent_state,
+                    budgets=checkpoint.get("budgets", {}),
+                    approvals=checkpoint.get("approvals", {}),
+                    artifact_refs=artifact_refs,
+                    previous_checkpoint_hash=latest[1].strip(),
+                )
+                resumed_payload = json.dumps(
+                    resumed_checkpoint, sort_keys=True, separators=(",", ":"),
+                    ensure_ascii=False, allow_nan=False,
+                )
+                cursor.execute("""INSERT INTO yj64_task_checkpoints
+                    (queue_task_id, sequence, schema_version, checkpoint_hash, previous_checkpoint_hash, checkpoint)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+                    (parent_task_id, resumed_checkpoint["sequence"],
+                     resumed_checkpoint["schema_version"], resumed_checkpoint["checkpoint_hash"],
+                     resumed_checkpoint["previous_checkpoint_hash"], resumed_payload))
                 cursor.execute("""UPDATE yj64_task_queue
                     SET state = 'pending', available_at = now(), blocked_reason = NULL,
                         locked_at = NULL, lock_owner = NULL, updated_at = now()
@@ -782,7 +824,7 @@ class PostgresCycleStore:
                 if cursor.rowcount != 1:
                     raise RuntimeError("waiting parent could not be atomically requeued")
                 return {"accepted": True, "duplicate": inserted is None,
-                        "resume_event_id": inserted[0] if inserted is not None else None,
+                        "resume_event_id": resume_event_id,
                         "parent_task_id": parent_task_id, "state": "pending"}
 
     def save_checkpoint(
