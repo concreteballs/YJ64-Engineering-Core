@@ -111,8 +111,9 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 - SUPABASE_URL;
 - SUPABASE_SERVICE_ROLE_KEY — только серверный ключ для private artifact storage.
 
-Необязательная переменная:
-- YJ64_COUNCIL_AGENT_ID (по умолчанию yj64-engineering-core).
+Необязательные GitHub repository variables:
+- YJ64_COUNCIL_AGENT_ID (по умолчанию yj64-engineering-core);
+- YJ64_COUNCIL_SUBMIT_PATH, YJ64_COUNCIL_STATUS_PATH, YJ64_COUNCIL_RESULT_PATH и YJ64_COUNCIL_CANCEL_PATH — для отображения предварительных маршрутов на окончательные пути, согласованные с разработчиком приложения YJ-64.
 
 Polling выполняется каждые пять минут, максимум тремя одношаговыми worker одновременно. По умолчанию разрешено 288 проверок; жёсткий максимум — 2 016 проверок (семь дней). Для повторной доставки результата используются стабильные ID и временные метки envelope. Worker не удерживается на ожидании дискуссии.
 
