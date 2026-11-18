@@ -1,6 +1,11 @@
 name: Scheduled CI Event Worker
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/scheduled-ci-event-worker.yml"
+      - "scripts/run_ci_event_worker.py"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
