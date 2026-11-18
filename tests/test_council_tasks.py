@@ -137,6 +137,7 @@ class CouncilTaskTests(unittest.TestCase):
                 "request_id": "request-123",
                 "session_id": "session-123",
                 "parent_task_id": 9,
+                "submitted_at": "2026-11-18T12:00:00Z",
                 "correlation_id": "task-12345678",
                 "idempotency_key": "idem-key-12345678",
                 "mode": "consensus",
@@ -206,6 +207,27 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(loaded["request_id"], "request-123")
         self.assertEqual(loaded["outcome"], "unresolved_disagreement")
         self.assertEqual(len(artifacts.saved), 1)
+
+    def test_result_handoff_envelope_is_stable_across_retries(self):
+        context = FakeContext()
+        artifacts = FakeArtifactStore()
+        task = self.poll_task("completed")
+        first = handle_poll_council_request(
+            task, context,
+            client_factory=lambda: FakeClient("completed"),
+            artifact_store_factory=lambda: artifacts,
+        )
+        second = handle_poll_council_request(
+            task, context,
+            client_factory=lambda: FakeClient("completed"),
+            artifact_store_factory=lambda: artifacts,
+        )
+        self.assertEqual(first, TaskExecutionResult("completed"))
+        self.assertEqual(second, TaskExecutionResult("completed"))
+        self.assertEqual(
+            context.store.enqueued[0]["payload"],
+            context.store.enqueued[1]["payload"],
+        )
 
     def test_session_mismatch_is_blocked(self):
         class WrongSessionClient(FakeClient):
