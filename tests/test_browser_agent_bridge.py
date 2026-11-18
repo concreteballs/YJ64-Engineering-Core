@@ -20,6 +20,7 @@ class BrowserAgentEnvelopeTests(unittest.TestCase):
             "repository": EXPECTED_REPOSITORY,
             "branch": EXPECTED_BRANCH,
             "task_id": 4,
+            "idempotency_key": "dedupe-msg-00001",
             "run_id": 12,
             "run_attempt": 1,
             "commit_sha": "a" * 40,
