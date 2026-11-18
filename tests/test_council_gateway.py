@@ -150,6 +150,45 @@ class CouncilGatewayClientTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             request.to_payload("yj64-engineering-core")
 
+    def test_optional_voting_controls_are_explicit_and_bounded(self):
+        request = CouncilRequest(
+            mode="consensus",
+            title="Review",
+            prompt="Prompt",
+            correlation_id="task-12345678",
+            idempotency_key="idem-key-12345678",
+            voting_enabled=True,
+            weighted_voting_enabled=True,
+        )
+        payload = request.to_payload("yj64-engineering-core")
+        self.assertEqual(payload["voting"], {"enabled": True, "weighted": True})
+        self.assertTrue(payload["limits"]["allow_early_stop"])
+
+    def test_weighted_voting_cannot_be_enabled_without_voting(self):
+        request = CouncilRequest(
+            mode="consensus",
+            title="Review",
+            prompt="Prompt",
+            correlation_id="task-12345678",
+            idempotency_key="idem-key-12345678",
+            weighted_voting_enabled=True,
+        )
+        with self.assertRaises(ValueError):
+            request.to_payload("yj64-engineering-core")
+
+    def test_rejects_private_individual_ballots_in_result(self):
+        opener = FakeOpener({
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": "request-123",
+            "session_id": "session-123",
+            "status": "completed",
+            "outcome": "consensus",
+            "summary": "Done",
+            "voting_summary": {"enabled": True, "ballots": [{"participant_id": "P1", "vote": "FOR"}]},
+        })
+        with self.assertRaises(CouncilGatewayError):
+            self.client(opener).get_result("request-123", "session-123")
+
     def test_rejects_plain_http_by_default(self):
         with self.assertRaises(ValueError):
             CouncilGatewayClient(base_url="http://yj64.example", token="token")
