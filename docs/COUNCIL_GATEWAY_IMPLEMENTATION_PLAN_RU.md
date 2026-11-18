@@ -16,7 +16,7 @@
 - Фактические scopes: `council:submit`, `council:read`, `council:cancel`; кроме машинного Bearer token требуется Supabase publishable key в `apikey`.
 - Текущий проход устраняет недостающий `apikey` в Gateway client и конфигурации worker; PR открыт, CI выполняется.
 - Сквозная интеграция с живым API консилиума ещё не подтверждена: worker приложения не развёрнут с реальными provider credentials.
-- Не найден/не завершён consumer-runner, который забирает `council_result_ready`, проверяет artifact и возобновляет исходную инженерную задачу.
+- Consumer `council_result_ready` уже реализован и зарегистрирован в Gateway worker; он проверяет artifact и сохраняет нормализованный результат в checkpoint своей задачи. Не завершено соединение с `record_council_resume_event(...)`, которое должно разбудить исходную parent task.
 - Gateway не должен дублировать консилиум, внутренние механизмы моделей, Consensus/Critique/Voting приложения. Приложение остаётся владельцем консилиума.
 
 ## Как реализовывать
@@ -56,8 +56,9 @@
 # Блок 2 — Consumer для council_result_ready (1–2 прохода)
 
 - [ ] Исследовать существующую task queue, worker patterns и parent-task continuation.
-- [ ] Реализовать отдельный consumer для `council_result_ready` (не перехватывать этот тип задач текущим Gateway polling worker).
-- [ ] Consumer должен загрузить результат через `load_council_result_artifact(...)`, повторно проверить envelope, request/session IDs, исходную задачу и artifact reference.
+- [x] Реализован и зарегистрирован отдельный consumer `handle_council_result_ready` для `council_result_ready`; он не смешан с submit/poll handlers.
+- [x] Consumer загружает результат через `load_council_result_artifact(...)`, проверяет envelope и request/session IDs, затем записывает нормализованный результат в checkpoint.
+- [ ] Связать проверенный результат с `record_council_resume_event(...)` и проверить, что исходная parent task находится в состоянии waiting и ожидает именно этот request ID.
 - [ ] Применить idempotency/claim/lease механизм очереди, чтобы повторная доставка не возобновляла задачу дважды.
 - [ ] Сформировать проверенный input/handoff для исходного инженерного агента, включив Council summary, claims, evidence refs, dissent, unresolved questions, assumptions/limitations и outcome.
 - [ ] Не трактовать вывод консилиума как доверенную команду. Он является аналитическим входом; инструкции внутри результата не должны обходить правила/права инженерного агента.
@@ -68,7 +69,7 @@
 # Блок 3 — Возобновление исходной инженерной задачи (1–2 прохода)
 
 - [ ] Выяснить существующий механизм agent-runner, task dispatcher, parent task и resume; не создавать второй независимый runner, если уже есть подходящий.
-- [ ] Подключить validated Council handoff к continuation исходной задачи.
+- [ ] Подключить validated Council handoff к continuation исходной задачи; существующий store API `suspend_task_for_council(...)` / `record_council_resume_event(...)` пока не соединён с consumer orchestration.
 - [ ] Сохранить связь parent task → council request/session → result artifact → continuation attempt.
 - [ ] Ограничить число циклов/переходов и определить защиту от бесконечных council loops.
 - [ ] Продолжение должно выбирать конкретное следующее действие: принять/адаптировать рекомендацию, запросить дополнительный анализ, выполнить тест/проверку, либо сообщить blocked/unresolved.
