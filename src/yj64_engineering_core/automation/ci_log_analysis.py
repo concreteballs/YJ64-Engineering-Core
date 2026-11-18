@@ -313,6 +313,8 @@ def process_ci_log_analysis(
     )
     reservation = None
     if latest is not None:
+        if latest.get("request_payload_sha256") != request_hash:
+            return TaskExecutionResult("blocked", "provider_reservation_payload_mismatch")
         if latest["state"] == "completed":
             reservation = latest
         elif latest["state"] == "reserved":
