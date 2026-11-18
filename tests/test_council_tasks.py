@@ -125,6 +125,7 @@ class CouncilTaskTests(unittest.TestCase):
                     "max_output_tokens": 12000,
                 },
                 "parent_task_id": 9,
+                "submitted_at": "2026-11-18T12:00:00Z",
                 "max_poll_count": 20,
             },
         }
