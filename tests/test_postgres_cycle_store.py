@@ -362,7 +362,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
                 elif "SELECT state FROM yj64_task_queue" in query:
                     self._fetch = ("pending",)
                 elif "SELECT result_task_id, result_artifact_ref, result_sha256, resume_event_id" in query:
-                    self._fetch = (71, "private://result/1", "a" * 64, 901)
+                    self._fetch = (88, "private://result/1", "a" * 64, 901)
                 else:
                     self._fetch = None
 
@@ -387,7 +387,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
                 elif "SELECT state FROM yj64_task_queue" in query:
                     self._fetch = ("pending",)
                 elif "SELECT result_task_id, result_artifact_ref, result_sha256, resume_event_id" in query:
-                    self._fetch = (71, "private://result/old", "b" * 64, 901)
+                    self._fetch = (88, "private://result/old", "b" * 64, 901)
                 else:
                     self._fetch = None
 
