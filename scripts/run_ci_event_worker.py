@@ -114,7 +114,7 @@ def process_ci_event(
     header = (
         "YJ64 CI RUN DIAGNOSTIC INPUT\n"
         f"repository: {repository}\n"
-        f"workflow: {event.get(\"workflow\")}\n"
+        f"workflow: {event['workflow']}\n"
         f"run_id: {run_id}\n"
         f"run_attempt: {attempt}\n"
         f"conclusion: {event['conclusion']}\n"
