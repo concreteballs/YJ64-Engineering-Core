@@ -173,6 +173,113 @@ class PostgresCycleStore:
                     "task_id": existing[0], "state": existing[3],
                 }
 
+    def enqueue_council_task_and_suspend_parent(
+        self, queue_task_id: int, worker_id: str, task_payload: dict,
+        dedupe_key: str, checkpoint: dict, council_request_id: str,
+        lease_seconds: int = 300,
+    ) -> dict:
+        """Atomically enqueue a Council submit task and move its parent to waiting."""
+        from .checkpoints import verify_checkpoint
+
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(task_payload, dict):
+            raise ValueError("task_payload must be an object")
+        if not isinstance(dedupe_key, str) or not re.fullmatch(r"[A-Za-z0-9:._-]{1,240}", dedupe_key):
+            raise ValueError("dedupe_key must be a bounded safe identifier")
+        if not isinstance(council_request_id, str) or not council_request_id.strip() or len(council_request_id) > 256:
+            raise ValueError("council_request_id must be a non-empty string of at most 256 characters")
+        if task_payload.get("parent_task_id") != queue_task_id or task_payload.get("resume_request_id") != council_request_id:
+            raise ValueError("Council submit payload does not match its parent handoff")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        verify_checkpoint(checkpoint)
+        if checkpoint.get("task_id") != str(queue_task_id):
+            raise ValueError("checkpoint task_id does not match queue_task_id")
+        state = checkpoint.get("task_state")
+        if not isinstance(state, dict) or state.get("stage") != "waiting_council" or state.get("expected_council_request_id") != council_request_id:
+            raise ValueError("checkpoint must identify the expected waiting council request")
+
+        payload_json = json.dumps(
+            task_payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        checkpoint_json = json.dumps(
+            checkpoint, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second') FOR UPDATE""",
+                    (queue_task_id, worker_id, lease_seconds))
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot hand off without a live parent task lease")
+
+                cursor.execute("""INSERT INTO yj64_task_queue
+                    (task_type, payload, dedupe_key, max_attempts)
+                    VALUES ('submit_council_request', %s::jsonb, %s, 5)
+                    ON CONFLICT (dedupe_key) DO NOTHING
+                    RETURNING task_id""", (payload_json, dedupe_key))
+                inserted = cursor.fetchone()
+                if inserted is not None:
+                    child_task_id = inserted[0]
+                    duplicate = False
+                else:
+                    cursor.execute("""SELECT task_id, task_type, payload
+                        FROM yj64_task_queue WHERE dedupe_key = %s FOR UPDATE""", (dedupe_key,))
+                    existing = cursor.fetchone()
+                    existing_payload = existing[2] if existing is not None else None
+                    if isinstance(existing_payload, str):
+                        existing_payload = json.loads(existing_payload)
+                    if (
+                        existing is None or existing[1] != "submit_council_request"
+                        or existing_payload != task_payload
+                    ):
+                        raise ValueError("dedupe_key already exists with conflicting Council task content")
+                    child_task_id = existing[0]
+                    duplicate = True
+
+                cursor.execute("""SELECT checkpoint_hash FROM yj64_task_checkpoints
+                    WHERE queue_task_id = %s AND sequence = %s""",
+                    (queue_task_id, checkpoint["sequence"]))
+                existing_checkpoint = cursor.fetchone()
+                if existing_checkpoint is not None:
+                    if existing_checkpoint[0].strip() != checkpoint["checkpoint_hash"]:
+                        raise ValueError("checkpoint sequence already exists with different content")
+                else:
+                    cursor.execute("""SELECT sequence, checkpoint_hash FROM yj64_task_checkpoints
+                        WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1 FOR UPDATE""",
+                        (queue_task_id,))
+                    latest = cursor.fetchone()
+                    expected_sequence = latest[0] + 1 if latest else 1
+                    expected_hash = latest[1].strip() if latest else None
+                    if checkpoint["sequence"] != expected_sequence:
+                        raise ValueError("checkpoint sequence must immediately follow the latest checkpoint")
+                    if checkpoint["previous_checkpoint_hash"] != expected_hash:
+                        raise ValueError("checkpoint previous hash does not match the latest checkpoint")
+                    cursor.execute("""INSERT INTO yj64_task_checkpoints
+                        (queue_task_id, sequence, schema_version, checkpoint_hash, previous_checkpoint_hash, checkpoint)
+                        VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+                        (queue_task_id, checkpoint["sequence"], checkpoint["schema_version"],
+                         checkpoint["checkpoint_hash"], checkpoint["previous_checkpoint_hash"], checkpoint_json))
+
+                cursor.execute("""UPDATE yj64_task_queue
+                    SET state = 'waiting', locked_at = NULL, lock_owner = NULL, updated_at = now()
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')""",
+                    (queue_task_id, worker_id, lease_seconds))
+                if cursor.rowcount != 1:
+                    raise RuntimeError("parent task lease was lost during Council handoff")
+                return {
+                    "enqueued": not duplicate, "duplicate": duplicate,
+                    "task_id": child_task_id, "parent_task_id": queue_task_id,
+                    "state": "waiting",
+                }
+
     def claim_next_task(
         self, worker_id: str, lease_seconds: int = 300,
         task_types: list[str] | None = None,
