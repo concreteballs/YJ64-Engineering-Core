@@ -74,6 +74,10 @@ class FakeStore:
             "proposal_json": kwargs["proposal_json"],
         }
 
+    def enqueue_task(self, task_type, payload, dedupe_key, max_attempts=3):
+        self.enqueued = (task_type, payload, dedupe_key, max_attempts)
+        return {"enqueued": True, "duplicate": False, "task_id": 53, "state": "pending"}
+
 
 class FakeContext:
     store = None
