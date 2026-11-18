@@ -45,7 +45,7 @@ class CouncilGatewayClientTests(unittest.TestCase):
             correlation_id="engineering-task-123",
             idempotency_key="idem-key-12345678",
             context={"repository": "concreteballs/YJ64-Engineering-Core"},
-            evidence_refs=("https://github.com/concreteballs/YJ64-Engineering-Core"),
+            evidence_refs=("https://github.com/concreteballs/YJ64-Engineering-Core",),
         )
 
     def client(self, opener):
