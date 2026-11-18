@@ -10,6 +10,7 @@
     "message_type",
     "created_at",
     "expires_at",
+    "idempotency_key",
     "repository",
     "branch",
     "task_id",
