@@ -103,7 +103,7 @@ Configure these GitHub Actions repository secrets:
 Optional variable:
 - `YJ64_COUNCIL_AGENT_ID` (defaults to `yj64-engineering-core`).
 
-The scheduled workflow polls every five minutes and runs at most three single-task workers in parallel. Polling is durable and bounded by `max_poll_count`; no worker sleeps while waiting for a discussion.
+The scheduled workflow polls every five minutes and runs at most three single-task workers in parallel. Polling is durable and bounded by `max_poll_count` (default 288 polls; hard maximum 2,016 polls, or seven days at five-minute intervals). Result envelopes use stable message IDs and timestamps so a retried result handoff is idempotent. No worker sleeps while waiting for a discussion.
 
 ## Verification and release gate
 
