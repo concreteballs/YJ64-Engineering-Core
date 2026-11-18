@@ -52,6 +52,7 @@ class CouncilGatewayClientTests(unittest.TestCase):
         return CouncilGatewayClient(
             base_url="https://yj64.example",
             token="server-only-token",
+            publishable_key="sb_publishable_test_key_1234567890",
             opener=opener,
         )
 
@@ -66,6 +67,7 @@ class CouncilGatewayClientTests(unittest.TestCase):
         request, _timeout = opener.requests[0]
         self.assertEqual(result["request_id"], "request-123")
         self.assertEqual(request.get_header("Authorization"), "Bearer server-only-token")
+        self.assertEqual(request.get_header("Apikey"), "sb_publishable_test_key_1234567890")
         self.assertEqual(request.get_header("Idempotency-key"), "idem-key-12345678")
         body = json.loads(request.data.decode("utf-8"))
         self.assertEqual(body["mode"], "consensus")
@@ -199,6 +201,7 @@ class CouncilGatewayClientTests(unittest.TestCase):
         client = CouncilGatewayClient(
             base_url="https://yj64.example",
             token="server-only-token",
+            publishable_key="sb_publishable_test_key_1234567890",
             opener=opener,
             status_path_template="/v2/native-council/jobs/{request_id}/state",
         )
@@ -210,12 +213,13 @@ class CouncilGatewayClientTests(unittest.TestCase):
             CouncilGatewayClient(
                 base_url="https://yj64.example",
                 token="token",
+                publishable_key="sb_publishable_test_key_1234567890",
                 status_path_template="https://attacker.example/{request_id}",
             )
 
     def test_rejects_plain_http_by_default(self):
         with self.assertRaises(ValueError):
-            CouncilGatewayClient(base_url="http://yj64.example", token="token")
+            CouncilGatewayClient(base_url="http://yj64.example", token="token", publishable_key="sb_publishable_test_key_1234567890")
 
     def test_request_limits_are_validated(self):
         request = CouncilRequest(
