@@ -107,213 +107,111 @@ Persist task/session IDs, model/version identifiers, round count, mode, atomic c
 11. Validate false consensus, minority-correct, majority-wrong, insufficient evidence, untested simulation, source mismatch, ballot leakage, repeated/no-progress, context-limited impossibility, and session-budget exhaustion.
 
 No stage may be marked complete without task-level acceptance tests and evidence. Implement small additive increments, preserve current interfaces, and update IMPLEMENTATION_STATUS.md only when code is actually delivered.
-13. Междисциплинарные связи модулей и комплексная оценка безопасности инженерных решений
+## 13. Interdisciplinary Module Connections and Comprehensive Engineering Safety Assessment
 
-13.1. Цель и обоснование
+### 13.1. Purpose and rationale
+Scientific and engineering disciplines are not isolated. Real processes often depend on multiple domains simultaneously, with nonlinear, layered, and non-obvious interactions.
 
-Научные и инженерные дисциплины не существуют изолированно. Реальные процессы часто зависят от нескольких областей знания одновременно, причём взаимосвязи могут быть нелинейными, многоуровневыми и неочевидными заранее.
+A design optimized for strength, mass, cost, energy consumption, or performance may be unsuitable for real-world use because chemical, biological, environmental, or other consequences were not considered.
 
-Инженерное решение, оптимальное с точки зрения прочности, массы, стоимости, энергопотребления или производительности, может оказаться непригодным для практического применения из-за химических, биологических, экологических или иных последствий, которые не были учтены при первоначальном проектировании.
+Engineering Core should therefore evolve from isolated specialist modules into a system that can gradually form, expand, and use interdisciplinary connections. This is intended to identify consequences that cannot be seen from a single-discipline perspective.
 
-Поэтому Engineering Core должен развиваться не как набор изолированных специализированных модулей, а как система, способная постепенно формировать, расширять и использовать междисциплинарные связи.
+For example, developing a robotic artificial muscle may require:
+- Engineering: design, strength, service life, manufacturability.
+- Physics: forces, dynamics, thermal conditions, energy.
+- Chemistry: material composition, reactions, stability, toxicity.
+- Biology: molecular mechanisms, biocompatibility, microbial growth.
+- Mathematics: modelling, optimization, uncertainty analysis.
+- Ecology: environmental impact, waste, lifecycle.
 
-Мы делаем это для того, чтобы система могла обнаруживать последствия, которые невозможно увидеть, рассматривая задачу только с позиции одной дисциплины.
+Connections should be discovered by the system, not depend solely on a user or model remembering to request another discipline.
 
-Например, разработка искусственной мышцы робота может одновременно требовать:
+### 13.2. Universal intermodule interaction architecture
+Provide an architecture for multiple interaction patterns. Do not limit it to hard-coded pairs of modules. It must support new connections, disciplines, and complex collaborative workflows without rewriting the core.
 
-- инженерии — конструкция, прочность, ресурс, производимость;
-- физики — силы, динамика, тепловые режимы, энергия;
-- химии — состав материала, реакции, стабильность, токсичность;
-- биологии — молекулярные механизмы, биосовместимость, микробный рост;
-- математики — моделирование, оптимизация, анализ неопределённости;
-- экологии — воздействие на окружающую среду, отходы и жизненный цикл.
+Support:
+1. Consultation requests between specialist modules.
+2. Sharing evidence and data: calculations, research, observations, verified facts.
+3. Coordinated analysis by multiple modules from different perspectives.
+4. Event-triggered review, where one result automatically initiates another check.
+5. Analysis chains, where one discipline's result becomes input to several others and results return to the shared analysis.
+6. Mutual validation of assumptions, limitations, and conclusions.
+7. Conflict detection for incompatible conclusions, assumptions, and uncertainties.
+8. Dynamic discovery and invocation of additional disciplines as new factors emerge.
 
-Подобные связи должны обнаруживаться самой системой, а не зависеть исключительно от того, вспомнил ли пользователь или отдельная модель о необходимости привлечь другую область знаний.
+Connections must be extensible, versioned, and auditable. Each intermodule request and response must carry a task ID, context, input data, subject/design version, constraints, status, evidence, and result. Modules must not be forced into agreement; each retains the ability to report contradictions, insufficient data, or an unsupported conclusion.
 
-13.2. Универсальная архитектура межмодульного взаимодействия
+### 13.3. Automatic detection of interdisciplinary analysis needs
+Engineering Core should determine which knowledge domains a task requires. For a new material, consider not only mechanical properties but also potential hazardous reactions, harmful emissions under heat/wear/aging, moisture and microbial-growth conditions, human or animal exposure, environmental contamination, and degradation during use.
 
-Необходимо заранее предусмотреть архитектуру, позволяющую модулям взаимодействовать различными способами.
+When a factor falls outside the current module's competence, initiate an appropriate cross-module request. This must work in reverse as well: chemistry, biology, or physics may trigger a review of the engineering design.
 
-Не следует ограничиваться жёстко заданными связями между двумя конкретными модулями. Архитектура должна поддерживать развитие новых связей, подключение новых дисциплин и более сложные цепочки совместного анализа без необходимости переписывать ядро.
+### 13.4. Required chemical assessment of engineering materials
+When chemical properties matter for materials, coatings, liquids, polymers, composites, or similar objects, Engineering should invoke Chemistry as appropriate.
 
-Предусмотреть следующие типы взаимодействия:
+Assess composition and properties; known hazards and toxicology; reactivity and incompatibilities; corrosion and breakdown; aging/degradation/wear products; environmental releases; exposure pathways; and production, use, maintenance, and disposal conditions.
 
-1. Запрос консультации — один модуль запрашивает анализ у другого специализированного модуля.
-2. Передача доказательств и данных — модули передают друг другу расчёты, результаты исследований, наблюдения и проверенные факты.
-3. Совместный анализ — несколько модулей одновременно исследуют одну задачу, каждый со своей точки зрения.
-4. Событийное взаимодействие — результат одного модуля автоматически запускает дополнительную проверку в другом.
-5. Цепочки анализа — результат одной дисциплины становится исходными данными для нескольких других, после чего результаты возвращаются в общий анализ.
-6. Взаимная проверка — один модуль проверяет предположения, ограничения и выводы другого.
-7. Обнаружение конфликтов — система фиксирует несовместимые выводы, различия в предположениях и неопределённости.
-8. Динамическое подключение дисциплин — возможность привлекать дополнительные модули в процессе решения задачи, если обнаружены новые факторы.
+The objective is to identify hazards before recommending practical use.
 
-Связи должны быть постепенно развиваемыми, расширяемыми, версионируемыми и проверяемыми.
+### 13.5. Required biological assessment
+Invoke Biology when biological exposure, biocompatibility, contamination, microbial growth, or interactions with living organisms may matter.
 
-Каждый запрос и ответ между модулями должен иметь идентификатор задачи, контекст, исходные данные, версию объекта исследования, ограничения, статус, доказательства и результат.
+Consider molecular structure where relevant to function; surface properties and contamination retention; moisture, stagnant zones, and temperature; biofilm potential; cleaning, disinfection, and maintenance; exposure pathways for people, animals, and ecosystems; and evidence and uncertainty.
 
-Модули не должны автоматически соглашаться друг с другом. Каждый сохраняет свою специализацию и право сообщить о противоречиях, недостаточности данных или невозможности сделать обоснованный вывод.
+Biology must explain mechanisms, not merely flag risk. It must distinguish theoretical possibility, conducive conditions, confirmed growth of a specific organism, and demonstrated disease risk. Presence of certain substances alone does not establish pathogen presence or infection.
 
-13.3. Автоматическое обнаружение необходимости междисциплинарного анализа
+### 13.6. Molecular explanations, formulas, and mechanisms
+Chemistry and Biology should explain molecular structure and component function at the appropriate level when needed, including structures, functional groups, bonds, interactions, component roles, reaction mechanisms, and relevant physicochemical conditions.
 
-Engineering Core должен оценивать, какие области знания необходимы для решения конкретной задачи.
+Use formulas, equations, reaction notation, quantitative models, and calculations when useful. Define variables and units; state assumptions; check dimensional consistency; explain what the formula establishes; state applicability limits; and distinguish calculated results from experimentally verified findings.
 
-Например, при разработке нового материала система должна учитывать не только его механические характеристики, но и то, может ли он:
+Formulas must clarify mechanisms and causality, not serve as decoration.
 
-- вступать в опасные реакции;
-- выделять вредные вещества при нагреве, износе или старении;
-- создавать условия для накопления влаги и микробного роста;
-- представлять опасность при контакте с человеком или животным;
-- загрязнять окружающую среду;
-- терять свойства в реальных условиях эксплуатации.
+### 13.7. Comprehensive safety assessment
+Where relevant, evaluate chemical, biological, physical, toxicological, environmental, operational, and human/animal impacts.
 
-Если обнаруживается фактор, выходящий за пределы компетенции текущего модуля, должен запускаться соответствующий межмодульный запрос.
+Consider normal operation and scenarios involving damage, overheating, wear, aging, contamination, repair, cleaning, and disposal. Significant risks should be able to trigger redesign, safer alternatives, additional testing, independent review, or restrictions/blocks on practical-use recommendations until material uncertainties are resolved.
 
-Это должно работать и в обратном направлении: химический, биологический или физический модуль, обнаруживший проблему, может инициировать пересмотр инженерного решения.
+### 13.8. User-facing risk explanation
+A final engineering answer must not merely list substances, biological factors, metrics, or warnings. Explain each significant risk:
+1. What was detected?
+2. Why/how does it occur (mechanism)?
+3. Under what conditions does it become significant?
+4. Who or what could be affected?
+5. What are the practical consequences?
+6. How can it be reduced or eliminated?
+7. How confident are we, and what sources, calculations, experiments, simulations, and limitations support that confidence?
 
-13.4. Обязательная химическая оценка инженерных материалов
+Technical explanations, formulas, and mechanisms must be accompanied by plain-language consequences. Do not imply safety simply because a check did not detect a hazard.
 
-При разработке материалов, покрытий, жидкостей, полимеров, композитов и других объектов, для которых химические свойства имеют значение, инженерный модуль должен при необходимости подключать химический модуль.
+### 13.9. Assessment statuses
+Use clear statuses:
+- Assessed within stated scope; no significant issue identified.
+- Risk identified.
+- Risk reduction or mitigation required.
+- Further research or independent review required.
+- Insufficient data.
+- Not assessed.
 
-Оценка должна учитывать:
+“No risk identified” is not a guarantee of absolute safety.
 
-- состав и химические свойства материала;
-- опасные свойства и известные токсикологические данные;
-- реактивность и несовместимость с другими веществами;
-- коррозию и разрушение;
-- продукты разложения, старения и износа;
-- возможные выделения в окружающую среду;
-- пути воздействия на организм;
-- условия производства, эксплуатации, ремонта и утилизации.
+### 13.10. Gradual evolution of the connection network
+Start with core intermodule interfaces and essential connections, then gradually add disciplines, interaction types, methods, and evidence-sharing mechanisms.
 
-Цель — выявлять потенциальные опасности до того, как материал будет рекомендован к практическому применению.
+Avoid chaotic connection growth, duplicated functionality, or uncontrolled module invocation. Consider connection utility, result quality, resource cost, repeated calls, and cycles. Interdisciplinary workflows must be controlled, resource-bounded, and auditable.
 
-13.5. Обязательная биологическая оценка
-
-Биологический модуль должен подключаться при наличии потенциального биологического воздействия, биосовместимости, загрязнения, микробного роста или взаимодействия материала с живыми организмами.
-
-Оценка должна учитывать:
-
-- молекулярную структуру веществ и материалов, когда она имеет значение для биологической функции;
-- свойства поверхности и вероятность удержания загрязнений;
-- наличие влаги, застойных зон и подходящих температурных условий;
-- возможность образования биоплёнок;
-- возможность очистки, дезинфекции и обслуживания;
-- потенциальные пути воздействия на человека, животных и окружающую среду;
-- доступные доказательства и неопределённости.
-
-Биологический модуль должен не просто выдать отметку о риске, но и объяснить механизм его возникновения.
-
-Например, при оценке материала он должен уметь объяснить, почему определённые молекулярные компоненты, свойства поверхности, доступность воды или другие факторы имеют значение для рассматриваемого биологического процесса.
-
-При этом необходимо строго различать теоретическую возможность, благоприятные условия, подтверждённый рост конкретного микроорганизма и доказанный риск заболевания. Наличие определённых веществ само по себе не доказывает присутствие патогена или возникновение инфекции.
-
-13.6. Молекулярные объяснения, формулы и механизмы
-
-При необходимости биологический и химический модули должны объяснять устройство молекул и функциональность их компонентов на соответствующем уровне детализации.
-
-Объяснение может включать:
-
-- молекулярную структуру;
-- функциональные группы;
-- химические связи;
-- взаимодействие молекул;
-- роль отдельных компонентов в рассматриваемом процессе;
-- реакционные механизмы;
-- физико-химические условия, влияющие на процесс.
-
-Где это полезно, необходимо использовать формулы, уравнения, обозначения реакций, количественные модели и расчёты.
-
-При использовании формул обязательно:
-
-- определять обозначения и переменные;
-- указывать единицы измерения;
-- обозначать принятые допущения;
-- проверять размерность уравнений;
-- объяснять, что именно формула позволяет установить;
-- обозначать ограничения применимости;
-- отделять расчётный результат от экспериментально подтверждённого.
-
-Формулы не должны использоваться исключительно для придания ответу научного вида. Они должны помогать понять механизм, проверить вывод и установить причинно-следственную связь.
-
-13.7. Комплексная оценка безопасности
-
-При необходимости Engineering Core должен проводить комплексную оценку потенциальных последствий:
-
-- химических;
-- биологических;
-- физических;
-- токсикологических;
-- экологических;
-- эксплуатационных;
-- связанных с воздействием на человека и животных.
-
-Проверка должна учитывать не только нормальную эксплуатацию, но и возможные сценарии повреждения, перегрева, износа, старения, загрязнения, ремонта, очистки и утилизации.
-
-Если выявлен существенный риск, система должна иметь возможность:
-
-- инициировать повторное проектирование;
-- предложить более безопасную альтернативу;
-- потребовать дополнительной проверки;
-- обозначить необходимость независимой экспертизы;
-- ограничить или заблокировать рекомендацию о практическом применении до разрешения существенной неопределённости.
-
-13.8. Обязательное объяснение рисков пользователю
-
-В итоговом инженерном ответе недостаточно перечислить опасные вещества, биологические факторы, числовые показатели или технические предупреждения.
-
-Каждый обнаруженный существенный риск должен сопровождаться понятным объяснением:
-
-1. Что обнаружено? — описание конкретной опасности.
-2. Почему это возникает? — механизм возникновения, включая химические, физические или биологические причины.
-3. При каких условиях? — обстоятельства, при которых риск становится существенным.
-4. Кого или что это может затронуть? — людей, животных, оборудование или окружающую среду.
-5. Каковы возможные последствия? — объяснение практическим языком.
-6. Как это можно уменьшить или устранить? — варианты изменения конструкции, выбора материала, условий эксплуатации или обслуживания.
-7. Насколько мы уверены? — источник, расчёт, эксперимент, моделирование и ограничения полученных данных.
-
-Техническое объяснение с формулами и механизмами должно сопровождаться понятным человеку описанием последствий.
-
-Система не должна создавать ложное ощущение безопасности только потому, что в проведённой проверке опасность не была обнаружена.
-
-13.9. Статусы результатов проверки
-
-Для оценки безопасности и междисциплинарного анализа предусмотреть понятные статусы:
-
-- Проверено в заданных пределах, существенных проблем не выявлено.
-- Риск обнаружен.
-- Требуется устранение или снижение риска.
-- Требуется дополнительное исследование или независимая экспертиза.
-- Недостаточно данных.
-- Не оценивалось.
-
-Отсутствие обнаруженного риска не является гарантией абсолютной безопасности.
-
-13.10. Постепенное развитие системы связей
-
-На начальном этапе необходимо реализовать базовые межмодульные интерфейсы и несколько наиболее важных связей.
-
-В дальнейшем система должна постепенно развивать сеть взаимодействий, добавляя новые виды связи, новые дисциплины, новые методы анализа и новые механизмы передачи доказательств.
-
-При этом расширение должно происходить без хаотичного роста числа связей, дублирования функциональности или неконтролируемого запуска множества модулей.
-
-Необходимо учитывать полезность связи, качество получаемых результатов, затраты ресурсов, повторяемость запросов и возможность возникновения циклов.
-
-Междисциплинарное взаимодействие должно быть управляемым, ограниченным по ресурсам и прозрачным для аудита.
-
-13.11. Критерии принятия реализации
-
-Реализация считается соответствующей плану, если:
-
-- Engineering Core способен обнаруживать необходимость привлечения других дисциплин.
-- Межмодульная архитектура поддерживает различные типы взаимодействия и расширение.
-- Новые модули и типы связи можно добавлять без переписывания основного механизма.
-- Инженерное решение может быть автоматически направлено на химическую и биологическую оценку.
-- Результаты модулей сохраняют источники, версии, ограничения и неопределённости.
-- Выявленные риски могут инициировать пересмотр конструкции.
-- Биологические и химические механизмы объясняются научно корректно, при необходимости с формулами и молекулярными структурами.
-- Итоговый ответ содержит понятное объяснение практических последствий обнаруженных рисков.
-- Необоснованное утверждение о безопасности невозможно сформировать только на основании отсутствия предупреждений.
-- Межмодульные конфликты, ошибки, отсутствие ответов и недостаточность данных не скрываются.
-- Архитектура допускает постепенное развитие сложной сети взаимосвязей между дисциплинами.
-
-Главный принцип: мы создаём не набор отдельных интеллектуальных инструментов, а постепенно развивающуюся систему взаимосвязанных знаний, способную учитывать сложные последствия решений, выходящие за пределы одной научной или инженерной области.
+### 13.11. Implementation acceptance criteria
+Implementation is acceptable when:
+- Engineering Core detects when other disciplines are needed.
+- The architecture supports varied interaction patterns and extensibility.
+- Modules and connection types can be added without rewriting the core.
+- Engineering tasks can automatically request Chemistry and Biology assessments.
+- Intermodule results preserve provenance, versions, limitations, and uncertainty.
+- Identified hazards can trigger design review.
+- Chemical and biological mechanisms are explained accurately, with molecular structures/formulas as appropriate.
+- User-facing results explain practical consequences.
+- Safety claims cannot be justified solely by absence of warnings.
+- Intermodule conflicts, errors, missing responses, and insufficient data remain visible.
+- The architecture can gradually expand into a complex interdisciplinary network.
+
+Core principle: build an evolving network of connected knowledge, not isolated tools, capable of accounting for consequences beyond a single discipline.
