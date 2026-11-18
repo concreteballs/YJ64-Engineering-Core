@@ -40,7 +40,21 @@ jobs:
           python-version: "3.11"
       - name: Install YJ64 package and PostgreSQL driver
         run: python -m pip install -e .
+      - name: Check Council Gateway secrets
+        id: config
+        env:
+          YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
+          YJ64_COUNCIL_API_URL: ${{ secrets.YJ64_COUNCIL_API_URL }}
+          YJ64_COUNCIL_AGENT_TOKEN: ${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
+        run: |
+          if [ -z "$YJ64_DATABASE_URL" ] || [ -z "$YJ64_COUNCIL_API_URL" ] || [ -z "$YJ64_COUNCIL_AGENT_TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Council Gateway secrets are not configured; worker skipped."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Process one Council Gateway task
+        if: steps.config.outputs.enabled == 'true'
         env:
           YJ64_DATABASE_URL: \${{ secrets.YJ64_DATABASE_URL }}
           YJ64_COUNCIL_API_URL: \${{ secrets.YJ64_COUNCIL_API_URL }}
