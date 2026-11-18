@@ -55,6 +55,11 @@ class BrowserAgentEnvelopeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite JSON"):
             payload_hash({"not_json": object()})
 
+    def test_rejects_unknown_envelope_keys(self):
+        bad = dict(self.message, injected_extra="unexpected")
+        with self.assertRaisesRegex(ValueError, "unknown fields"):
+            validate_envelope(bad, now=self.now)
+
     def test_rejects_invalid_run_identity_and_schema(self):
         bad = dict(self.message, run_attempt=0)
         with self.assertRaisesRegex(ValueError, "run_attempt"):
