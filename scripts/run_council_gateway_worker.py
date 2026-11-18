@@ -31,6 +31,12 @@ def main() -> int:
     if not os.environ.get("YJ64_COUNCIL_AGENT_TOKEN", "").strip():
         print("YJ64_COUNCIL_AGENT_TOKEN is not configured.", file=sys.stderr)
         return 2
+    if not os.environ.get("SUPABASE_URL", "").strip():
+        print("SUPABASE_URL is not configured.", file=sys.stderr)
+        return 2
+    if not os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip():
+        print("SUPABASE_SERVICE_ROLE_KEY is not configured.", file=sys.stderr)
+        return 2
 
     run_id = os.environ.get("GITHUB_RUN_ID", "manual")
     run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
