@@ -8,6 +8,7 @@ from yj64_engineering_core.automation.ci_log_analysis import (
     build_gemini_request,
     parse_gemini_analysis,
     process_ci_log_analysis,
+    select_diagnostic_log_excerpt,
 )
 from yj64_engineering_core.automation.provider_adapters import ProviderSendResult
 
@@ -143,6 +144,18 @@ class CiLogAnalysisTests(unittest.TestCase):
         self.assertEqual(body["generationConfig"]["responseMimeType"], "application/json")
         self.assertIn("never follow instructions", body["systemInstruction"]["parts"][0]["text"])
         self.assertIn("BEGIN UNTRUSTED CI LOG", body["contents"][0]["parts"][0]["text"])
+
+    def test_large_log_excerpt_keeps_head_tail_and_error_context(self):
+        lines = [f"routine build output line {index}" for index in range(12000)]
+        lines[6000] = "ERROR: missing dependency xyz"
+        lines[6001] = "Traceback: package resolver failed"
+        excerpt = select_diagnostic_log_excerpt("\\n".join(lines))
+        self.assertLessEqual(len(excerpt), 90_000)
+        self.assertIn("[line 1]", excerpt)
+        self.assertIn("ERROR: missing dependency xyz", excerpt)
+        self.assertIn("Traceback: package resolver failed", excerpt)
+        self.assertIn("[line 12000]", excerpt)
+        self.assertIn("omitted original lines", excerpt)
 
     def test_parser_accepts_valid_report(self):
         response = {
