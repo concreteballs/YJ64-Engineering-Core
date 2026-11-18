@@ -102,6 +102,16 @@ def build_ci_fix_proposal(analysis: dict, event: dict) -> dict:
     }
 
 
+def _enqueue_patch_generation(context, proposal_task_id: int, analysis_task_id: int) -> None:
+    """Queue exact-commit inspection and review-only patch generation idempotently."""
+    context.store.enqueue_task(
+        "generate_ci_patch",
+        {"proposal_task_id": proposal_task_id},
+        f"ci-patch-generation:{analysis_task_id}",
+        max_attempts=3,
+    )
+
+
 def process_ci_fix_proposal(task: dict, context, *, artifact_store) -> TaskExecutionResult:
     """Persist one repair-plan package for a completed CI analysis."""
     payload = task.get("payload")
@@ -118,6 +128,8 @@ def process_ci_fix_proposal(task: dict, context, *, artifact_store) -> TaskExecu
 
     existing = context.store.get_ci_fix_proposal(context.task_id)
     if existing is not None:
+        if existing.get("proposal_status") == "awaiting_review":
+            _enqueue_patch_generation(context, context.task_id, existing["analysis_task_id"])
         return TaskExecutionResult("completed")
 
     analysis = context.store.get_ci_log_analysis(analysis_task_id)
@@ -155,4 +167,6 @@ def process_ci_fix_proposal(task: dict, context, *, artifact_store) -> TaskExecu
         proposal_artifact_ref=artifact_ref,
         proposal_sha256=digest,
     )
+    if proposal["proposal_status"] == "awaiting_review":
+        _enqueue_patch_generation(context, context.task_id, analysis_task_id)
     return TaskExecutionResult("completed")
