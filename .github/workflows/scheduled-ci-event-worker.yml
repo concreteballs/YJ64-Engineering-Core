@@ -13,14 +13,22 @@ permissions:
   contents: read
   actions: read
 
+# Keep workflow runs serialized; each run fans out into five independently
+# leased workers. PostgreSQL SKIP LOCKED prevents duplicate task claims.
 concurrency:
   group: yj64-ci-event-worker
   cancel-in-progress: false
 
 jobs:
   process-one:
+    name: Process one CI event (worker ${{ matrix.slot }})
     runs-on: ubuntu-latest
     timeout-minutes: 4
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        slot: ["1", "2", "3", "4", "5"]
     steps:
       - name: Check out trusted main branch
         uses: actions/checkout@v4
@@ -36,4 +44,5 @@ jobs:
         env:
           YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
           GITHUB_TOKEN: ${{ github.token }}
+          YJ64_WORKER_SLOT: ${{ matrix.slot }}
         run: python scripts/run_ci_event_worker.py
