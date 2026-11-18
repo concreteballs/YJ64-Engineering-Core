@@ -1404,6 +1404,18 @@ class PostgresCycleStore:
             raise ValueError("unsupported initial proposal status")
         if not isinstance(proposal_json, dict):
             raise ValueError("proposal_json must be an object")
+        implementation = proposal_json.get("implementation")
+        if (
+            proposal_json.get("proposal_status") != proposal_status
+            or not isinstance(implementation, dict)
+            or implementation.get("auto_apply") is not False
+            or implementation.get("human_approval_required") is not True
+            or implementation.get("patch_ready") is not False
+            or not isinstance(proposal_json.get("source"), dict)
+            or proposal_json["source"].get("analysis_task_id") != analysis_task_id
+            or proposal_json["source"].get("event_id") != event_id
+        ):
+            raise ValueError("proposal does not satisfy the human-approval safety gate")
         if not isinstance(proposal_artifact_ref, str) or not proposal_artifact_ref.strip():
             raise ValueError("proposal_artifact_ref is required")
         if "?" in proposal_artifact_ref or "#" in proposal_artifact_ref:
