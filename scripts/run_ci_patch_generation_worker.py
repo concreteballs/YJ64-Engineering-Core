@@ -60,7 +60,7 @@ def publish_candidate_for_review(candidate: dict, *, repository: str, token: str
         or not isinstance(files, list) or not files
         or any(
             not isinstance(p, str) or not p or p.startswith("/")
-            or "\\\\" in p or any(part in {"", ".", ".."} for part in p.split("/"))
+            or "\\" in p or any(part in {"", ".", ".."} for part in p.split("/"))
             for p in files
         )
         or len(files) != len(set(files))
@@ -72,14 +72,14 @@ def publish_candidate_for_review(candidate: dict, *, repository: str, token: str
 
     # Validate the diff's own file headers before touching git. The declared
     # allowlist must match exactly, with one header pair per target file.
-    header_paths = re.findall(r"^(?:--- a/|\\+\\+\\+ b/)(.+)$", diff, re.MULTILINE)
+    header_paths = re.findall(r"^(?:--- a/|\+\+\+ b/)(.+)$", diff, re.MULTILINE)
     if not header_paths or len(header_paths) % 2:
         raise ValueError("patch_review_diff_headers_invalid")
     normalized_headers = []
     for header_path in header_paths:
         if (
             not header_path or header_path.startswith("/")
-            or "\\\\" in header_path
+            or "\\" in header_path
             or any(part in {"", ".", ".."} for part in header_path.split("/"))
         ):
             raise ValueError("patch_review_diff_path_invalid")
