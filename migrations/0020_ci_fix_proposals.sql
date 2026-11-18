@@ -19,6 +19,23 @@ CREATE TABLE IF NOT EXISTS public.yj64_ci_fix_proposals (
     review_note TEXT
 );
 
+DO $
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'yj64_ci_fix_proposals_review_gate_check'
+    ) THEN
+        ALTER TABLE public.yj64_ci_fix_proposals
+            ADD CONSTRAINT yj64_ci_fix_proposals_review_gate_check
+            CHECK (
+                proposal_json->>'proposal_status' = proposal_status
+                AND proposal_json->'implementation'->>'auto_apply' = 'false'
+                AND proposal_json->'implementation'->>'human_approval_required' = 'true'
+                AND proposal_json->'implementation'->>'patch_ready' = 'false'
+            );
+    END IF;
+END $;
+
 CREATE INDEX IF NOT EXISTS yj64_ci_fix_proposals_status_idx
     ON public.yj64_ci_fix_proposals(proposal_status, created_at DESC);
 
