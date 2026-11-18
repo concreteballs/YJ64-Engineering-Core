@@ -271,6 +271,16 @@ def _retry_delay(retry_at: Any) -> int:
     return max(5, min(86_400, int((target - datetime.now(timezone.utc)).total_seconds())))
 
 
+def _enqueue_fix_proposal(context) -> None:
+    """Idempotently hand a validated diagnosis to the review-plan worker."""
+    context.store.enqueue_task(
+        "prepare_ci_fix",
+        {"analysis_task_id": context.task_id},
+        f"ci-fix-proposal:{context.task_id}",
+        max_attempts=3,
+    )
+
+
 def _save_report(
     *, task: dict, context, event: dict, source_task_id: int, payload_id: str, reservation: dict,
     response_bytes: bytes, artifact_store,
@@ -314,6 +324,7 @@ def _save_report(
     )
     if report is None:
         return TaskExecutionResult("blocked", "model_output_invalid")
+    _enqueue_fix_proposal(context)
     return TaskExecutionResult("completed")
 
 
@@ -359,10 +370,10 @@ def process_ci_log_analysis(
             provider_result_ref=existing["provider_response_artifact_ref"],
             lease_seconds=context.lease_seconds,
         )
-        return TaskExecutionResult(
-            "completed" if existing["analysis_status"] == "completed" else "blocked",
-            "" if existing["analysis_status"] == "completed" else "model_output_invalid",
-        )
+        if existing["analysis_status"] == "completed":
+            _enqueue_fix_proposal(context)
+            return TaskExecutionResult("completed")
+        return TaskExecutionResult("blocked", "model_output_invalid")
 
     if event.get("conclusion") == "success":
         return TaskExecutionResult("completed")
