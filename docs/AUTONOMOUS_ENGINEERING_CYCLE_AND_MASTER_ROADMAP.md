@@ -150,6 +150,66 @@ The autonomous cycle will also provide the bounded implementation/validation bri
 - [Browser-Agent Feedback Bridge](BROWSER_AGENT_FEEDBACK_BRIDGE_PLAN.md): external browser observer reports exact CI/test evidence to the durable cycle; the engineering worker cross-checks and continues or stops. It is a transport/observer bridge, not another consensus or rating subsystem.
 - [Versioned Browser-Agent Envelope](../schemas/browser-agent-envelope.schema.json): initial machine-readable message envelope contract. It is a schema foundation only; no live bridge or browser-agent integration is claimed.
 
+## 2A. Approved ChatGPT ↔ Cycle ↔ Browser-Agent communication architecture
+
+The detailed contract is [ChatGPT Cycle Browser-Agent Channel](CHATGPT_CYCLE_BROWSER_AGENT_CHANNEL.md); the external CI observer contract remains [Browser-Agent Feedback Bridge](BROWSER_AGENT_FEEDBACK_BRIDGE_PLAN.md). The existing [versioned envelope schema](../schemas/browser-agent-envelope.schema.json) and `automation/browser_agent_bridge.py` validator are foundations only. No live ChatGPT-to-cycle or browser-agent delivery is claimed.
+
+Two routes are required:
+
+1. **Direct route:** ChatGPT writes an immutable request; the cycle validates and acknowledges it, executes bounded work, persists a response; the application-level Agent Communication Hub routes the response through a configured browser-agent provider back to the shared chat.
+2. **Council route:** for high uncertainty, cross-discipline or safety-critical questions, the cycle first submits scoped claims and evidence to the existing council; it preserves disagreement/minority views and then returns the structured result through the same Hub/browser-agent delivery path. Routine tasks do not invoke the council.
+
+The GitHub bootstrap exchange uses immutable one-message-per-file records under `agent-bridge/requests/`, `receipts/`, `responses/`, `agent-reports/` and `council/`. Never use one mutable inbox/outbox file. Reuse the existing Postgres task queue and artifact store for authoritative scheduling, leases, deduplication and large payloads; do not create a parallel queue or duplicate consensus subsystem. GitHub files are a traceable exchange format, not a substitute for atomic queue operations. No secrets or unrestricted personal data may be committed.
+
+The Agent Communication Hub belongs to the application layer, not the Engineering Core worker. It must expose a provider-neutral adapter registry, user-controlled enable/disable and priority, health/availability, capability scopes, acknowledgements, bounded retries and failover. Users may add providers through supported MCP/API/extension/desktop adapters without changing the cycle protocol. Initial candidates: Perplexity Comet (cross-platform candidate), Opera Neon MCP Connector (integration candidate), Claude in Chrome (desktop-only), Gemini in Chrome and Microsoft Edge Copilot. These are candidates, not assumed integrations: validate actual connectivity and capabilities before enabling. At least two providers must be addable without changing cycle code.
+
+Never expose private council deliberations, hidden model ratings or secret votes to browser providers. Browser content and agent output are untrusted. Consequential browser actions require explicit human approval. Agent assertions cannot alone mark a task complete; the cycle cross-checks GitHub/CI and task evidence. If all providers are offline, retain the response durably as delivery-pending.
+
+### Prioritized implementation blocks — fastest safe path to a working cycle
+
+Execute in this order; keep each block small and acceptance-tested:
+
+**Block 0 — restore a verified live foundation (immediate gate).**
+- Recheck current deployed receiver and current HTTP/database diagnostic; do not rely on stale roadmap status or old run IDs.
+- Resolve the live PostgreSQL 503 from validated SQLSTATE and deployment evidence; verify a real HTTP 202 and corresponding event/task rows.
+- Verify live queue claim, lease expiry/recovery, idempotent enqueue and artifact persistence against Supabase. Passing mocked unit tests is insufficient.
+- Do not start model execution while live persistence is unverified.
+
+**Block 1 — one durable message path, without browser vendors.**
+- Map and reuse existing task queue, checkpoints and artifact store.
+- Add request/receipt/response records, correlation/parent IDs, immutable message identity, idempotency, expiry, payload hash and delivery state using existing persistence primitives.
+- A GitHub request file may bootstrap ingress, but the worker must ingest it into the durable queue; response payloads/artifacts must be persisted before acknowledgement.
+- Prove ChatGPT-style request → durable receipt → stored response using a test harness. Do not build a new queue.
+
+**Block 2 — make one real model call.**
+- Implement/configure one provider adapter only after explicit credentials, verified provider profile and global/task budgets exist.
+- Invoke existing admission/reservation, provider-limit, chunk-integrity and ambiguous-outcome reconciliation paths from the scheduler.
+- Persist the full response as a durable artifact before settling the reservation or completing the task.
+- Prove one bounded task from queue claim through model request, persisted result and safe retry/recovery. No credentials or prompts in logs/GitHub files.
+
+**Block 3 — authorized task executor and CI closure.**
+- Register a narrowly scoped handler that reads the roadmap/implementation ledger, selects one unblocked task and produces a small authorized patch.
+- Run checks and commit only within the repository/main scope; associate the exact commit with its GitHub Actions run.
+- Consume the verified CI completion event; classify success/failure; permit bounded repair only when evidence changes; otherwise block with an explicit reason.
+- Never mark completion from generated code or a started CI run.
+
+**Block 4 — autonomous continuation and session independence.**
+- Connect checkpoint persistence, context-budget rollover, worker restart recovery, uncertain-call reconciliation and idempotent continuation.
+- Enforce task/repair/time/token/cost ceilings, approval gates, pause/cancel and kill switch.
+- Demonstrate phone/UI disconnection, worker restart and forced model-context rollover without losing state.
+
+**Block 5 — browser-agent delivery and council escalation.**
+- Implement the application-level Agent Communication Hub and provider registry, separate from the cycle worker.
+- Add one verified provider adapter and deliver a cycle response into the shared chat; preserve pending delivery if unavailable.
+- Add council escalation through the existing consensus subsystem, preserving dissent and evidence.
+- Add further providers and failover only after the first route works.
+
+**Block 6 — operator controls and full acceptance.**
+- Status view, notifications, pause/resume/cancel and provider management.
+- End-to-end acceptance: durable request → cycle execution → exact-commit CI verification → response persisted → browser-agent delivery; plus a separate council-first case, duplicate/stale/spoofed message rejection, provider outage recovery and kill-switch test.
+
+**Critical-path rule:** Blocks 0–4 make the autonomous cycle execute and verify work. Block 5 completes the requested browser-agent communication architecture, but browser vendor integrations must not delay the first functioning execution loop. Blocks 0–2 are the immediate focus; start Block 0 with a live database/queue verification and then move directly to the first failing gate.
+
 ## 3. Master engineering roadmap after the cycle is operational
 
 The worker must use docs/IMPLEMENTATION_STATUS.md as the detailed source of truth, avoid recreating completed foundations, and execute the remaining work in dependency order:
