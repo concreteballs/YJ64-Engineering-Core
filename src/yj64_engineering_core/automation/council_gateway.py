@@ -383,8 +383,28 @@ class CouncilGatewayClient:
         if data.get("completion_reason") is not None and not isinstance(data.get("completion_reason"), str):
             raise CouncilGatewayError("invalid_completion_reason")
         voting_summary = data.get("voting_summary")
-        if voting_summary is not None and not isinstance(voting_summary, dict):
-            raise CouncilGatewayError("invalid_voting_summary")
+        if voting_summary is not None:
+            if not isinstance(voting_summary, dict):
+                raise CouncilGatewayError("invalid_voting_summary")
+            allowed_voting_fields = {
+                "enabled", "weighted_enabled", "majority_result",
+                "weighted_result", "aggregate_counts",
+            }
+            if set(voting_summary) - allowed_voting_fields:
+                raise CouncilGatewayError("invalid_voting_summary")
+            for flag in ("enabled", "weighted_enabled"):
+                if flag in voting_summary and not isinstance(voting_summary[flag], bool):
+                    raise CouncilGatewayError("invalid_voting_summary")
+            vote_results = {"FOR", "AGAINST", "ABSTAIN", "CONDITIONAL", "NO_MAJORITY"}
+            for key in ("majority_result", "weighted_result"):
+                if key in voting_summary and voting_summary[key] not in vote_results:
+                    raise CouncilGatewayError("invalid_voting_summary")
+            counts = voting_summary.get("aggregate_counts", {})
+            if not isinstance(counts, dict) or any(
+                not isinstance(count, int) or isinstance(count, bool) or count < 0
+                for count in counts.values()
+            ):
+                raise CouncilGatewayError("invalid_voting_summary")
         return {
             "protocol_version": PROTOCOL_VERSION,
             "request_id": request_id,
