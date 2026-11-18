@@ -48,7 +48,7 @@ jobs:
           YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
           YJ64_COUNCIL_API_URL: ${{ secrets.YJ64_COUNCIL_API_URL }}
           YJ64_COUNCIL_AGENT_TOKEN: ${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
-          YJ64_COUNCIL_SUPABASE_API_KEY: ${{ vars.YJ64_COUNCIL_SUPABASE_API_KEY }}
+          YJ64_COUNCIL_SUPABASE_API_KEY: ${{ vars.YJ64_COUNCIL_SUPABASE_API_KEY || secrets.YJ64_COUNCIL_API_PUBLISHABLE_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
@@ -64,7 +64,7 @@ jobs:
           YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
           YJ64_COUNCIL_API_URL: ${{ secrets.YJ64_COUNCIL_API_URL }}
           YJ64_COUNCIL_AGENT_TOKEN: ${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
-          YJ64_COUNCIL_SUPABASE_API_KEY: ${{ vars.YJ64_COUNCIL_SUPABASE_API_KEY }}
+          YJ64_COUNCIL_SUPABASE_API_KEY: ${{ vars.YJ64_COUNCIL_SUPABASE_API_KEY || secrets.YJ64_COUNCIL_API_PUBLISHABLE_KEY }}
           YJ64_COUNCIL_AGENT_ID: yj64-engineering-core
           YJ64_COUNCIL_SUBMIT_PATH: ${{ vars.YJ64_COUNCIL_SUBMIT_PATH || '/api/v1/external-agents/council/requests' }}
           YJ64_COUNCIL_STATUS_PATH: ${{ vars.YJ64_COUNCIL_STATUS_PATH || '/api/v1/external-agents/council/requests/{request_id}' }}
