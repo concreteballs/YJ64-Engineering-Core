@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
 from .browser_agent_bridge import create_envelope, validate_envelope
@@ -46,6 +47,7 @@ def enqueue_council_request(
     voting_enabled: bool = False,
     weighted_voting_enabled: bool = False,
     allow_early_stop: bool = True,
+    submitted_at: str | None = None,
     max_poll_count: int = DEFAULT_MAX_POLLS,
 ) -> dict[str, Any]:
     """Enqueue one external council request using the existing PostgreSQL queue."""
@@ -78,11 +80,24 @@ def enqueue_council_request(
         raise ValueError("parent_task_ref must be a non-empty string of at most 128 characters")
     if parent_task_id is not None and parent_task_ref is not None:
         raise ValueError("provide parent_task_id or parent_task_ref, not both")
+    if submitted_at is None:
+        submitted = datetime.now(timezone.utc)
+    else:
+        if not isinstance(submitted_at, str):
+            raise ValueError("submitted_at must be a timezone-aware ISO timestamp")
+        try:
+            submitted = datetime.fromisoformat(submitted_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("submitted_at must be a timezone-aware ISO timestamp") from None
+        if submitted.tzinfo is None:
+            raise ValueError("submitted_at must be a timezone-aware ISO timestamp")
+        submitted = submitted.astimezone(timezone.utc)
+    submitted_at_normalized = submitted.isoformat().replace("+00:00", "Z")
     if (
         not isinstance(max_poll_count, int) or isinstance(max_poll_count, bool)
-        or not 1 <= max_poll_count <= 10000
+        or not 1 <= max_poll_count <= 2016
     ):
-        raise ValueError("max_poll_count must be between 1 and 10000")
+        raise ValueError("max_poll_count must be between 1 and 2016 (seven days at five-minute polling)")
 
     payload = {
         "protocol_version": PROTOCOL_VERSION,
@@ -103,6 +118,7 @@ def enqueue_council_request(
         },
         "parent_task_id": parent_task_id,
         "parent_task_ref": parent_task_ref,
+        "submitted_at": submitted_at_normalized,
         "max_poll_count": max_poll_count,
     }
     key_digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
@@ -142,6 +158,7 @@ def enqueue_council_request_from_envelope(
         voting_enabled=request.get("voting_enabled", False),
         weighted_voting_enabled=request.get("weighted_voting_enabled", False),
         allow_early_stop=request.get("allow_early_stop", True),
+        submitted_at=message["created_at"],
         max_poll_count=request.get("max_poll_count", DEFAULT_MAX_POLLS),
     )
 
@@ -194,6 +211,7 @@ def _queue_poll(
         "session_id": session_id,
         "parent_task_id": payload.get("parent_task_id"),
         "parent_task_ref": payload.get("parent_task_ref"),
+        "submitted_at": payload["submitted_at"],
         "correlation_id": payload["request"]["correlation_id"],
         "idempotency_key": payload["request"]["idempotency_key"],
         "mode": payload["request"]["mode"],
@@ -252,6 +270,8 @@ def handle_submit_council_request(
         "idempotency_key": accepted["idempotency_key"],
         "remote_status": accepted["status"],
         "parent_task_id": payload.get("parent_task_id"),
+        "parent_task_ref": payload.get("parent_task_ref"),
+        "submitted_at": payload["submitted_at"],
     }
     if not _checkpoint(context, task, state):
         # Re-submission is safe because the remote API receives the same key.
@@ -298,7 +318,9 @@ def _enqueue_result_ready(
         task_id=envelope_task_id,
         idempotency_key=f"council-result:{request_id}",
         payload=result_payload,
-        ttl_seconds=604800,
+        now=datetime.fromisoformat(payload["submitted_at"].replace("Z", "+00:00")),
+        message_id=hashlib.sha256(f"council-result:{request_id}".encode("utf-8")).hexdigest()[:32],
+        ttl_seconds=2592000,
     )
     handoff = {
         "protocol_version": PROTOCOL_VERSION,
@@ -416,6 +438,7 @@ def handle_poll_council_request(
         "session_id": session_id,
         "remote_status": status["status"],
         "poll_generation": generation,
+        "submitted_at": payload["submitted_at"],
     }
     if not _checkpoint(context, task, state):
         return TaskExecutionResult("retry", "council_checkpoint_persistence_failed", 90)
