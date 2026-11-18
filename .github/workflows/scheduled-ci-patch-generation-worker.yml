@@ -10,7 +10,9 @@ on:
     branches: ["main"]
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  actions: write
 
 concurrency:
   group: yj64-ci-patch-generation
@@ -20,12 +22,13 @@ jobs:
   prepare-one:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - name: Check out trusted main branch
         uses: actions/checkout@v4
         with:
           ref: main
+          persist-credentials: true
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,4 +41,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python scripts/run_ci_patch_generation_worker.py
