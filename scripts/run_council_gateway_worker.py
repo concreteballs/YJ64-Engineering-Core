@@ -88,7 +88,7 @@ def main() -> int:
         return 1
 
     print(json.dumps({
-        "ok": result.get("status") in {"completed", "idle", "blocked"},
+        "ok": result.get("status") in {"completed", "idle", "blocked", "waiting"},
         "worker": "council_gateway",
         "result": result,
         "scope": "native_yj64_council_submit_poll_and_result_consumption",
