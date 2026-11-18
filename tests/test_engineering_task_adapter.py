@@ -5,7 +5,7 @@ from yj64_engineering_core.automation.engineering_task_adapter import (
 )
 from yj64_engineering_core.automation.parent_tasks import ParentTaskState
 from yj64_engineering_core.automation.worker import TaskExecutionResult
-from yj64_engineering_core.contracts import EngineeringRequest
+from yj64_engineering_core.contracts import EngineeringRequest, LoadCase
 from yj64_engineering_core.dispatcher import AxialMemberSolver, EngineeringDispatcher
 from yj64_engineering_core.task_contracts import TaskRequest
 
@@ -46,7 +46,7 @@ class EngineeringTaskAdapterTests(unittest.TestCase):
                 "youngs_modulus_pa": 200e9,
                 "allowable_stress_pa": 150e6,
             },
-            load_cases=(),
+            load_cases=(LoadCase(name="service", force_n=(0.0, 0.0, 1000.0)),),
         )
         return TaskRequest(
             task_id="task-42",
