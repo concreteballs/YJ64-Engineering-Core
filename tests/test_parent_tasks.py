@@ -1,5 +1,6 @@
 import unittest
 
+from yj64_engineering_core.automation.checkpoints import create_checkpoint
 from yj64_engineering_core.automation.parent_tasks import (
     TaskAdapterRegistry,
     handle_parent_task_request,
@@ -83,9 +84,12 @@ class ParentTaskHandlerTests(unittest.TestCase):
         self.assertEqual(result, TaskExecutionResult("blocked", "task_capability_not_registered"))
 
     def test_resumes_from_verified_council_checkpoint(self):
-        checkpoint = {
-            "task_id": "42",
-            "task_state": {
+        checkpoint = create_checkpoint(
+            task_id="42",
+            sequence=1,
+            state="checkpointed",
+            task_spec_version="1.0",
+            task_state={
                 "stage": "council_result_received",
                 "resume_state": {"next_step": "apply_review"},
                 "council_resume_event": {
@@ -93,8 +97,10 @@ class ParentTaskHandlerTests(unittest.TestCase):
                     "result_sha256": "a" * 64,
                 },
             },
-            "artifact_refs": ["private://result/42"],
-        }
+            budgets={},
+            approvals={},
+            artifact_refs=["private://result/42"],
+        )
         registry = TaskAdapterRegistry()
         seen = []
 
@@ -159,11 +165,15 @@ class ParentTaskHandlerTests(unittest.TestCase):
         self.assertEqual(result, TaskExecutionResult("blocked", "council_use_forbidden"))
 
     def test_rejects_waiting_checkpoint_without_resume_event(self):
-        checkpoint = {
-            "task_id": "42",
-            "task_state": {"stage": "waiting_council", "resume_state": {}},
-            "artifact_refs": [],
-        }
+        checkpoint = create_checkpoint(
+            task_id="42",
+            sequence=1,
+            state="checkpointed",
+            task_spec_version="1.0",
+            task_state={"stage": "waiting_council", "resume_state": {}},
+            budgets={},
+            approvals={},
+        )
         registry = TaskAdapterRegistry()
         registry.register("code.review", lambda *_: TaskExecutionResult("completed"), capabilities=("github.read",))
         result = handle_parent_task_request(
