@@ -208,6 +208,10 @@ class CouncilGatewayClient:
         max_response_bytes: int = 2 * 1024 * 1024,
         opener: Callable | None = None,
         allow_insecure_http: bool = False,
+        submit_path: str = "/api/v1/external-agents/council/requests",
+        status_path_template: str = "/api/v1/external-agents/council/requests/{request_id}",
+        result_path_template: str = "/api/v1/external-agents/council/requests/{request_id}/result",
+        cancel_path_template: str = "/api/v1/external-agents/council/requests/{request_id}/cancel",
     ) -> None:
         if not isinstance(base_url, str) or not base_url.strip():
             raise ValueError("base_url is required")
@@ -237,6 +241,10 @@ class CouncilGatewayClient:
         self.agent_id = agent_id
         self.timeout_seconds = float(timeout_seconds)
         self.max_response_bytes = max_response_bytes
+        self.submit_path = self._validate_route(submit_path, "submit_path")
+        self.status_path_template = self._validate_route(status_path_template, "status_path_template", request_id=True)
+        self.result_path_template = self._validate_route(result_path_template, "result_path_template", request_id=True)
+        self.cancel_path_template = self._validate_route(cancel_path_template, "cancel_path_template", request_id=True)
         self._opener = opener or urllib.request.build_opener(_NoRedirect()).open
 
     @classmethod
@@ -250,7 +258,14 @@ class CouncilGatewayClient:
                 "YJ64_COUNCIL_API_URL and YJ64_COUNCIL_AGENT_TOKEN are required"
             )
         return cls(
-            base_url=base_url, token=token, agent_id=agent_id, **kwargs
+            base_url=base_url,
+            token=token,
+            agent_id=agent_id,
+            submit_path=os.environ.get("YJ64_COUNCIL_SUBMIT_PATH", "/api/v1/external-agents/council/requests"),
+            status_path_template=os.environ.get("YJ64_COUNCIL_STATUS_PATH", "/api/v1/external-agents/council/requests/{request_id}"),
+            result_path_template=os.environ.get("YJ64_COUNCIL_RESULT_PATH", "/api/v1/external-agents/council/requests/{request_id}/result"),
+            cancel_path_template=os.environ.get("YJ64_COUNCIL_CANCEL_PATH", "/api/v1/external-agents/council/requests/{request_id}/cancel"),
+            **kwargs,
         )
 
     def submit(self, request: CouncilRequest) -> dict[str, Any]:
@@ -258,7 +273,7 @@ class CouncilGatewayClient:
             raise TypeError("request must be a CouncilRequest")
         payload = request.to_payload(self.agent_id)
         data = self._request(
-            "POST", "/api/v1/external-agents/council/requests",
+            "POST", self.submit_path,
             payload=payload,
             extra_headers={"Idempotency-Key": request.idempotency_key},
         )
@@ -282,7 +297,7 @@ class CouncilGatewayClient:
     def get_status(self, request_id: str) -> dict[str, Any]:
         request_id = _safe_id(request_id, "request_id")
         data = self._request(
-            "GET", f"/api/v1/external-agents/council/requests/{urllib.parse.quote(request_id, safe='')}"
+            "GET", self.status_path_template.format(request_id=urllib.parse.quote(request_id, safe=""))
         )
         if data.get("protocol_version") != PROTOCOL_VERSION:
             raise CouncilGatewayError("unsupported_protocol_version")
@@ -310,7 +325,7 @@ class CouncilGatewayClient:
         session_id = _safe_id(session_id, "session_id")
         data = self._request(
             "GET",
-            f"/api/v1/external-agents/council/requests/{urllib.parse.quote(request_id, safe='')}/result",
+            self.result_path_template.format(request_id=urllib.parse.quote(request_id, safe="")),
         )
         if data.get("protocol_version") != PROTOCOL_VERSION:
             raise CouncilGatewayError("unsupported_protocol_version")
@@ -429,7 +444,7 @@ class CouncilGatewayClient:
         request_id = _safe_id(request_id, "request_id")
         data = self._request(
             "POST",
-            f"/api/v1/external-agents/council/requests/{urllib.parse.quote(request_id, safe='')}/cancel",
+            self.cancel_path_template.format(request_id=urllib.parse.quote(request_id, safe="")),
             payload={"protocol_version": PROTOCOL_VERSION, "agent_id": self.agent_id},
         )
         if data.get("protocol_version") != PROTOCOL_VERSION:
@@ -437,6 +452,22 @@ class CouncilGatewayClient:
         if data.get("request_id") != request_id or data.get("status") not in TERMINAL_STATUSES:
             raise CouncilGatewayError("invalid_cancel_response")
         return {"request_id": request_id, "status": data["status"]}
+
+    @staticmethod
+    def _validate_route(value: str, name: str, *, request_id: bool = False) -> str:
+        if not isinstance(value, str) or not value.startswith("/") or value.startswith("//"):
+            raise ValueError(f"{name} must be an absolute path on the configured API origin")
+        parsed = urllib.parse.urlsplit(value)
+        if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+            raise ValueError(f"{name} must not contain an origin, query or fragment")
+        if any(part in {".", ".."} for part in parsed.path.split("/")):
+            raise ValueError(f"{name} contains an invalid path segment")
+        if request_id:
+            if value.count("{request_id}") != 1 or set(re.findall(r"{([^{}]+)}", value)) != {"request_id"}:
+                raise ValueError(f"{name} must contain exactly one {{request_id}} placeholder")
+        elif "{" in value or "}" in value:
+            raise ValueError(f"{name} must not contain path placeholders")
+        return value
 
     def _request(
         self,
