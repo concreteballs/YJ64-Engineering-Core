@@ -92,9 +92,9 @@ class CouncilGatewayClientTests(unittest.TestCase):
             "outcome": "qualified_consensus",
             "summary": "Agreement with one unresolved limitation.",
             "claims": [{"claim_id": "claim-1", "statement": "A", "epistemic_type": "inference", "reasoning": "Derived from evidence.", "evidence_refs": ["evidence-1"]}],
-            "participant_positions": [{"participant": "P1", "position": "agree"}],
-            "dissent": [{"participant": "P2", "reason": "missing test"}],
-            "evidence": [{"ref": "artifact://evidence/1"}],
+            "participant_positions": [{"participant_id": "P1", "position": "agree", "rationale": "Evidence supports the claim."}],
+            "dissent": [{"participant_id": "P2", "reason": "missing test"}],
+            "evidence": [{"evidence_id": "evidence-1", "reference": "artifact://evidence/1", "description": "Test artifact", "evidence_type": "artifact"}],
             "unresolved_questions": ["Does the test cover edge case B?"],
         })
         result = self.client(opener).get_result("request-123", "session-123")
