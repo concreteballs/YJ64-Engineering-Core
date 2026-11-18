@@ -119,6 +119,7 @@ class PostgresCycleStore:
         allowed_types = {
             "process_ci_event", "analyze_ci_logs", "prepare_ci_fix", "generate_ci_patch",
             "submit_council_request", "poll_council_request", "council_result_ready",
+            "execute_task_request",
         }
         if task_type not in allowed_types:
             raise ValueError("task_type is not allowlisted")
