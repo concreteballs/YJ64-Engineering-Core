@@ -89,6 +89,7 @@ def make_task(status="completed"):
             "reason": None if status == "completed" else "council_timeout",
             "source": "yj64_native_council",
             "parent_task_id": 12,
+            "resume_request_id": "council-resume:abc",
             "browser_agent_envelope": envelope,
         },
     }, content
@@ -111,7 +112,7 @@ class CouncilResultConsumerTests(unittest.TestCase):
         self.assertEqual(len(context.store.calls), 1)
         self.assertEqual(context.store.calls[0]["parent_task_id"], 12)
         self.assertEqual(context.store.calls[0]["result_task_id"], 71)
-        self.assertEqual(context.store.calls[0]["council_request_id"], "req-1")
+        self.assertEqual(context.store.calls[0]["council_request_id"], "council-resume:abc")
         self.assertEqual(context.store.calls[0]["result_sha256"], state["result_sha256"])
         self.assertEqual(len(state["result_sha256"]), 64)
 
