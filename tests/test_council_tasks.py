@@ -80,7 +80,7 @@ class FakeClient:
             "summary": "The participants did not reach agreement.",
             "claims": [],
             "participant_positions": [],
-            "dissent": [{"participant": "P2", "reason": "insufficient test evidence"}],
+            "dissent": [{"participant_id": "P2", "reason": "insufficient test evidence"}],
             "evidence": [],
             "unresolved_questions": ["Run an additional test."],
             "assumptions": [],
