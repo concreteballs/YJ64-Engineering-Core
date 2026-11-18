@@ -41,7 +41,7 @@ class BrowserAgentEnvelopeTests(unittest.TestCase):
             validate_envelope(bad, now=self.now)
 
     def test_rejects_expired_and_naive_timestamps(self):
-        bad = dict(self.message, expires_at=(self.now - timedelta(seconds=1)).isoformat())
+        bad = dict(self.message, created_at=(self.now - timedelta(hours=2)).isoformat(), expires_at=(self.now - timedelta(hours=1)).isoformat())
         with self.assertRaisesRegex(ValueError, "expired"):
             validate_envelope(bad, now=self.now)
         bad = dict(self.message, created_at=self.now.replace(tzinfo=None).isoformat())
