@@ -8,6 +8,7 @@ from yj64_engineering_core.automation.council_tasks import (
     SUBMIT_TASK,
     enqueue_council_request_from_envelope,
     handle_poll_council_request,
+    load_council_result_artifact,
     handle_submit_council_request,
 )
 from yj64_engineering_core.automation.worker import TaskExecutionResult
@@ -94,10 +95,15 @@ class FakeClient:
 class FakeArtifactStore:
     def __init__(self):
         self.saved = []
+        self.content = None
 
     def put(self, **kwargs):
         self.saved.append(kwargs)
+        self.content = kwargs["content"]
         return "supabase-storage://yj64-private-artifacts/council/request-123/" + "a" * 64
+
+    def get(self, _artifact_ref):
+        return self.content
 
 
 class CouncilTaskTests(unittest.TestCase):
@@ -194,6 +200,11 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(handoff["payload"]["substantive_outcome"], "unresolved_disagreement")
         self.assertIn("supabase-storage://", handoff["payload"]["result_artifact_ref"])
         self.assertEqual(handoff["payload"]["browser_agent_envelope"]["message_type"], "council_result")
+        loaded = load_council_result_artifact(
+            handoff["payload"], artifact_store_factory=lambda: artifacts
+        )
+        self.assertEqual(loaded["request_id"], "request-123")
+        self.assertEqual(loaded["outcome"], "unresolved_disagreement")
         self.assertEqual(len(artifacts.saved), 1)
 
     def test_session_mismatch_is_blocked(self):
