@@ -28,6 +28,10 @@ class FakeContext:
         self.checkpoints.append(checkpoint)
         return True
 
+    def record_council_resume_event(self, parent_task_id, request_id, artifact_ref, digest):
+        self.resume_event = (parent_task_id, request_id, artifact_ref, digest)
+        return {"accepted": True, "duplicate": False}
+
 
 def make_task(status="completed"):
     from yj64_engineering_core.automation.browser_agent_bridge import create_envelope
@@ -59,7 +63,7 @@ def make_task(status="completed"):
             "mode": "critique",
             "execution_status": status,
             "substantive_outcome": result["outcome"] if status == "completed" else None,
-            "result_artifact_ref": "private://council/result-1" if status == "completed" else None,
+            "result_artifact_ref": "private://council/result-1" if status == "completed" else f"council-terminal://req-1/{status}",
             "reason": None if status == "completed" else "council_timeout",
             "source": "yj64_native_council",
         },
@@ -73,7 +77,7 @@ def make_task(status="completed"):
             "correlation_id": "corr-1",
             "mode": "critique",
             "execution_status": status,
-            "result_artifact_ref": "private://council/result-1" if status == "completed" else None,
+            "result_artifact_ref": "private://council/result-1" if status == "completed" else f"council-terminal://req-1/{status}",
             "reason": None if status == "completed" else "council_timeout",
             "source": "yj64_native_council",
             "parent_task_id": 12,
@@ -101,8 +105,9 @@ class CouncilResultConsumerTests(unittest.TestCase):
         task, _ = make_task(status="blocked")
         context = FakeContext()
         decision = handle_council_result_ready(task, context)
-        self.assertEqual(decision, TaskExecutionResult("blocked", "council_timeout"))
-        self.assertEqual(context.checkpoints[0]["state"], "blocked")
+        self.assertEqual(decision, TaskExecutionResult("completed"))
+        self.assertEqual(context.checkpoints[0]["task_state"]["status"], "blocked")
+        self.assertEqual(context.resume_event[1], "req-1")
 
     def test_invalid_semantic_shape_is_blocked(self):
         task, content = make_task()

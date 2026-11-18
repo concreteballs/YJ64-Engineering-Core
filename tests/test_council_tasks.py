@@ -49,6 +49,14 @@ class FakeContext:
         self.checkpoints.append(checkpoint)
         return True
 
+    def suspend_for_council(self, checkpoint, request_id):
+        self.suspended = (checkpoint, request_id)
+        return True
+
+    def record_council_resume_event(self, parent_task_id, request_id, artifact_ref, digest):
+        self.resume_event = (parent_task_id, request_id, artifact_ref, digest)
+        return {"accepted": True, "duplicate": False}
+
 
 class FakeClient:
     def __init__(self, status="accepted"):
@@ -166,6 +174,17 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(store.enqueued[0]["task_type"], SUBMIT_TASK)
         self.assertEqual(store.enqueued[0]["payload"]["parent_task_ref"], "engineering-task-123")
         self.assertEqual(store.enqueued[0]["payload"]["request"]["mode"], "critique")
+
+    def test_parent_task_can_submit_and_suspend_for_council(self):
+        from yj64_engineering_core.automation.council_tasks import handle_council_request_in_parent_task
+        context = FakeContext()
+        result = handle_council_request_in_parent_task(
+            self.submit_task(), context, client_factory=lambda: FakeClient(),
+        )
+        self.assertEqual(result, TaskExecutionResult("suspended"))
+        self.assertEqual(context.suspended[1], "request-123")
+        self.assertEqual(context.suspended[0]["task_state"]["stage"], "waiting_council")
+        self.assertEqual(context.store.enqueued[0]["task_type"], POLL_TASK)
 
     def test_submit_persists_remote_ids_and_queues_poll_without_waiting(self):
         context = FakeContext()

@@ -226,6 +226,81 @@ def _queue_poll(
     )
 
 
+def handle_council_request_in_parent_task(
+    task: dict,
+    context: Any,
+    *,
+    client_factory: Callable[[], CouncilGatewayClient] | None = None,
+) -> TaskExecutionResult:
+    """Submit Council under the parent lease, then suspend the parent durably."""
+    try:
+        payload = _payload(task)
+        raw = payload.get("request")
+        if not isinstance(raw, dict):
+            return TaskExecutionResult("blocked", "invalid_council_request")
+        request = CouncilRequest(
+            mode=raw.get("mode"), title=raw.get("title"), prompt=raw.get("prompt"),
+            correlation_id=raw.get("correlation_id"),
+            idempotency_key=raw.get("idempotency_key"),
+            context=raw.get("context", {}),
+            evidence_refs=tuple(raw.get("evidence_refs", [])),
+            max_rounds=raw.get("max_rounds", 3),
+            timeout_seconds=raw.get("timeout_seconds", 1800),
+            max_output_tokens=raw.get("max_output_tokens", 12000),
+            voting_enabled=raw.get("voting_enabled", False),
+            weighted_voting_enabled=raw.get("weighted_voting_enabled", False),
+            allow_early_stop=raw.get("allow_early_stop", True),
+        )
+        accepted = _client(client_factory).submit(request)
+    except CouncilGatewayError as exc:
+        if exc.retryable:
+            return TaskExecutionResult("retry", exc.classification, min(900, max(30, exc.retry_after_seconds or 90)))
+        return TaskExecutionResult("blocked", exc.classification)
+    except (TypeError, ValueError, KeyError):
+        return TaskExecutionResult("blocked", "invalid_council_request")
+
+    parent_payload = dict(payload)
+    parent_payload["parent_task_id"] = context.task_id
+    parent_payload.pop("parent_task_ref", None)
+    parent_payload.setdefault("submitted_at", datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
+    parent_payload.setdefault("max_poll_count", DEFAULT_MAX_POLLS)
+    queued = _queue_poll(
+        context, parent_payload, request_id=accepted["request_id"],
+        session_id=accepted["session_id"], generation=0,
+    )
+    if not queued.get("enqueued") and not queued.get("duplicate"):
+        return TaskExecutionResult("retry", "council_poll_enqueue_failed", 90)
+
+    previous = context.load_latest_checkpoint()
+    checkpoint = create_checkpoint(
+        task_id=str(context.task_id),
+        sequence=int(previous.get("sequence", 0)) + 1 if isinstance(previous, dict) else 1,
+        state="checkpointed",
+        task_spec_version=PROTOCOL_VERSION,
+        task_state={
+            "stage": "waiting_council",
+            "status": "waiting",
+            "expected_council_request_id": accepted["request_id"],
+            "request_id": accepted["request_id"],
+            "session_id": accepted["session_id"],
+            "correlation_id": accepted["correlation_id"],
+            "idempotency_key": accepted["idempotency_key"],
+            "submitted_at": parent_payload["submitted_at"],
+            "chat_id": raw.get("context", {}).get("chat_id") if isinstance(raw.get("context"), dict) else None,
+        },
+        budgets={},
+        approvals={"external_council_request": "authorized_by_calling_workflow"},
+        artifact_refs=[],
+        previous_checkpoint_hash=previous.get("checkpoint_hash") if isinstance(previous, dict) else None,
+    )
+    try:
+        if not context.suspend_for_council(checkpoint, accepted["request_id"]):
+            return TaskExecutionResult("retry", "council_parent_suspend_failed", 90)
+    except (RuntimeError, ValueError):
+        return TaskExecutionResult("retry", "council_parent_suspend_failed", 90)
+    return TaskExecutionResult("suspended")
+
+
 def handle_submit_council_request(
     task: dict,
     context: Any,
@@ -297,6 +372,8 @@ def _enqueue_result_ready(
     reason: str | None = None,
 ) -> dict[str, Any]:
     request_id = payload["request_id"]
+    if execution_status != "completed" and result_artifact_ref is None:
+        result_artifact_ref = f"council-terminal://{request_id}/{execution_status}"
     envelope_task_id = (
         payload.get("parent_task_id")
         or payload.get("parent_task_ref")
@@ -355,7 +432,7 @@ def load_council_result_artifact(
     request_id = message.get("request_id")
     session_id = message.get("session_id")
     if (
-        message.get("execution_status") != "completed"
+        message.get("execution_status") not in {"completed", "blocked", "failed", "cancelled"}
         or not isinstance(request_id, str)
         or not isinstance(session_id, str)
         or envelope_payload.get("request_id") != request_id
@@ -379,7 +456,7 @@ def load_council_result_artifact(
         not isinstance(result, dict)
         or result.get("request_id") != request_id
         or result.get("session_id") != session_id
-        or result.get("status") != "completed"
+        or result.get("status") != message.get("execution_status")
     ):
         raise ValueError("council result artifact identity mismatch")
     return result

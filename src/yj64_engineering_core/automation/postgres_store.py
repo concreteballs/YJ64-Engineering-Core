@@ -734,7 +734,18 @@ class PostgresCycleStore:
                     raise RuntimeError("council result task lease is not owned by this worker")
                 cursor.execute("SELECT state FROM yj64_task_queue WHERE task_id = %s FOR UPDATE", (parent_task_id,))
                 parent = cursor.fetchone()
-                if parent is None or parent[0] != "waiting":
+                if parent is None:
+                    return {"accepted": False, "duplicate": False, "reason": "parent_not_found"}
+                cursor.execute("""SELECT result_task_id, result_artifact_ref, result_sha256
+                    FROM yj64_task_resume_events
+                    WHERE parent_task_id = %s AND council_request_id = %s""",
+                    (parent_task_id, council_request_id))
+                existing_event = cursor.fetchone()
+                if existing_event is not None:
+                    if existing_event != (result_task_id, result_artifact_ref, result_sha256):
+                        raise ValueError("council resume identity conflicts with an existing event")
+                    return {"accepted": True, "duplicate": True, "parent_task_id": parent_task_id, "state": parent[0]}
+                if parent[0] != "waiting":
                     return {"accepted": False, "duplicate": False, "reason": "parent_not_waiting"}
                 cursor.execute("""SELECT checkpoint FROM yj64_task_checkpoints
                     WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1""", (parent_task_id,))
