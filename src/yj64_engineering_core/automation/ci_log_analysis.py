@@ -96,7 +96,7 @@ def select_diagnostic_log_excerpt(log_text: str, max_chars: int = 90_000) -> str
             used += cost
 
     output = [header]
-    previous = -2
+    previous = -1
     for index in sorted(selected):
         if index > previous + 1:
             start = previous + 2
