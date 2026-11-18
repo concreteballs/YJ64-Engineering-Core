@@ -1,6 +1,8 @@
 import io
+import os
 import unittest
 import zipfile
+from unittest.mock import patch
 from hashlib import sha256
 
 from scripts.run_ci_event_worker import process_ci_event
@@ -128,6 +130,21 @@ class CiLogIngestionTests(unittest.TestCase):
         self.assertEqual(result, b"zip-data")
         self.assertIn("/repos/concreteballs/yj64-clean-bial2modFun5/", captured["url"])
         self.assertIsNone(captured["authorization"])
+
+    def test_fetches_android_logs_with_scoped_token_when_configured(self):
+        captured = {}
+
+        def opener(request, timeout):
+            captured["authorization"] = request.get_header("Authorization")
+            return FakeResponse(b"zip-data")
+
+        with patch.dict(os.environ, {"YJ64_ANDROID_REPO_LOGS_TOKEN": "android-only-token"}):
+            result = fetch_run_logs(
+                "concreteballs/yj64-clean-bial2modFun5", 12345, 1, "core-token",
+                opener=opener,
+            )
+        self.assertEqual(result, b"zip-data")
+        self.assertEqual(captured["authorization"], "Bearer android-only-token")
 
     def test_rejects_other_repository(self):
         with self.assertRaisesRegex(ValueError, "outside"):

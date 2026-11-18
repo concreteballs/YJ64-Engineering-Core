@@ -49,5 +49,6 @@ jobs:
         env:
           YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
           GITHUB_TOKEN: ${{ github.token }}
+          YJ64_ANDROID_REPO_LOGS_TOKEN: ${{ secrets.YJ64_ANDROID_REPO_LOGS_TOKEN }}
           YJ64_WORKER_SLOT: ${{ matrix.slot }}
         run: python scripts/run_ci_event_worker.py

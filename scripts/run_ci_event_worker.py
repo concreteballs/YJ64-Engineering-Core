@@ -99,6 +99,7 @@ def process_ci_event(
             archive,
             secrets=(
                 token,
+                os.environ.get("YJ64_ANDROID_REPO_LOGS_TOKEN", ""),
                 os.environ.get("YJ64_DATABASE_URL", ""),
                 os.environ.get("GEMINI_API_KEY", ""),
                 os.environ.get("SUPABASE_SERVICE_ROLE_KEY", ""),
@@ -212,7 +213,11 @@ def main() -> int:
                 sqlstate = candidate
                 break
         detail = str(exc).splitlines()[0][:180]
-        for secret in (database_url, os.environ.get("GITHUB_TOKEN", "")):
+        for secret in (
+            database_url,
+            os.environ.get("GITHUB_TOKEN", ""),
+            os.environ.get("YJ64_ANDROID_REPO_LOGS_TOKEN", ""),
+        ):
             if secret:
                 detail = detail.replace(secret, "[REDACTED]")
         print(json.dumps({

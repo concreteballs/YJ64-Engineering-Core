@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import urllib.error
 import urllib.request
@@ -125,8 +126,11 @@ def fetch_run_logs(
         "User-Agent": "YJ64-Engineering-Core",
     }
     # Never forward the Core token to the separate public Android repository.
-    if repository == EXPECTED_REPOSITORY:
-        headers["Authorization"] = "Bearer " + token.strip()
+    request_token = token.strip() if repository == EXPECTED_REPOSITORY else os.environ.get(
+        "YJ64_ANDROID_REPO_LOGS_TOKEN", ""
+    ).strip()
+    if request_token:
+        headers["Authorization"] = "Bearer " + request_token
     request = urllib.request.Request(url, headers=headers, method="GET")
     send = opener or urllib.request.urlopen
     try:
