@@ -107,9 +107,10 @@ class TaskRequestQueueTests(unittest.TestCase):
         query, params = cursor.statements[0]
         self.assertIn("INSERT INTO yj64_task_queue", query)
         self.assertEqual(params[0], PARENT_TASK_QUEUE_TYPE)
-        self.assertEqual(json.loads(params[1]), {
-            "task_request": self.make_request().to_dict()
-        })
+        self.assertEqual(
+            json.loads(params[1]),
+            json.loads(json.dumps({"task_request": self.make_request().to_dict()})),
+        )
         self.assertEqual(params[2], "task-request:repo-review-001")
 
     def test_postgres_store_accepts_exact_duplicate_but_rejects_conflicting_payload(self):
