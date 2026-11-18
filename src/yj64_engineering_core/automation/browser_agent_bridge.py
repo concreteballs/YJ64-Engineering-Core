@@ -52,7 +52,7 @@ def validate_envelope(envelope: Mapping[str, Any], *, now: datetime | None = Non
         raise ValueError("envelope contains unknown fields")
     required = {
         "schema_version", "message_id", "message_type", "created_at",
-        "expires_at", "repository", "branch", "task_id", "payload_sha256", "payload",
+        "expires_at", "repository", "branch", "task_id", "idempotency_key", "payload_sha256", "payload",
     }
     if not required.issubset(data):
         raise ValueError("envelope is missing required fields")
@@ -82,10 +82,7 @@ def validate_envelope(envelope: Mapping[str, Any], *, now: datetime | None = Non
         not isinstance(data["commit_sha"], str) or not _COMMIT_SHA.fullmatch(data["commit_sha"])
     ):
         raise ValueError("commit_sha must be a lowercase 40-character SHA")
-    if "idempotency_key" in data and data["idempotency_key"] is not None and (
-        not isinstance(data["idempotency_key"], str)
-        or not 8 <= len(data["idempotency_key"]) <= 256
-    ):
+    if not isinstance(data.get("idempotency_key"), str) or not 8 <= len(data["idempotency_key"]) <= 256:
         raise ValueError("idempotency_key must be 8-256 characters")
     if not isinstance(data["payload"], Mapping):
         raise ValueError("payload must be an object")
