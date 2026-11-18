@@ -163,10 +163,14 @@ class PostgresCycleStore:
                     (dedupe_key,),
                 )
                 existing = cursor.fetchone()
+                existing_payload = existing[2] if existing is not None else None
+                if isinstance(existing_payload, str):
+                    existing_payload = json.loads(existing_payload)
+                normalized_payload = json.loads(payload_json)
                 if (
                     existing is None
                     or existing[1] != task_type
-                    or existing[2] != payload
+                    or existing_payload != normalized_payload
                 ):
                     raise ValueError("dedupe_key already exists with conflicting task content")
                 return {
