@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/concreteballs/YJ64-Engineering-Core/blob/main/schemas/council-api-v1.schema.json",
+  "title": "YJ64 External Council API v1",
+  "description": "Proposed machine-to-machine contract. The YJ-64 application must implement and publish these operations before live integration.",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "status": {
+      "enum": ["accepted", "running", "completed", "blocked", "failed", "cancelled"]
+    },
+    "outcome": {
+      "enum": ["consensus", "qualified_consensus", "unresolved_disagreement", "insufficient_evidence"]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "agent_id", "correlation_id", "idempotency_key", "mode", "task", "limits"],
+      "properties": {
+        "protocol_version": {"const": "yj64.council-api.v1"},
+        "agent_id": {"$ref": "#/$defs/id"},
+        "correlation_id": {"$ref": "#/$defs/id"},
+        "idempotency_key": {"type": "string", "minLength": 8, "maxLength": 256},
+        "mode": {"enum": ["consensus", "critique"]},
+        "task": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "prompt", "context", "evidence_refs"],
+          "properties": {
+            "title": {"type": "string", "minLength": 1, "maxLength": 500},
+            "prompt": {"type": "string", "minLength": 1, "maxLength": 50000},
+            "context": {"type": "object"},
+            "evidence_refs": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 2048}}
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_rounds", "timeout_seconds", "max_output_tokens", "minimum_critique_rounds"],
+          "properties": {
+            "max_rounds": {"type": "integer", "minimum": 1, "maximum": 10},
+            "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 86400},
+            "max_output_tokens": {"type": "integer", "minimum": 256, "maximum": 100000},
+            "minimum_critique_rounds": {"const": 1}
+          }
+        }
+      }
+    },
+    "accepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "session_id", "status"],
+      "properties": {
+        "protocol_version": {"const": "yj64.council-api.v1"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "session_id": {"$ref": "#/$defs/id"},
+        "status": {"enum": ["accepted", "running"]}
+      }
+    },
+    "status_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "session_id", "status"],
+      "properties": {
+        "protocol_version": {"const": "yj64.council-api.v1"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "session_id": {"$ref": "#/$defs/id"},
+        "status": {"$ref": "#/$defs/status"},
+        "progress": {"type": "object"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "session_id", "status", "outcome", "summary", "claims", "participant_positions", "dissent", "evidence", "unresolved_questions"],
+      "properties": {
+        "protocol_version": {"const": "yj64.council-api.v1"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "session_id": {"$ref": "#/$defs/id"},
+        "status": {"const": "completed"},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 50000},
+        "claims": {"type": "array", "items": {"type": "object"}},
+        "participant_positions": {"type": "array", "items": {"type": "object"}},
+        "dissent": {"type": "array", "items": {"type": "object"}},
+        "evidence": {"type": "array", "items": {"type": "object"}},
+        "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "rounds_completed": {"type": "integer", "minimum": 0},
+        "completion_reason": {"type": "string"},
+        "tests_and_simulations": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "cancel_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "request_id", "status"],
+      "properties": {
+        "protocol_version": {"const": "yj64.council-api.v1"},
+        "request_id": {"$ref": "#/$defs/id"},
+        "status": {"enum": ["completed", "blocked", "failed", "cancelled"]}
+      }
+    }
+  }
+}
