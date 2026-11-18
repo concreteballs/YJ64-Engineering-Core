@@ -52,3 +52,34 @@ Keep database and provider credentials server-side. Never put them in source fil
 An external worker cannot resume this exact ChatGPT conversation. A separate event/notification bridge is required before automatic continuation inside this chat can be claimed.
 
 The current system is a working CI-event persistence pipeline with bounded, redacted, integrity-verified log capture. It is not yet a live LLM-driven autonomous engineering cycle.
+
+
+## Android emulator test bridge
+
+The Android client repository `concreteballs/yj64-clean-bial2modFun5` runs
+`.github/workflows/android-build.yml` on a GitHub-hosted Android 15 emulator.
+The workflow builds Base and Monitor APKs, installs them in the x86_64 emulator,
+launches both packages, checks Base-to-Monitor Content Provider IPC, and emits
+job/logcat diagnostics.
+
+GitHub `workflow_run` events do not cross repository boundaries. The Core
+workflow `.github/workflows/poll-android-runtime-runs.yml` therefore polls the
+public Android repository's exact workflow (main-branch push runs from the last
+30 days) and persists completed attempts into the existing `yj64_ci_events`
+table. Its unique key `(repository, run_id, run_attempt)` makes polling
+idempotent. The existing `yj64_task_queue` receives `process_ci_event` tasks;
+no second queue or cross-repository write token is introduced.
+
+The log worker accepts only two explicit scopes:
+- `concreteballs/YJ64-Engineering-Core` / `Python tests`
+- `concreteballs/yj64-clean-bial2modFun5` / `.github/workflows/android-build.yml`
+
+It downloads the exact attempt's logs, sanitizes them, stores a verified
+payload manifest/chunks, and queues `analyze_ci_logs`. Android logs are fetched
+anonymously because the app repository is public; the Core GitHub token is
+never forwarded to another repository.
+
+This bridge delivers emulator results to the durable analysis queue. It does
+not yet enable live LLM analysis or autonomous code changes: those remain
+gated by the configured $0 budget and a verified provider profile, and require
+a separate analysis/repair worker.

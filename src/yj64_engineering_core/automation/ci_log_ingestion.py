@@ -9,6 +9,8 @@ import zipfile
 from typing import Callable
 
 EXPECTED_REPOSITORY = "concreteballs/YJ64-Engineering-Core"
+ANDROID_RUNTIME_REPOSITORY = "concreteballs/yj64-clean-bial2modFun5"
+ALLOWED_REPOSITORIES = frozenset({EXPECTED_REPOSITORY, ANDROID_RUNTIME_REPOSITORY})
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 MAX_LOG_BYTES = 4 * 1024 * 1024
 MAX_LOG_FILES = 100
@@ -104,29 +106,28 @@ def fetch_run_logs(
     timeout_seconds: float = 30.0,
 ) -> bytes:
     """Download the ZIP for one exact workflow-run attempt using a read-only token."""
-    if repository != EXPECTED_REPOSITORY:
+    if repository not in ALLOWED_REPOSITORIES:
         raise ValueError("repository is outside the configured YJ64 scope")
     if not isinstance(run_id, int) or isinstance(run_id, bool) or run_id < 1:
         raise ValueError("run_id must be a positive integer")
     if not isinstance(run_attempt, int) or isinstance(run_attempt, bool) or run_attempt < 1:
         raise ValueError("run_attempt must be a positive integer")
-    if not isinstance(token, str) or not token.strip():
-        raise ValueError("github_token is required")
+    if repository == EXPECTED_REPOSITORY and (not isinstance(token, str) or not token.strip()):
+        raise ValueError("github_token is required for the Engineering Core repository")
 
     url = (
-        f"https://api.github.com/repos/{EXPECTED_REPOSITORY}/actions/runs/"
+        f"https://api.github.com/repos/{repository}/actions/runs/"
         f"{run_id}/attempts/{run_attempt}/logs"
     )
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Authorization": "Bearer " + token.strip(),
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "YJ64-Engineering-Core",
-        },
-        method="GET",
-    )
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "YJ64-Engineering-Core",
+    }
+    # Never forward the Core token to the separate public Android repository.
+    if repository == EXPECTED_REPOSITORY:
+        headers["Authorization"] = "Bearer " + token.strip()
+    request = urllib.request.Request(url, headers=headers, method="GET")
     send = opener or urllib.request.urlopen
     try:
         with send(request, timeout=timeout_seconds) as response:

@@ -24,6 +24,12 @@ from yj64_engineering_core.automation.worker import TaskExecutionResult, WorkerR
 
 EXPECTED_WORKFLOW = "Python tests"
 EXPECTED_BRANCH = "main"
+ANDROID_RUNTIME_REPOSITORY = "concreteballs/yj64-clean-bial2modFun5"
+ANDROID_RUNTIME_WORKFLOW = ".github/workflows/android-build.yml"
+EVENT_SCOPES = {
+    (EXPECTED_REPOSITORY, EXPECTED_WORKFLOW): EXPECTED_BRANCH,
+    (ANDROID_RUNTIME_REPOSITORY, ANDROID_RUNTIME_WORKFLOW): EXPECTED_BRANCH,
+}
 VALID_CONCLUSIONS = {
     "success", "failure", "cancelled", "timed_out",
     "action_required", "neutral", "skipped", "stale",
@@ -63,13 +69,13 @@ def process_ci_event(
 
     if (
         event.get("event_id") != event_id
-        or event.get("repository") != EXPECTED_REPOSITORY
-        or event.get("workflow") != EXPECTED_WORKFLOW
-        or event.get("branch") != EXPECTED_BRANCH
+        or (event.get("repository"), event.get("workflow")) not in EVENT_SCOPES
+        or event.get("branch") != EVENT_SCOPES.get((event.get("repository"), event.get("workflow")))
         or event.get("conclusion") not in VALID_CONCLUSIONS
     ):
         return TaskExecutionResult("blocked", "ci_event_scope_rejected")
 
+    repository = event.get("repository")
     run_id = event.get("run_id")
     attempt = event.get("run_attempt")
     sha = event.get("commit_sha")
@@ -79,7 +85,7 @@ def process_ci_event(
         or not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1
         or not isinstance(sha, str) or len(sha) != 40
         or any(ch not in "0123456789abcdef" for ch in sha)
-        or run_url != f"https://github.com/{EXPECTED_REPOSITORY}/actions/runs/{run_id}"
+        or run_url != f"https://github.com/{repository}/actions/runs/{run_id}"
     ):
         return TaskExecutionResult("blocked", "ci_event_integrity_rejected")
 
@@ -88,7 +94,7 @@ def process_ci_event(
         return TaskExecutionResult("blocked", "github_token_not_configured")
 
     try:
-        archive = logs_fetcher(EXPECTED_REPOSITORY, run_id, attempt, token)
+        archive = logs_fetcher(repository, run_id, attempt, token)
         log_text = extract_text_logs(
             archive,
             secrets=(
@@ -107,8 +113,8 @@ def process_ci_event(
 
     header = (
         "YJ64 CI RUN DIAGNOSTIC INPUT\n"
-        f"repository: {EXPECTED_REPOSITORY}\n"
-        f"workflow: {EXPECTED_WORKFLOW}\n"
+        f"repository: {repository}\n"
+        f"workflow: {event.get(\"workflow\")}\n"
         f"run_id: {run_id}\n"
         f"run_attempt: {attempt}\n"
         f"conclusion: {event['conclusion']}\n"

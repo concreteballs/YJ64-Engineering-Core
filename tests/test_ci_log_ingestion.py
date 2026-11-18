@@ -114,6 +114,21 @@ class CiLogIngestionTests(unittest.TestCase):
         self.assertTrue(captured["url"].endswith("/runs/12345/attempts/2/logs"))
         self.assertEqual(captured["authorization"], "Bearer test-token")
 
+
+    def test_fetches_public_android_repository_logs_without_forwarding_core_token(self):
+        captured = {}
+        def opener(request, timeout):
+            captured["url"] = request.full_url
+            captured["authorization"] = request.get_header("Authorization")
+            return FakeResponse(b"zip-data")
+        result = fetch_run_logs(
+            "concreteballs/yj64-clean-bial2modFun5", 12345, 1, "core-token",
+            opener=opener,
+        )
+        self.assertEqual(result, b"zip-data")
+        self.assertIn("/repos/concreteballs/yj64-clean-bial2modFun5/", captured["url"])
+        self.assertIsNone(captured["authorization"])
+
     def test_rejects_other_repository(self):
         with self.assertRaisesRegex(ValueError, "outside"):
             fetch_run_logs("someone/else", 1, 1, "token", opener=lambda *a, **k: None)

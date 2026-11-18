@@ -73,6 +73,27 @@ class CiEventWorkerTests(unittest.TestCase):
         self.assertEqual(store.enqueued[0], "analyze_ci_logs")
         self.assertEqual(store.enqueued[1]["payload_id"], store.saved[0]["payload_id"])
 
+
+    def test_android_runtime_event_fetches_logs_from_allowlisted_app_repository(self):
+        event = self.valid_event()
+        event.update({
+            "repository": "concreteballs/yj64-clean-bial2modFun5",
+            "workflow": ".github/workflows/android-build.yml",
+            "run_url": "https://github.com/concreteballs/yj64-clean-bial2modFun5/actions/runs/12345",
+            "conclusion": "failure",
+        })
+        store = FakeStore(event)
+        requested = []
+        result = process_ci_event(
+            {"payload": {"event_id": 42}}, FakeContext(store),
+            github_token="core-token",
+            logs_fetcher=lambda *args: (requested.append(args) or make_archive()),
+        )
+        self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(requested[0][0], "concreteballs/yj64-clean-bial2modFun5")
+        self.assertEqual(store.enqueued[0], "analyze_ci_logs")
+        self.assertEqual(store.enqueued[1]["run_url"], event["run_url"])
+
     def test_missing_event_is_blocked(self):
         result = process_ci_event(
             {"payload": {"event_id": 42}},
