@@ -67,6 +67,7 @@ The result includes request/session identity, execution status, substantive outc
 ## Engineering Core implementation
 
 Files:
+- `src/yj64_engineering_core/automation/browser_agent_bridge.py` — builds and validates the existing `yj64.browser-agent-envelope.v1` messages for `council_request` and `council_result`.
 - `src/yj64_engineering_core/automation/council_gateway.py`: HTTPS client, machine authentication, bounded payloads, protocol validation, request/session identity checks, and result validation.
 - `src/yj64_engineering_core/automation/council_tasks.py`: durable queue entrypoint, submit/poll handlers, checkpointing, result artifact persistence, and result-ready handoff.
 - `scripts/run_council_gateway_worker.py`: one-task worker entrypoint.
@@ -79,12 +80,13 @@ The existing PostgreSQL task queue is reused. New allowlisted task types:
 - `council_result_ready` (handoff for the engineering-agent consumer; intentionally not consumed by the Gateway worker).
 
 Lifecycle:
-1. The engineering workflow calls `enqueue_council_request(...)` with a stable idempotency key.
-2. The submit task sends one authenticated request. The same key is reused on a retry after an ambiguous transport failure.
-3. The Gateway checkpoints the returned request/session IDs, enqueues a poll task, and completes the submit task. It does not hold a worker while the discussion runs.
-4. Each poll task performs one status request. If still running, it enqueues the next generation and completes itself.
-5. On completion, the structured result is validated, stored in the existing private content-addressed Supabase artifact store, and referenced by a `council_result_ready` queue item.
-6. The engineering-agent workflow consumes that handoff, reads the private artifact, independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
+1. The GitHub agent sends a `council_request` message using the existing `yj64.browser-agent-envelope.v1`. `enqueue_council_request_from_envelope(...)` validates repository/branch scope, expiry, message type, idempotency key, and payload hash before placing the request in the queue. The envelope hash protects integrity but does not authenticate the sender; the receiving boundary must authenticate and authorize the agent.
+2. An internal engineering workflow may call `enqueue_council_request(...)` directly when it already has an authorized task context.
+3. The submit task sends one authenticated request. The same key is reused on a retry after an ambiguous transport failure.
+4. The Gateway checkpoints the returned request/session IDs, enqueues a poll task, and completes the submit task. It does not hold a worker while the discussion runs.
+5. Each poll task performs one status request. If still running, it enqueues the next generation and completes itself.
+6. On completion, the structured result is validated, stored in the existing private content-addressed Supabase artifact store, and referenced by a `council_result_ready` queue item. The handoff also contains a `council_result` browser-agent envelope bound to the original task reference.
+7. The engineering-agent workflow consumes that handoff, reads the private artifact, independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
 
 The Gateway never treats the council's conclusion as proof that a patch is correct. The consumer must validate the result and preserve the distinction between consensus, qualified consensus, unresolved disagreement, and insufficient evidence.
 
