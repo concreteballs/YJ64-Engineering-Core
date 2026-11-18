@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from yj64_engineering_core.automation.engineering_task_adapter import (
@@ -55,7 +56,7 @@ class EngineeringTaskAdapterTests(unittest.TestCase):
             objective="Run the explicitly requested engineering operation",
             input_data={
                 "operation": operation,
-                "engineering_request": engineering_request.to_dict(),
+                "engineering_request": json.loads(json.dumps(engineering_request.to_dict())),
             },
             requested_capabilities=("engineering.dispatch",),
         )
