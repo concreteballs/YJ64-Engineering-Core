@@ -100,8 +100,9 @@ Configure these GitHub Actions repository secrets:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` — server-side only, used to persist private result artifacts.
 
-Optional variable:
-- `YJ64_COUNCIL_AGENT_ID` (defaults to `yj64-engineering-core`).
+Optional repository variables:
+- `YJ64_COUNCIL_AGENT_ID` (defaults to `yj64-engineering-core`);
+- `YJ64_COUNCIL_SUBMIT_PATH`, `YJ64_COUNCIL_STATUS_PATH`, `YJ64_COUNCIL_RESULT_PATH`, and `YJ64_COUNCIL_CANCEL_PATH` to map the provisional routes to the final paths agreed with the YJ-64 application developer.
 
 The scheduled workflow polls every five minutes and runs at most three single-task workers in parallel. Polling is durable and bounded by `max_poll_count` (default 288 polls; hard maximum 2,016 polls, or seven days at five-minute intervals). Result envelopes use stable message IDs and timestamps so a retried result handoff is idempotent. No worker sleeps while waiting for a discussion.
 
