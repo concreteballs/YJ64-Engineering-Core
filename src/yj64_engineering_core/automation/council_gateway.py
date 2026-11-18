@@ -279,27 +279,50 @@ class CouncilGatewayClient:
         for claim in claims:
             if (
                 not isinstance(claim, dict)
-                or not isinstance(claim.get("claim_id"), str)
-                or not isinstance(claim.get("statement"), str)
+                or not isinstance(claim.get("claim_id"), str) or not claim.get("claim_id", "").strip()
+                or not isinstance(claim.get("statement"), str) or not claim.get("statement", "").strip()
                 or claim.get("epistemic_type") not in {"fact", "inference", "hypothesis", "test_result"}
                 or not isinstance(claim.get("reasoning"), str)
                 or not isinstance(claim.get("evidence_refs", []), list)
+                or any(not isinstance(ref, str) or not ref.strip() for ref in claim.get("evidence_refs", []))
             ):
                 raise CouncilGatewayError("invalid_claim_structure")
         evidence = data.get("evidence", [])
         for item in evidence:
             if (
                 not isinstance(item, dict)
-                or not isinstance(item.get("evidence_id"), str)
-                or not isinstance(item.get("reference"), str)
-                or not isinstance(item.get("description"), str)
+                or not isinstance(item.get("evidence_id"), str) or not item.get("evidence_id", "").strip()
+                or not isinstance(item.get("reference"), str) or not item.get("reference", "").strip()
+                or not isinstance(item.get("description"), str) or not item.get("description", "").strip()
                 or item.get("evidence_type") not in {"source", "artifact", "test", "simulation", "measurement"}
             ):
                 raise CouncilGatewayError("invalid_evidence_structure")
-        if any(not isinstance(item, dict) for key in ("participant_positions", "dissent", "tests_and_simulations") for item in data.get(key, [])):
+        for item in data.get("participant_positions", []):
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("participant_id"), str) or not item.get("participant_id", "").strip()
+                or not isinstance(item.get("position"), str) or not item.get("position", "").strip()
+                or not isinstance(item.get("rationale"), str)
+            ):
+                raise CouncilGatewayError("invalid_participant_position")
+        for item in data.get("dissent", []):
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("participant_id"), str) or not item.get("participant_id", "").strip()
+                or not isinstance(item.get("reason"), str) or not item.get("reason", "").strip()
+            ):
+                raise CouncilGatewayError("invalid_dissent_structure")
+        if any(not isinstance(item, dict) for item in data.get("tests_and_simulations", [])):
             raise CouncilGatewayError("invalid_result_structure")
         if any(not isinstance(item, str) for key in ("unresolved_questions", "assumptions", "limitations") for item in data.get(key, [])):
             raise CouncilGatewayError("invalid_result_structure")
+        rounds = data.get("rounds_completed")
+        if rounds is not None and (
+            not isinstance(rounds, int) or isinstance(rounds, bool) or rounds < 0
+        ):
+            raise CouncilGatewayError("invalid_round_count")
+        if data.get("completion_reason") is not None and not isinstance(data.get("completion_reason"), str):
+            raise CouncilGatewayError("invalid_completion_reason")
         return {
             "protocol_version": PROTOCOL_VERSION,
             "request_id": request_id,
