@@ -282,4 +282,17 @@ Verified implementation:
 - The first real proposal was persisted successfully for analysis task 36 and proposal task 158, with status `awaiting_review`. It identified a historical test-double signature mismatch and preserved the original failing run identity.
 - Python test run [44231036575](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44231036575) passed: 485 tests. The proposal worker run [44231111194](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44231111194) completed successfully.
 
-**Next required stage:** inspect the exact source commit and relevant files, generate a bounded unified-diff candidate, validate it with `git apply --check`, and persist it for explicit owner approval. Only a separate approved execution stage may create a branch or modify repository files. This is not yet an autonomous self-repair loop.
+**Exact-commit inspection and review-only patch generation — implemented prototype**
+
+- A reviewable proposal now idempotently enqueues `generate_ci_patch` in the existing task queue.
+- `automation/ci_patch_generation.py` inspects the failed run's exact commit and current `main` tip for the two allowlisted YJ64 repositories. It selects only file paths explicitly present in the diagnosis/log evidence; it does not guess target files.
+- If an evidence-backed candidate file changed between the failed commit and current `main`, the worker records `source_files_changed_since_failure` and stops before Gemini. This prevents stale diagnoses from generating patches against already-changed code.
+- Gemini patch generation uses the existing provider adapter, token counting, durable reservation/lease lifecycle, immutable response artifacts, and the existing explicit $0 daily/monthly budget guard. The worker sends at most one generation request for a patch task; an ambiguous provider outcome is quarantined rather than blindly resent.
+- Generated diffs are restricted to inspected regular text files, bounded in size, and rejected if they contain traversal, binary, add/delete, rename, or uninspected-file operations. The current `main` tip is rechecked immediately before validation.
+- Every candidate is persisted in `yj64_ci_patch_candidates` and private Storage. An `awaiting_review` candidate requires a successful `git apply --check` against the exact current HEAD. No patch is applied, no branch is created, and no commit is made.
+- If the diagnosis names no source file, the worker records `needs_target_file_evidence` without spending a Gemini generation request. If the relevant file changed since the failure, it records that stale state and also skips generation.
+- `migrations/0021_ci_patch_candidates.sql` is applied. RLS is enabled and public/anonymous/authenticated access is revoked.
+- Added `scripts/run_ci_patch_generation_worker.py` and a five-minute scheduled workflow. The workflow is read-only against GitHub and requires the existing Gemini and private Supabase secrets.
+- Unit tests cover evidence-based path extraction, refusal to guess paths, diff allowlisting, traversal rejection and unsafe file-operation rejection.
+
+This remains a **patch-candidate generator**, not autonomous self-repair. A human must review and separately approve any later execution stage.
