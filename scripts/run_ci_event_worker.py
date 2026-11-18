@@ -184,7 +184,11 @@ def main() -> int:
 
     run_id = os.environ.get("GITHUB_RUN_ID", "manual")
     run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-    worker_id = f"gha-ci-log-ingestion-{run_id}-{run_attempt}"
+    worker_slot = os.environ.get("YJ64_WORKER_SLOT", "1").strip()
+    if worker_slot not in {"1", "2", "3", "4", "5"}:
+        print("YJ64_WORKER_SLOT must be between 1 and 5.", file=sys.stderr)
+        return 2
+    worker_id = f"gha-ci-log-ingestion-{run_id}-{run_attempt}-slot-{worker_slot}"
 
     stage = "store_init"
     try:
