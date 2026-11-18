@@ -99,11 +99,11 @@ def handle_council_result_ready(
             payload, artifact_store_factory=artifact_factory
         )
         normalized = _validated_result(result)
-    canonical_artifact = json.dumps(
-        result, sort_keys=True, separators=(",", ":"),
-        ensure_ascii=False, allow_nan=False,
-    ).encode("utf-8")
-    result_sha256 = hashlib.sha256(canonical_artifact).hexdigest()
+        canonical_artifact = json.dumps(
+            result, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+        result_sha256 = hashlib.sha256(canonical_artifact).hexdigest()
     except (TypeError, ValueError, KeyError):
         return TaskExecutionResult("blocked", "invalid_council_result")
     except (OSError, RuntimeError):
