@@ -46,7 +46,8 @@ The request schema is `schemas/council-api-v1.schema.json`. It contains:
 - `protocol_version`, `agent_id`, `correlation_id`, and `idempotency_key`;
 - `mode`: `consensus` or `critique`;
 - task title, prompt, bounded context, and evidence references;
-- bounded round, execution-time, and output-token limits.
+- bounded round, execution-time, and output-token limits plus an explicit early-stop policy;
+- optional voting controls (`enabled`, `weighted`). Voting is opt-in; when enabled, the API may return only an aggregate voting summary, never individual ballots or private competence ratings.
 
 The application must return the same remote request/session for a repeated idempotency key belonging to the same authorized agent. It must not create a second discussion on retry.
 
