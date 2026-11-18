@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/concreteballs/YJ64-Engineering-Core/blob/main/schemas/browser-agent-envelope.schema.json",
+  "title": "YJ64 Browser Agent Message Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "message_id",
+    "message_type",
+    "created_at",
+    "expires_at",
+    "repository",
+    "branch",
+    "task_id",
+    "payload_sha256",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "yj64.browser-agent-envelope.v1"
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "message_type": {
+      "enum": [
+        "ci_observation",
+        "test_report",
+        "verification_request",
+        "verification_response",
+        "council_request",
+        "council_result",
+        "blocked_notice",
+        "cycle_complete"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repository": {
+      "const": "concreteballs/YJ64-Engineering-Core"
+    },
+    "branch": {
+      "const": "main"
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "integer"
+      ],
+      "minLength": 1
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "integer"
+      ]
+    },
+    "run_attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "payload_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}
