@@ -131,6 +131,8 @@ class CiFixProposalTests(unittest.TestCase):
         self.assertEqual(store.saved["analysis_task_id"], 41)
         self.assertEqual(len(store.saved["proposal_sha256"]), 64)
         self.assertFalse(store.saved["proposal_json"]["implementation"]["auto_apply"])
+        self.assertEqual(store.enqueued[0], "generate_ci_patch")
+        self.assertEqual(store.enqueued[1], {"proposal_task_id": 52})
 
     def test_worker_rejects_missing_analysis(self):
         store = FakeStore()
