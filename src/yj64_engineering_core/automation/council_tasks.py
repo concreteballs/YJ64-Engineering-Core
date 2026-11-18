@@ -298,6 +298,7 @@ def _enqueue_result_ready(
         task_id=envelope_task_id,
         idempotency_key=f"council-result:{request_id}",
         payload=result_payload,
+        ttl_seconds=604800,
     )
     handoff = {
         "protocol_version": PROTOCOL_VERSION,
