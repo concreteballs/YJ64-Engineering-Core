@@ -130,7 +130,7 @@ def build_gemini_request(event: dict, log_text: str) -> bytes:
     user_text = (
         "Diagnose this completed GitHub Actions run. Identify the most likely root cause, cite "
         "short exact log excerpts, explain confidence, and suggest safe next checks. Do not write "
-        "a patch or assume that the first error line is necessarily the root cause.\n\n"
+        "a patch or assume that the first error line is necessarily the root cause. " + excerpt_note + "\n\n"
         f"Repository: {event.get('repository', '')}\n"
         f"Workflow: {event.get('workflow', '')}\n"
         f"Run ID: {event.get('run_id', '')}\n"
