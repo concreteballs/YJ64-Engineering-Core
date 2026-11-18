@@ -51,6 +51,7 @@ def create_envelope(
     run_attempt: int | None = None,
     commit_sha: str | None = None,
     now: datetime | None = None,
+    message_id: str | None = None,
 ) -> dict:
     """Create a signed-by-hash, scope-bound envelope for an existing agent channel.
 
@@ -63,15 +64,15 @@ def create_envelope(
         raise ValueError("payload must be an object")
     if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 256:
         raise ValueError("idempotency_key must be 8-256 characters")
-    if not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool) or not 1 <= ttl_seconds <= 604800:
-        raise ValueError("ttl_seconds must be between 1 and 604800")
+    if not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool) or not 1 <= ttl_seconds <= 2592000:
+        raise ValueError("ttl_seconds must be between 1 and 2592000")
     current = now or datetime.now(timezone.utc)
     if not isinstance(current, datetime) or current.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     current = current.astimezone(timezone.utc)
     envelope = {
         "schema_version": SCHEMA_VERSION,
-        "message_id": uuid.uuid4().hex,
+        "message_id": message_id or uuid.uuid4().hex,
         "message_type": message_type,
         "created_at": current.isoformat().replace("+00:00", "Z"),
         "expires_at": (current + timedelta(seconds=ttl_seconds)).isoformat().replace("+00:00", "Z"),
