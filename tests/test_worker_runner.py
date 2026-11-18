@@ -82,6 +82,18 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertTrue(any(call[0] == "block" for call in store.calls))
 
+    def test_suspended_decision_does_not_complete_or_fail_released_parent(self):
+        store = FakeStore(self.task())
+        result = WorkerRunner(
+            store,
+            worker_id="worker-a",
+            handlers={"demo": lambda task, context: TaskExecutionResult(
+                "suspended", "waiting_for_council"
+            )},
+        ).run_once()
+        self.assertEqual(result["status"], "waiting")
+        self.assertFalse(any(call[0] in {"complete", "fail", "block"} for call in store.calls))
+
     def test_retry_decision_uses_bounded_scheduler(self):
         store = FakeStore(self.task())
         result = WorkerRunner(
