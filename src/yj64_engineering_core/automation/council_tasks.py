@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from typing import Any, Callable, Mapping
 
 from .browser_agent_bridge import create_envelope, validate_envelope
