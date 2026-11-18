@@ -171,6 +171,19 @@ class ParentTaskHandlerTests(unittest.TestCase):
         )
         self.assertEqual(result, TaskExecutionResult("blocked", "invalid_parent_task_request"))
 
+    def test_handler_factory_binds_registry_for_worker_runner(self):
+        from yj64_engineering_core.automation.parent_tasks import create_parent_task_handler
+
+        registry = TaskAdapterRegistry()
+        registry.register(
+            "code.review",
+            lambda *_: TaskExecutionResult("completed"),
+            capabilities=("github.read",),
+        )
+        handler = create_parent_task_handler(registry)
+        result = handler(queued(request()), FakeContext())
+        self.assertEqual(result, TaskExecutionResult("completed"))
+
     def test_duplicate_adapter_registration_is_rejected(self):
         registry = TaskAdapterRegistry()
         registry.register("code.review", lambda *_: TaskExecutionResult("completed"))
