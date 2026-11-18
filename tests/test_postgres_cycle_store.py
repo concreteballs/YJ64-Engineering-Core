@@ -353,6 +353,70 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(len(cursor.statements), 4)
 
 
+    def test_record_council_resume_event_checkpoints_result_before_requeue(self):
+        import json
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
+
+        waiting_checkpoint = create_checkpoint(
+            task_id="12", sequence=4, state="checkpointed", task_spec_version="v1",
+            task_state={
+                "stage": "waiting_council",
+                "expected_council_request_id": "request-1",
+                "work_state": {"next_step": "continue"},
+            },
+            budgets={"tokens": 100}, approvals={"council": True},
+            previous_checkpoint_hash="d" * 64,
+        )
+
+        class ResumeInsertCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (88,)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("waiting",)
+                elif "SELECT result_task_id, result_artifact_ref, result_sha256, resume_event_id" in query:
+                    self._fetch = None
+                elif "SELECT sequence, checkpoint_hash, checkpoint" in query:
+                    self._fetch = (
+                        waiting_checkpoint["sequence"],
+                        waiting_checkpoint["checkpoint_hash"],
+                        waiting_checkpoint,
+                    )
+                elif "INSERT INTO yj64_task_resume_events" in query:
+                    self._fetch = (901,)
+                elif "INSERT INTO yj64_task_checkpoints" in query:
+                    self._fetch = None
+                elif "UPDATE yj64_task_queue" in query:
+                    self.rowcount = 1
+                    self._fetch = None
+                else:
+                    self._fetch = None
+
+        cursor = ResumeInsertCursor()
+        result = self.store(cursor).record_council_resume_event(
+            parent_task_id=12, result_task_id=88, worker_id="worker-a",
+            council_request_id="request-1",
+            result_artifact_ref="private://result/1", result_sha256="a" * 64,
+        )
+        self.assertEqual(result["accepted"], True)
+        self.assertEqual(result["duplicate"], False)
+        self.assertEqual(result["resume_event_id"], 901)
+        checkpoint_insert = next(
+            params for query, params in cursor.statements
+            if "INSERT INTO yj64_task_checkpoints" in query
+        )
+        resumed_checkpoint = json.loads(checkpoint_insert[5])
+        self.assertTrue(verify_checkpoint(resumed_checkpoint))
+        self.assertEqual(resumed_checkpoint["sequence"], 5)
+        self.assertEqual(resumed_checkpoint["task_state"]["stage"], "council_result_received")
+        self.assertEqual(
+            resumed_checkpoint["task_state"]["council_resume_event"]["result_artifact_ref"],
+            "private://result/1",
+        )
+        self.assertEqual(resumed_checkpoint["previous_checkpoint_hash"], waiting_checkpoint["checkpoint_hash"])
+        self.assertTrue(any("UPDATE yj64_task_queue" in query for query, _ in cursor.statements))
+
     def test_record_council_resume_event_accepts_matching_duplicate_after_parent_requeued(self):
         class ResumeCursor(FakeCursor):
             def execute(self, query, params):
