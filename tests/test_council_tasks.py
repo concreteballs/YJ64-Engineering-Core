@@ -1,9 +1,12 @@
 import unittest
 
+from yj64_engineering_core.automation.browser_agent_bridge import create_envelope
 from yj64_engineering_core.automation.council_gateway import PROTOCOL_VERSION
 from yj64_engineering_core.automation.council_tasks import (
     POLL_TASK,
     RESULT_READY_TASK,
+    SUBMIT_TASK,
+    enqueue_council_request_from_envelope,
     handle_poll_council_request,
     handle_submit_council_request,
 )
@@ -136,6 +139,26 @@ class CouncilTaskTests(unittest.TestCase):
             },
         }
 
+    def test_browser_agent_council_request_envelope_enters_existing_queue(self):
+        store = FakeStore()
+        envelope = create_envelope(
+            message_type="council_request",
+            task_id="engineering-task-123",
+            idempotency_key="browser-agent-idem-12345",
+            payload={
+                "mode": "critique",
+                "title": "Review a patch",
+                "prompt": "Find defects in this proposed patch.",
+                "context": {"repository": "concreteballs/YJ64-Engineering-Core"},
+                "evidence_refs": ["https://github.com/concreteballs/YJ64-Engineering-Core"],
+            },
+        )
+        result = enqueue_council_request_from_envelope(store, envelope)
+        self.assertTrue(result["enqueued"])
+        self.assertEqual(store.enqueued[0]["task_type"], SUBMIT_TASK)
+        self.assertEqual(store.enqueued[0]["payload"]["parent_task_ref"], "engineering-task-123")
+        self.assertEqual(store.enqueued[0]["payload"]["request"]["mode"], "critique")
+
     def test_submit_persists_remote_ids_and_queues_poll_without_waiting(self):
         context = FakeContext()
         result = handle_submit_council_request(
@@ -170,6 +193,7 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(handoff["task_type"], RESULT_READY_TASK)
         self.assertEqual(handoff["payload"]["substantive_outcome"], "unresolved_disagreement")
         self.assertIn("supabase-storage://", handoff["payload"]["result_artifact_ref"])
+        self.assertEqual(handoff["payload"]["browser_agent_envelope"]["message_type"], "council_result")
         self.assertEqual(len(artifacts.saved), 1)
 
     def test_session_mismatch_is_blocked(self):
