@@ -116,7 +116,7 @@ class PostgresCycleStore:
         *, max_attempts: int = 3,
     ) -> dict:
         """Idempotently enqueue one allowlisted internal task in the existing queue."""
-        allowed_types = {"process_ci_event", "analyze_ci_logs", "prepare_ci_fix"}
+        allowed_types = {"process_ci_event", "analyze_ci_logs", "prepare_ci_fix", "generate_ci_patch"}
         if task_type not in allowed_types:
             raise ValueError("task_type is not allowlisted")
         if not isinstance(payload, dict):
@@ -1477,6 +1477,126 @@ class PostgresCycleStore:
                     "proposal_status": proposal_status,
                     "proposal_sha256": proposal_sha256,
                 }
+
+    def get_ci_patch_candidate(self, patch_task_id: int) -> dict | None:
+        """Read one durable patch candidate by its unique worker task."""
+        if not isinstance(patch_task_id, int) or isinstance(patch_task_id, bool) or patch_task_id < 1:
+            raise ValueError("patch_task_id must be a positive integer")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT proposal_task_id, analysis_task_id, event_id,
+                           candidate_status, candidate_json, candidate_artifact_ref,
+                           candidate_sha256
+                    FROM yj64_ci_patch_candidates
+                    WHERE patch_task_id = %s
+                    """,
+                    (patch_task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                payload = row[4]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                return {
+                    "patch_task_id": patch_task_id, "proposal_task_id": row[0],
+                    "analysis_task_id": row[1], "event_id": row[2],
+                    "candidate_status": row[3], "candidate_json": payload,
+                    "candidate_artifact_ref": row[5],
+                    "candidate_sha256": str(row[6]).strip(),
+                }
+
+    def save_ci_patch_candidate(
+        self, *, patch_task_id: int, worker_id: str, lease_seconds: int,
+        proposal_task_id: int, analysis_task_id: int, event_id: int,
+        candidate_status: str, candidate_json: dict,
+        candidate_artifact_ref: str, candidate_sha256: str,
+    ) -> dict:
+        """Persist an inspected patch candidate only under its live queue lease."""
+        import hashlib
+        import re
+
+        for name, value in (
+            ("patch_task_id", patch_task_id), ("proposal_task_id", proposal_task_id),
+            ("analysis_task_id", analysis_task_id), ("event_id", event_id),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        allowed = {
+            "awaiting_review", "needs_target_file_evidence",
+            "source_files_changed_since_failure", "no_patch_recommended",
+            "invalid_model_patch", "git_apply_check_failed",
+        }
+        if candidate_status not in allowed or not isinstance(candidate_json, dict):
+            raise ValueError("candidate status or JSON is invalid")
+        safety = candidate_json.get("safety")
+        if (
+            candidate_json.get("candidate_status") != candidate_status
+            or not isinstance(safety, dict)
+            or safety.get("human_approval_required") is not True
+            or safety.get("auto_apply") is not False
+            or safety.get("auto_commit") is not False
+            or (candidate_status == "awaiting_review" and safety.get("git_apply_check") is not True)
+        ):
+            raise ValueError("candidate does not satisfy patch safety gates")
+        if not isinstance(candidate_artifact_ref, str) or not candidate_artifact_ref.strip() or "?" in candidate_artifact_ref or "#" in candidate_artifact_ref:
+            raise ValueError("candidate artifact reference must be opaque")
+        if not isinstance(candidate_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", candidate_sha256):
+            raise ValueError("candidate_sha256 must be a lowercase SHA-256 digest")
+        serialized = json.dumps(candidate_json, sort_keys=True, separators=(",", ":"),
+                                 ensure_ascii=False, allow_nan=False)
+        if hashlib.sha256(serialized.encode("utf-8")).hexdigest() != candidate_sha256:
+            raise ValueError("candidate hash does not match canonical JSON")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (patch_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot persist patch candidate without a live task lease")
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_ci_patch_candidates
+                        (patch_task_id, proposal_task_id, analysis_task_id, event_id,
+                         candidate_status, candidate_json, candidate_artifact_ref, candidate_sha256)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                    ON CONFLICT (proposal_task_id) DO NOTHING
+                    """,
+                    (patch_task_id, proposal_task_id, analysis_task_id, event_id,
+                     candidate_status, serialized, candidate_artifact_ref, candidate_sha256),
+                )
+                cursor.execute(
+                    """
+                    SELECT patch_task_id, analysis_task_id, event_id, candidate_status,
+                           candidate_artifact_ref, candidate_sha256
+                    FROM yj64_ci_patch_candidates WHERE proposal_task_id = %s
+                    """,
+                    (proposal_task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None or (
+                    row[0] != patch_task_id or row[1] != analysis_task_id
+                    or row[2] != event_id or row[3] != candidate_status
+                    or row[4] != candidate_artifact_ref
+                    or str(row[5]).strip() != candidate_sha256
+                ):
+                    raise ValueError("proposal already has a conflicting patch candidate")
+                return {"persisted": True, "patch_task_id": patch_task_id,
+                        "proposal_task_id": proposal_task_id,
+                        "candidate_status": candidate_status,
+                        "candidate_sha256": candidate_sha256}
 
     def set_task_usage_budget(
         self, task_id: int, *, input_token_limit: int | None = None,
