@@ -364,6 +364,9 @@ def process_ci_log_analysis(
             "" if existing["analysis_status"] == "completed" else "model_output_invalid",
         )
 
+    if event.get("conclusion") == "success":
+        return TaskExecutionResult("completed")
+
     log_text = context.store.get_payload_for_analysis(source_task_id, payload_id)
     if not isinstance(log_text, str) or not log_text:
         return TaskExecutionResult("blocked", "analysis_payload_unavailable")
