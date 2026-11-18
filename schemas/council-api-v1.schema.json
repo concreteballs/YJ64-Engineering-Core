@@ -17,7 +17,7 @@
     "request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol_version", "agent_id", "correlation_id", "idempotency_key", "mode", "task", "limits"],
+      "required": ["protocol_version", "agent_id", "correlation_id", "idempotency_key", "mode", "task", "limits", "voting"],
       "properties": {
         "protocol_version": {"const": "yj64.council-api.v1"},
         "agent_id": {"$ref": "#/$defs/id"},
@@ -38,12 +38,22 @@
         "limits": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["max_rounds", "timeout_seconds", "max_output_tokens", "minimum_critique_rounds"],
+          "required": ["max_rounds", "timeout_seconds", "max_output_tokens", "minimum_critique_rounds", "allow_early_stop"],
           "properties": {
             "max_rounds": {"type": "integer", "minimum": 1, "maximum": 10},
             "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 86400},
             "max_output_tokens": {"type": "integer", "minimum": 256, "maximum": 100000},
-            "minimum_critique_rounds": {"const": 1}
+            "minimum_critique_rounds": {"const": 1},
+            "allow_early_stop": {"type": "boolean"}
+          }
+        },
+        "voting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "weighted"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "weighted": {"type": "boolean"}
           }
         }
       }
@@ -143,7 +153,23 @@
         "limitations": {"type": "array", "items": {"type": "string"}},
         "rounds_completed": {"type": "integer", "minimum": 0},
         "completion_reason": {"type": "string"},
-        "tests_and_simulations": {"type": "array", "items": {"type": "object"}}
+        "tests_and_simulations": {"type": "array", "items": {"type": "object"}},
+        "voting_summary": {
+          "type": ["object", "null"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "weighted_enabled": {"type": "boolean"},
+            "majority_result": {"enum": ["FOR", "AGAINST", "ABSTAIN", "CONDITIONAL", "NO_MAJORITY"]},
+            "weighted_result": {"enum": ["FOR", "AGAINST", "ABSTAIN", "CONDITIONAL", "NO_MAJORITY"]},
+            "aggregate_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}
+          },
+          "not": {"anyOf": [
+            {"required": ["individual_votes"]},
+            {"required": ["ballots"]},
+            {"required": ["private_ratings"]},
+            {"required": ["competence_scores"]}
+          ]}
+        }
       }
     },
     "cancel_response": {
