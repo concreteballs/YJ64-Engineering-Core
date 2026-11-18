@@ -162,6 +162,7 @@ def process_ci_event(
             "run_id": run_id,
             "run_attempt": attempt,
             "commit_sha": sha,
+            "run_url": run_url,
         },
         dedupe_key=f"ci-log-analysis:{event_id}:{attempt}:{payload_digest}",
         max_attempts=3,
