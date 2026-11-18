@@ -28,6 +28,7 @@ SUBSTANTIVE_OUTCOMES = {
 }
 MODES = {"consensus", "critique"}
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_SENSITIVE_CONTEXT_KEY = re.compile(r"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization|private[_-]?messages|system[_-]?prompt|hidden[_-]?rating)", re.I)
 
 
 class CouncilGatewayError(RuntimeError):
@@ -93,7 +94,9 @@ class CouncilRequest:
         ):
             if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
                 raise ValueError(f"{name} must be between {minimum} and {maximum}")
-        _canonical_json(dict(self.context or {}))
+        _validate_context(dict(self.context or {}))
+        if len(_canonical_json(dict(self.context or {}))) > 256 * 1024:
+            raise ValueError("context exceeds the 256 KiB request limit")
         return {
             "protocol_version": PROTOCOL_VERSION,
             "agent_id": agent_id,
@@ -123,6 +126,33 @@ def _canonical_json(value: Any) -> bytes:
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ValueError("payload must contain finite JSON-compatible values") from exc
+
+
+def _validate_context(value: Any, *, depth: int = 0) -> None:
+    """Reject credential/private-state fields before context leaves the agent."""
+    if depth > 8:
+        raise ValueError("context nesting exceeds the supported depth")
+    if isinstance(value, Mapping):
+        if len(value) > 200:
+            raise ValueError("context object has too many fields")
+        for key, item in value.items():
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("context keys must be non-empty strings")
+            if _SENSITIVE_CONTEXT_KEY.search(key):
+                raise ValueError("context contains a credential or private-state field")
+            _validate_context(item, depth=depth + 1)
+    elif isinstance(value, (list, tuple)):
+        if len(value) > 500:
+            raise ValueError("context list exceeds the supported size")
+        for item in value:
+            _validate_context(item, depth=depth + 1)
+    elif isinstance(value, str):
+        if len(value) > 50000:
+            raise ValueError("context string exceeds the supported size")
+    elif value is None or isinstance(value, (bool, int, float)):
+        _canonical_json(value)
+    else:
+        raise ValueError("context must contain JSON-compatible values")
 
 
 def _safe_id(value: Any, name: str) -> str:
