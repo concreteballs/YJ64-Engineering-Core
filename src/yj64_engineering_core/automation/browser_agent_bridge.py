@@ -8,7 +8,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import uuid
 from typing import Any, Mapping
 
 SCHEMA_VERSION = "yj64.browser-agent-envelope.v1"
@@ -37,6 +38,57 @@ def payload_hash(payload: Mapping[str, Any]) -> str:
         raise ValueError("payload must be an object")
     return hashlib.sha256(_canonical_json(dict(payload))).hexdigest()
 
+
+
+def create_envelope(
+    *,
+    message_type: str,
+    task_id: int | str,
+    idempotency_key: str,
+    payload: Mapping[str, Any],
+    ttl_seconds: int = 3600,
+    run_id: int | None = None,
+    run_attempt: int | None = None,
+    commit_sha: str | None = None,
+    now: datetime | None = None,
+) -> dict:
+    """Create a signed-by-hash, scope-bound envelope for an existing agent channel.
+
+    The payload hash protects integrity, not sender identity. Authentication and
+    authorization must still be enforced by the receiving service.
+    """
+    if message_type not in MESSAGE_TYPES:
+        raise ValueError("unsupported message type")
+    if not isinstance(payload, Mapping):
+        raise ValueError("payload must be an object")
+    if not isinstance(idempotency_key, str) or not 8 <= len(idempotency_key) <= 256:
+        raise ValueError("idempotency_key must be 8-256 characters")
+    if not isinstance(ttl_seconds, int) or isinstance(ttl_seconds, bool) or not 1 <= ttl_seconds <= 604800:
+        raise ValueError("ttl_seconds must be between 1 and 604800")
+    current = now or datetime.now(timezone.utc)
+    if not isinstance(current, datetime) or current.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    current = current.astimezone(timezone.utc)
+    envelope = {
+        "schema_version": SCHEMA_VERSION,
+        "message_id": uuid.uuid4().hex,
+        "message_type": message_type,
+        "created_at": current.isoformat().replace("+00:00", "Z"),
+        "expires_at": (current + timedelta(seconds=ttl_seconds)).isoformat().replace("+00:00", "Z"),
+        "repository": EXPECTED_REPOSITORY,
+        "branch": EXPECTED_BRANCH,
+        "task_id": task_id,
+        "idempotency_key": idempotency_key,
+        "payload_sha256": payload_hash(payload),
+        "payload": dict(payload),
+    }
+    if run_id is not None:
+        envelope["run_id"] = run_id
+    if run_attempt is not None:
+        envelope["run_attempt"] = run_attempt
+    if commit_sha is not None:
+        envelope["commit_sha"] = commit_sha
+    return validate_envelope(envelope, now=current)
 
 def validate_envelope(envelope: Mapping[str, Any], *, now: datetime | None = None) -> dict:
     """Validate scope, identity, lifecycle timestamps and payload integrity."""
