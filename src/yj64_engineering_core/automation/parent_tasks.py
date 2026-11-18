@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping
 from ..task_contracts import TaskRequest
 from .worker import TaskExecutionResult
 from .task_requests import PARENT_TASK_QUEUE_TYPE
+from .checkpoints import verify_checkpoint
 
 
 _TASK_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
@@ -124,6 +125,7 @@ def _parent_state(context: Any) -> ParentTaskState:
         )
     if not isinstance(checkpoint, dict) or checkpoint.get("task_id") != str(context.task_id):
         raise ValueError("parent_checkpoint_identity_mismatch")
+    verify_checkpoint(checkpoint)
     state = checkpoint.get("task_state")
     if not isinstance(state, dict):
         raise ValueError("parent_checkpoint_state_invalid")
@@ -134,8 +136,19 @@ def _parent_state(context: Any) -> ParentTaskState:
     if not isinstance(resume_state, dict):
         raise ValueError("parent_resume_state_invalid")
     resume_event = state.get("council_resume_event")
-    if resume_event is not None and not isinstance(resume_event, dict):
-        raise ValueError("parent_council_resume_event_invalid")
+    if resume_event is not None:
+        if not isinstance(resume_event, dict):
+            raise ValueError("parent_council_resume_event_invalid")
+        artifact_ref = resume_event.get("result_artifact_ref")
+        result_hash = resume_event.get("result_sha256")
+        if (
+            not isinstance(artifact_ref, str) or not artifact_ref.strip()
+            or not isinstance(result_hash, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", result_hash)
+        ):
+            raise ValueError("parent_council_resume_event_invalid")
+    if stage == "council_result_received" and resume_event is None:
+        raise ValueError("parent_council_resume_event_missing")
     refs = checkpoint.get("artifact_refs", [])
     if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
         raise ValueError("parent_artifact_refs_invalid")
@@ -196,7 +209,9 @@ def handle_parent_task_request(
 
 
 
-def create_parent_task_handler(registry: TaskAdapterRegistry) -> TaskAdapter:
+def create_parent_task_handler(
+    registry: TaskAdapterRegistry,
+) -> Callable[[dict, Any], TaskExecutionResult]:
     """Bind an explicit registry for WorkerRunner's task-type handler map."""
     if not isinstance(registry, TaskAdapterRegistry):
         raise TypeError("registry must be a TaskAdapterRegistry")
