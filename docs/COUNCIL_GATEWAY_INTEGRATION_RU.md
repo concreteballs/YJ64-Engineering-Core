@@ -76,6 +76,7 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 
 ## Реализация в Engineering Core
 
+- automation/browser_agent_bridge.py — создание и проверка существующих сообщений yj64.browser-agent-envelope.v1 типов council_request и council_result.
 - automation/council_gateway.py — HTTPS-клиент, машинная аутентификация, лимиты, проверка протокола, идентификаторов и структуры результата.
 - automation/council_tasks.py — постановка запроса, асинхронный polling, checkpoints, сохранение результата и handoff.
 - scripts/run_council_gateway_worker.py — одношаговый worker.
@@ -90,12 +91,13 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 - council_result_ready — handoff для будущего обработчика инженерного агента; Council Gateway worker эту задачу не забирает.
 
 Жизненный цикл:
-1. Инженерный workflow вызывает enqueue_council_request(...) со стабильным idempotency key.
-2. Submit worker отправляет запрос и получает request_id и session_id.
-3. Идентификаторы сохраняются в checkpoint, создаётся poll task, текущий worker освобождается.
-4. Каждый poll worker делает один запрос статуса. Если сессия ещё выполняется, он создаёт следующее поколение poll task и завершает текущую задачу.
-5. После завершения результат проверяется и сохраняется как immutable artifact в существующем private Supabase Storage.
-6. Создаётся council_result_ready со ссылкой на artifact. Инженерный агент должен прочитать результат, самостоятельно проверить утверждения по коду, тестам и CI и только затем продолжить исходную задачу.
+1. GitHub-агент отправляет council_request в существующем формате yj64.browser-agent-envelope.v1. Функция enqueue_council_request_from_envelope(...) проверяет область репозитория/ветки, срок действия, тип сообщения, idempotency key и хеш payload. Хеш подтверждает целостность, но не подлинность отправителя: принимающая граница всё равно должна аутентифицировать агента и проверить его полномочия.
+2. Внутренний инженерный workflow может вызывать enqueue_council_request(...) напрямую, если уже имеет авторизованный контекст задачи.
+3. Submit worker отправляет один аутентифицированный запрос и получает request_id и session_id.
+4. Идентификаторы сохраняются в checkpoint, создаётся poll task, текущий worker освобождается.
+5. Каждый poll worker делает один запрос статуса. Если сессия ещё выполняется, он создаёт следующее поколение poll task и завершает текущую задачу.
+6. После завершения результат проверяется и сохраняется как immutable artifact в существующем private Supabase Storage.
+7. Создаётся council_result_ready со ссылкой на artifact и envelope council_result, привязанный к исходной задаче. Инженерный агент должен прочитать результат, самостоятельно проверить утверждения по коду, тестам и CI и только затем продолжить исходную задачу.
 
 ## Настройка GitHub Actions secrets
 
