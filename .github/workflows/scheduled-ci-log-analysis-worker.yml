@@ -1,9 +1,11 @@
 name: Scheduled CI Log Analysis Worker
 
 on:
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
   workflow_run:
-    workflows: ["Python tests"]
+    workflows: ["Python tests", "Scheduled CI Event Worker"]
     types: [completed]
     branches: ["main"]
 
