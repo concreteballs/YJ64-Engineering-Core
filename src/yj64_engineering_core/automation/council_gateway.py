@@ -29,6 +29,7 @@ SUBSTANTIVE_OUTCOMES = {
 MODES = {"consensus", "critique"}
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SENSITIVE_CONTEXT_KEY = re.compile(r"(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization|private[_-]?messages|system[_-]?prompt|hidden[_-]?rating)", re.I)
+_PRIVATE_RESULT_KEY = re.compile(r"(?:private[_-]?rating|competence[_-]?score|individual[_-]?vote|individual[_-]?ballot|hidden[_-]?vote|private[_-]?message|system[_-]?prompt|api[_-]?key|access[_-]?token)", re.I)
 
 
 class CouncilGatewayError(RuntimeError):
@@ -169,6 +170,19 @@ def _validate_context(value: Any, *, depth: int = 0) -> None:
         raise ValueError("context must contain JSON-compatible values")
 
 
+def _reject_private_result_fields(value: Any, *, depth: int = 0) -> None:
+    if depth > 12:
+        raise CouncilGatewayError("result_nesting_too_deep")
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if isinstance(key, str) and _PRIVATE_RESULT_KEY.search(key):
+                raise CouncilGatewayError("council_result_contains_private_fields")
+            _reject_private_result_fields(item, depth=depth + 1)
+    elif isinstance(value, list):
+        for item in value:
+            _reject_private_result_fields(item, depth=depth + 1)
+
+
 def _safe_id(value: Any, name: str) -> str:
     if not isinstance(value, str) or not _ID_RE.fullmatch(value):
         raise ValueError(f"{name} is missing or invalid")
@@ -304,6 +318,7 @@ class CouncilGatewayClient:
             raise CouncilGatewayError("council_result_identity_mismatch")
         if data.get("status") != "completed":
             raise CouncilGatewayError("council_result_not_completed")
+        _reject_private_result_fields(data)
         outcome = data.get("outcome")
         if outcome not in SUBSTANTIVE_OUTCOMES:
             raise CouncilGatewayError("invalid_substantive_outcome")
@@ -367,6 +382,9 @@ class CouncilGatewayClient:
             raise CouncilGatewayError("invalid_round_count")
         if data.get("completion_reason") is not None and not isinstance(data.get("completion_reason"), str):
             raise CouncilGatewayError("invalid_completion_reason")
+        voting_summary = data.get("voting_summary")
+        if voting_summary is not None and not isinstance(voting_summary, dict):
+            raise CouncilGatewayError("invalid_voting_summary")
         return {
             "protocol_version": PROTOCOL_VERSION,
             "request_id": request_id,
@@ -384,6 +402,7 @@ class CouncilGatewayClient:
             "rounds_completed": data.get("rounds_completed"),
             "completion_reason": data.get("completion_reason"),
             "tests_and_simulations": data.get("tests_and_simulations", []),
+            "voting_summary": voting_summary,
         }
 
     def cancel(self, request_id: str) -> dict[str, Any]:
