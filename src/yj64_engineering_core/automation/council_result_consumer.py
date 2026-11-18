@@ -148,7 +148,7 @@ def handle_council_result_ready(
                 parent_task_id=parent_task_id,
                 result_task_id=context.task_id,
                 worker_id=context.worker_id,
-                council_request_id=payload["request_id"],
+                council_request_id=payload.get("resume_request_id") or payload["request_id"],
                 result_artifact_ref=artifact_ref,
                 result_sha256=result_sha256,
             )
