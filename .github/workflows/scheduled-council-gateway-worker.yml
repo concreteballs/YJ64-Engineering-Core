@@ -8,6 +8,8 @@ on:
       - "scripts/run_council_gateway_worker.py"
       - "src/yj64_engineering_core/automation/council_gateway.py"
       - "src/yj64_engineering_core/automation/council_tasks.py"
+      - "src/yj64_engineering_core/automation/browser_agent_bridge.py"
+      - "src/yj64_engineering_core/automation/postgres_store.py"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
