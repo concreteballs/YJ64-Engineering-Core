@@ -22,8 +22,8 @@ class CiPatchGenerationTests(unittest.TestCase):
         }
         paths = extract_candidate_paths(report, "concreteballs/YJ64-Engineering-Core")
         self.assertEqual(paths, [
-            "src/yj64_engineering_core/automation/worker.py",
             "tests/test_worker.py",
+            "src/yj64_engineering_core/automation/worker.py",
         ])
 
     def test_does_not_guess_paths_when_evidence_has_none(self):
