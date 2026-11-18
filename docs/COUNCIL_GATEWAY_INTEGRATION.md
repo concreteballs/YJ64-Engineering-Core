@@ -17,11 +17,13 @@ Application source audited for this integration:
 
 ## Verified application-side state and integration blocker
 
-The current application source has a local `MessageDistributor` that dispatches to configured participants through `llm_api.generate_response`. `main.py` owns the sequential and group dialogue loops, the critique-mode prompt, stop controls, and the UI. `chat_workspace.py` stores chat messages in app-private JSON files.
+The current application source has a local `MessageDistributor` that dispatches to configured participants through `llm_api.generate_response`. `main.py` owns sequential multi-participant dialogue rounds, a separate group-dialogue loop, a prompt-based critique mode, stop controls, and the UI. `chat_workspace.py` stores chat messages in app-private JSON files.
 
-The audited source does not currently expose a cloud HTTP API for an external agent, a server-side machine identity, durable remote council request/session records, or a remote polling/result endpoint. The configured diagnostic bridge is Android Content Provider IPC and is not a council API. The application README also states that no cloud reporting endpoint is configured.
+The audit did not find a separate formal consensus decision engine, a structured critique/voting state machine, or a machine-readable consensus result lifecycle. The current `consensus_reached` flag and `[CONSENSUS: APPROVE/OBJECT]` prompt marker do not by themselves establish a verified consensus protocol. The planned Consensus/Critique/Voting/Decision Integrity work is described in the application integration plan, but documentation is not implementation evidence.
 
-Therefore the Gateway client and durable Engineering Core workflow can be implemented independently, but a real end-to-end exchange cannot be claimed until the YJ-64 application implements the API contract below and connects accepted requests to its existing native dialogue/council flow. A mock server is not proof of that integration.
+The audited source also does not expose a cloud HTTP API for an external agent, a server-side machine identity, durable remote council request/session records, or a remote polling/result endpoint. The configured diagnostic bridge is Android Content Provider IPC and is not a council API. The application README states that no cloud reporting endpoint is configured.
+
+Therefore the Gateway client and durable Engineering Core workflow can be implemented independently, but a real end-to-end council exchange cannot be claimed until the YJ-64 application implements the API contract below, connects it to its actual native multi-model workflow, and implements the agreed Consensus/Critique result semantics. The Gateway must not relabel an ordinary sequential chat as a completed consensus. A mock server is not proof of that integration.
 
 ## Proposed versioned API contract
 
