@@ -64,14 +64,14 @@ def extract_candidate_paths(report: dict, repository: str) -> list[str]:
             normalized = raw.replace("\\", "/")
             parts = normalized.split("/")
             if repo_name in parts:
-                normalized = "/".join(parts[parts.index(repo_name) + 1:])
+                normalized = "/".join(parts[len(parts) - 1 - parts[::-1].index(repo_name) + 1:])
             path = _safe_repo_path(normalized)
             if path:
                 candidates.append(path)
         for raw in _PATH_RE.findall(text):
             parts = raw.split("/")
             if repo_name in parts:
-                raw = "/".join(parts[parts.index(repo_name) + 1:])
+                raw = "/".join(parts[len(parts) - 1 - parts[::-1].index(repo_name) + 1:])
             path = _safe_repo_path(raw)
             if path:
                 candidates.append(path)
