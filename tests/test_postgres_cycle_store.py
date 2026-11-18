@@ -353,6 +353,60 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(len(cursor.statements), 4)
 
 
+    def test_atomic_council_handoff_enqueues_child_and_waits_parent(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
+
+        checkpoint = create_checkpoint(
+            task_id="12", sequence=2, state="checkpointed", task_spec_version="v1",
+            task_state={
+                "stage": "waiting_council",
+                "expected_council_request_id": "council-resume:abc",
+            },
+            budgets={}, approvals={},
+            previous_checkpoint_hash="e" * 64,
+        )
+
+        class AtomicHandoffCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (12,)
+                elif "INSERT INTO yj64_task_queue" in query:
+                    self._fetch = (101,)
+                elif "SELECT checkpoint_hash FROM yj64_task_checkpoints" in query:
+                    self._fetch = None
+                elif "SELECT sequence, checkpoint_hash FROM yj64_task_checkpoints" in query:
+                    self._fetch = (1, "e" * 64)
+                elif "INSERT INTO yj64_task_checkpoints" in query:
+                    self._fetch = None
+                elif "UPDATE yj64_task_queue" in query:
+                    self.rowcount = 1
+                    self._fetch = None
+                else:
+                    self._fetch = None
+
+        cursor = AtomicHandoffCursor()
+        result = self.store(cursor).enqueue_council_task_and_suspend_parent(
+            queue_task_id=12,
+            worker_id="worker-a",
+            task_payload={
+                "parent_task_id": 12,
+                "resume_request_id": "council-resume:abc",
+                "protocol_version": "v1",
+            },
+            dedupe_key="council-submit:abc",
+            checkpoint=checkpoint,
+            council_request_id="council-resume:abc",
+        )
+        self.assertEqual(result, {
+            "enqueued": True, "duplicate": False, "task_id": 101,
+            "parent_task_id": 12, "state": "waiting",
+        })
+        self.assertTrue(verify_checkpoint(checkpoint))
+        self.assertTrue(any("INSERT INTO yj64_task_queue" in query for query, _ in cursor.statements))
+        self.assertTrue(any("INSERT INTO yj64_task_checkpoints" in query for query, _ in cursor.statements))
+        self.assertTrue(any("SET state = 'waiting'" in query for query, _ in cursor.statements))
+
     def test_record_council_resume_event_checkpoints_result_before_requeue(self):
         import json
         from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
