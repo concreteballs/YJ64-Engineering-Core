@@ -138,6 +138,18 @@ class CouncilGatewayClientTests(unittest.TestCase):
         with self.assertRaises(CouncilGatewayError):
             self.client(opener).get_result("request-123", "session-123")
 
+    def test_rejects_secret_fields_in_context(self):
+        request = CouncilRequest(
+            mode="consensus",
+            title="Review",
+            prompt="Prompt",
+            correlation_id="task-12345678",
+            idempotency_key="idem-key-12345678",
+            context={"api_key": "must-not-leave-this-worker"},
+        )
+        with self.assertRaises(ValueError):
+            request.to_payload("yj64-engineering-core")
+
     def test_rejects_plain_http_by_default(self):
         with self.assertRaises(ValueError):
             CouncilGatewayClient(base_url="http://yj64.example", token="token")
