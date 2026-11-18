@@ -40,14 +40,14 @@ _FAILURE_CLASSES = {
 
 
 _SIGNAL_PATTERN = re.compile(
-    r"\\b(error|failed|failure|exception|traceback|fatal|panic|timeout|timed out|"
+    r"\b(error|failed|failure|exception|traceback|fatal|panic|timeout|timed out|"
     r"denied|not found|no matching|unable|cannot|could not|refused|unavailable|"
-    r"segmentation|assertion|warning|build failed|exit code [1-9])\\b",
+    r"segmentation|assertion|warning|build failed|exit code [1-9])\b",
     re.IGNORECASE,
 )
 _CRITICAL_PATTERN = re.compile(
-    r"\\b(error|failed|failure|exception|traceback|fatal|panic|timeout|timed out|"
-    r"denied|not found|no matching|segmentation|assertion|build failed)\\b",
+    r"\b(error|failed|failure|exception|traceback|fatal|panic|timeout|timed out|"
+    r"denied|not found|no matching|segmentation|assertion|build failed)\b",
     re.IGNORECASE,
 )
 
@@ -107,9 +107,9 @@ def select_diagnostic_log_excerpt(log_text: str, max_chars: int = 90_000) -> str
         previous = index
     if previous < len(lines) - 1:
         output.append(f"[... omitted original lines {previous + 2}-{len(lines)} ...]")
-    excerpt = "\\n".join(output)
+    excerpt = "\n".join(output)
     if len(excerpt) > max_chars:
-        excerpt = excerpt[:max_chars - 40] + "\\n[excerpt hard limit reached]"
+        excerpt = excerpt[:max_chars - 40] + "\n[excerpt hard limit reached]"
     return excerpt
 
 
