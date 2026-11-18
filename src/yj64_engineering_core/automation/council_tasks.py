@@ -45,6 +45,8 @@ def enqueue_council_request(
     max_poll_count: int = DEFAULT_MAX_POLLS,
 ) -> dict[str, Any]:
     """Enqueue one external council request using the existing PostgreSQL queue."""
+    if isinstance(evidence_refs, str):
+        raise ValueError("evidence_refs must be a list or tuple of references")
     request = CouncilRequest(
         mode=mode,
         title=title,
@@ -122,7 +124,7 @@ def _checkpoint(context: Any, task: Mapping[str, Any], state: dict[str, Any]) ->
         task_spec_version=PROTOCOL_VERSION,
         task_state=state,
         budgets={},
-        approvals={"external_council_request": True},
+        approvals={"external_council_request": "authorized_by_calling_workflow"},
         artifact_refs=state.get("artifact_refs", []),
         previous_checkpoint_hash=previous_hash,
     )
@@ -271,12 +273,24 @@ def handle_poll_council_request(
     except CouncilGatewayError as exc:
         if exc.retryable:
             return TaskExecutionResult("retry", exc.classification, min(900, max(30, exc.retry_after_seconds or 90)))
-        return TaskExecutionResult("blocked", exc.classification)
+        handoff = _enqueue_result_ready(
+            context, payload, execution_status="blocked",
+            reason=exc.classification,
+        )
+        if not handoff.get("enqueued") and not handoff.get("duplicate"):
+            return TaskExecutionResult("retry", "council_result_handoff_failed", 90)
+        return TaskExecutionResult("completed")
     except (TypeError, ValueError, KeyError):
         return TaskExecutionResult("blocked", "invalid_council_poll_task")
 
     if status["session_id"] != session_id:
-        return TaskExecutionResult("blocked", "council_session_id_mismatch")
+        handoff = _enqueue_result_ready(
+            context, payload, execution_status="blocked",
+            reason="council_session_id_mismatch",
+        )
+        if not handoff.get("enqueued") and not handoff.get("duplicate"):
+            return TaskExecutionResult("retry", "council_result_handoff_failed", 90)
+        return TaskExecutionResult("completed")
 
     state = {
         "stage": "poll",
@@ -322,7 +336,13 @@ def handle_poll_council_request(
         except CouncilGatewayError as exc:
             if exc.retryable:
                 return TaskExecutionResult("retry", exc.classification, 90)
-            return TaskExecutionResult("blocked", exc.classification)
+            handoff = _enqueue_result_ready(
+                context, payload, execution_status="blocked",
+                reason=exc.classification,
+            )
+            if not handoff.get("enqueued") and not handoff.get("duplicate"):
+                return TaskExecutionResult("retry", "council_result_handoff_failed", 90)
+            return TaskExecutionResult("completed")
         except (RuntimeError, OSError, ValueError, TypeError):
             return TaskExecutionResult("retry", "council_result_persistence_failed", 90)
         handoff = _enqueue_result_ready(
