@@ -400,6 +400,8 @@ def _enqueue_result_ready(
     reason: str | None = None,
 ) -> dict[str, Any]:
     request_id = payload["request_id"]
+    if execution_status != "completed" and result_artifact_ref is None:
+        result_artifact_ref = f"council-terminal://{request_id}/{execution_status}"
     envelope_task_id = (
         payload.get("parent_task_id")
         or payload.get("parent_task_ref")
