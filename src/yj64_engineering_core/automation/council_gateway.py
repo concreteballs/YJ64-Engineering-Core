@@ -257,7 +257,11 @@ class CouncilGatewayClient:
         base_url = os.environ.get("YJ64_COUNCIL_API_URL", "")
         token = os.environ.get("YJ64_COUNCIL_AGENT_TOKEN", "")
         agent_id = os.environ.get("YJ64_COUNCIL_AGENT_ID", "yj64-engineering-core")
-        supabase_api_key = (\n            os.environ.get("YJ64_COUNCIL_SUPABASE_API_KEY", "")\n            or os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "")\n            or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")\n        )
+        supabase_api_key = (
+            os.environ.get("YJ64_COUNCIL_SUPABASE_API_KEY", "")
+            or os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "")
+            or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
+        )
         if not base_url or not token or not supabase_api_key:
             raise RuntimeError(
                 "YJ64_COUNCIL_API_URL, YJ64_COUNCIL_AGENT_TOKEN and "
