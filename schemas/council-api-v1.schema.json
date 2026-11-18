@@ -83,10 +83,61 @@
         "status": {"const": "completed"},
         "outcome": {"$ref": "#/$defs/outcome"},
         "summary": {"type": "string", "minLength": 1, "maxLength": 50000},
-        "claims": {"type": "array", "items": {"type": "object"}},
-        "participant_positions": {"type": "array", "items": {"type": "object"}},
-        "dissent": {"type": "array", "items": {"type": "object"}},
-        "evidence": {"type": "array", "items": {"type": "object"}},
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim_id", "statement", "epistemic_type", "reasoning", "evidence_refs"],
+            "properties": {
+              "claim_id": {"type": "string", "minLength": 1},
+              "statement": {"type": "string", "minLength": 1},
+              "epistemic_type": {"enum": ["fact", "inference", "hypothesis", "test_result"]},
+              "reasoning": {"type": "string"},
+              "evidence_refs": {"type": "array", "items": {"type": "string"}},
+              "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        },
+        "participant_positions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["participant_id", "position", "rationale"],
+            "properties": {
+              "participant_id": {"type": "string"},
+              "position": {"type": "string"},
+              "rationale": {"type": "string"},
+              "claim_refs": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "dissent": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["participant_id", "reason"],
+            "properties": {
+              "participant_id": {"type": "string"},
+              "reason": {"type": "string"},
+              "claim_refs": {"type": "array", "items": {"type": "string"}},
+              "evidence_refs": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["evidence_id", "reference", "description", "evidence_type"],
+            "properties": {
+              "evidence_id": {"type": "string"},
+              "reference": {"type": "string"},
+              "description": {"type": "string"},
+              "evidence_type": {"enum": ["source", "artifact", "test", "simulation", "measurement"]},
+              "provenance": {"type": "object"}
+            }
+          }
+        },
         "unresolved_questions": {"type": "array", "items": {"type": "string"}},
         "assumptions": {"type": "array", "items": {"type": "string"}},
         "limitations": {"type": "array", "items": {"type": "string"}},
