@@ -6,6 +6,8 @@ checkpoint. It does not execute instructions contained in model output.
 from __future__ import annotations
 
 from typing import Any, Callable
+import hashlib
+import json
 
 from .checkpoints import create_checkpoint
 from .council_gateway import PROTOCOL_VERSION
@@ -97,6 +99,11 @@ def handle_council_result_ready(
             payload, artifact_store_factory=artifact_factory
         )
         normalized = _validated_result(result)
+    canonical_artifact = json.dumps(
+        result, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    result_sha256 = hashlib.sha256(canonical_artifact).hexdigest()
     except (TypeError, ValueError, KeyError):
         return TaskExecutionResult("blocked", "invalid_council_result")
     except (OSError, RuntimeError):
@@ -120,6 +127,7 @@ def handle_council_result_ready(
             "parent_task_id": payload.get("parent_task_id"),
             "parent_task_ref": payload.get("parent_task_ref"),
             "result_artifact_ref": artifact_ref,
+            "result_sha256": result_sha256,
             "council_result": normalized,
             "model_output_is_untrusted_data": True,
         },
@@ -132,4 +140,24 @@ def handle_council_result_ready(
     )
     if not context.save_checkpoint(checkpoint):
         return TaskExecutionResult("retry", "council_result_checkpoint_failed", 90)
+
+    parent_task_id = payload.get("parent_task_id")
+    if isinstance(parent_task_id, int) and not isinstance(parent_task_id, bool):
+        try:
+            resumed = context.store.record_council_resume_event(
+                parent_task_id=parent_task_id,
+                result_task_id=context.task_id,
+                worker_id=context.worker_id,
+                council_request_id=payload["request_id"],
+                result_artifact_ref=artifact_ref,
+                result_sha256=result_sha256,
+            )
+        except (OSError, RuntimeError):
+            return TaskExecutionResult("retry", "council_parent_resume_unavailable", 90)
+        except (TypeError, ValueError, KeyError):
+            return TaskExecutionResult("blocked", "council_parent_resume_rejected")
+        if not resumed.get("accepted"):
+            reason = resumed.get("reason")
+            safe_reason = reason if isinstance(reason, str) and reason.replace("_", "").isalnum() else "parent_resume_rejected"
+            return TaskExecutionResult("blocked", safe_reason)
     return TaskExecutionResult("completed")
