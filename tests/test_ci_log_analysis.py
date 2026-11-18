@@ -87,6 +87,11 @@ class FakeStore:
         self.latest = None
         self.finished = []
         self.saved = None
+        self.enqueued = []
+
+    def enqueue_task(self, *args, **kwargs):
+        self.enqueued.append((args, kwargs))
+        return {"enqueued": True, "duplicate": False, "task_id": 91, "state": "pending"}
 
     def get_ci_event(self, event_id):
         return self.event if event_id == self.event["event_id"] else None
@@ -242,6 +247,9 @@ class CiLogAnalysisTests(unittest.TestCase):
         self.assertEqual(store.saved["output_tokens"], 54)
         self.assertEqual(store.saved["actual_cost_usd"], "0")
         self.assertIn(store.saved["analysis_artifact_ref"], artifacts.items)
+        self.assertEqual(store.enqueued[0][0][0], "prepare_ci_fix")
+        self.assertEqual(store.enqueued[0][0][1]["analysis_task_id"], context.task_id)
+        self.assertEqual(store.enqueued[0][1]["dedupe_key"], "ci-fix-proposal:90")
 
 
 if __name__ == "__main__":
