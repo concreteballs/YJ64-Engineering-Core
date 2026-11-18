@@ -38,7 +38,7 @@ The paths below are the concrete proposed defaults used by `CouncilGatewayClient
 | Result | `GET /api/v1/external-agents/council/requests/{request_id}/result` | Return the structured result only when completed |
 | Cancel | `POST /api/v1/external-agents/council/requests/{request_id}/cancel` | Request cancellation subject to owner, scope, and state checks |
 
-All operations require a dedicated machine identity using a server-side Bearer token and the `yj64.council.submit`, `yj64.council.read`, and `yj64.council.cancel` scopes as applicable. The application must authorize every request against `agent_id` and request ownership. The token must never be exposed to Android UI, browser code, repository files, task payloads, or logs.
+All operations require a dedicated machine identity using a server-side Bearer token and the `council:submit`, `council:read`, and `council:cancel` scopes as applicable. The application must authorize every request against `agent_id` and request ownership. The machine token must never be exposed to Android UI, browser code, repository files, task payloads, or logs. Every request also sends the Supabase project publishable key in the `apikey` header; this key identifies the project at the Supabase gateway and is not the machine credential. The machine token remains in `Authorization: Bearer` and is independently checked by the Council API.
 
 ### Submit request
 
@@ -99,6 +99,7 @@ Configure these GitHub Actions repository secrets:
 - `YJ64_DATABASE_URL`
 - `YJ64_COUNCIL_API_URL` — HTTPS origin of the YJ-64 external-agent API.
 - `YJ64_COUNCIL_AGENT_TOKEN` — dedicated machine token with minimum scopes.
+- `YJ64_COUNCIL_SUPABASE_API_KEY` — Supabase project publishable key, supplied as the `apikey` header (configure as a GitHub Actions repository variable; it is not a machine credential).
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` — server-side only, used to persist private result artifacts.
 
