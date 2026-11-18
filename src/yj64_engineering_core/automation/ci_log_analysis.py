@@ -230,8 +230,8 @@ def _save_report(
         analysis_sha256=digest,
         analysis_status=status,
         analysis_json=stored_report,
-        input_tokens=reservation.get("input_tokens_actual") or reservation.get("input_tokens_estimated") or 0,
-        output_tokens=reservation.get("output_tokens_actual") or reservation.get("output_tokens_estimated") or 0,
+        input_tokens=(reservation.get("input_tokens_actual") if reservation.get("input_tokens_actual") is not None else reservation.get("input_tokens_estimated") or 0),
+        output_tokens=(reservation.get("output_tokens_actual") if reservation.get("output_tokens_actual") is not None else reservation.get("output_tokens_estimated") or 0),
         actual_cost_usd="0",
     )
     if report is None:
