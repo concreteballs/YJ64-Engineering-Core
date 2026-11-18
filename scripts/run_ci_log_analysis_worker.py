@@ -70,6 +70,14 @@ def _write_step_summary(analysis: dict, model: str) -> None:
     with open(summary_path, "a", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
 
+def _is_successful_worker_result(result: dict) -> bool:
+    """Treat a durably scheduled retry as a healthy worker outcome."""
+    status = result.get("status")
+    if status in {"completed", "idle", "blocked"}:
+        return True
+    return status == "pending" and result.get("reason") == "retry_scheduled"
+
+
 def main() -> int:
     required = (
         "YJ64_DATABASE_URL", "GEMINI_API_KEY",
@@ -131,13 +139,13 @@ def main() -> int:
             if saved_analysis is not None:
                 _write_step_summary(saved_analysis, GEMINI_MODEL)
         print(json.dumps({
-            "ok": result.get("status") in {"completed", "idle", "blocked"},
+            "ok": _is_successful_worker_result(result),
             "worker": "ci_log_analysis",
             "model": GEMINI_MODEL,
             "cost_guard_usd": "0",
             "result": result,
         }, default=str, separators=(",", ":")))
-        return 0 if result.get("status") in {"completed", "idle", "blocked"} else 1
+        return 0 if _is_successful_worker_result(result) else 1
     except Exception as exc:
         # Do not print provider bodies, credentials, or arbitrary exception text.
         print(json.dumps({
