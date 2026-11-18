@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone, timedelta
 
 from yj64_engineering_core.automation.browser_agent_bridge import (
-    EXPECTED_BRANCH, EXPECTED_REPOSITORY, SCHEMA_VERSION, payload_hash, validate_envelope,
+    EXPECTED_BRANCH, EXPECTED_REPOSITORY, SCHEMA_VERSION, create_envelope, payload_hash, validate_envelope,
 )
 
 
@@ -32,6 +32,18 @@ class BrowserAgentEnvelopeTests(unittest.TestCase):
         valid = validate_envelope(self.message, now=self.now)
         self.assertEqual(valid["schema_version"], SCHEMA_VERSION)
         self.assertTrue(valid["created_at"].endswith("Z"))
+
+    def test_create_envelope_builds_valid_council_message(self):
+        envelope = create_envelope(
+            message_type="council_request",
+            task_id=91,
+            idempotency_key="council-idem-12345",
+            payload={"mode": "consensus", "title": "Review", "prompt": "Check this change."},
+            now=self.now,
+        )
+        self.assertEqual(envelope["message_type"], "council_request")
+        self.assertEqual(envelope["task_id"], 91)
+        self.assertEqual(validate_envelope(envelope, now=self.now)["payload"]["mode"], "consensus")
 
     def test_rejects_wrong_repository_or_branch(self):
         bad = dict(self.message, repository="someone/else")
