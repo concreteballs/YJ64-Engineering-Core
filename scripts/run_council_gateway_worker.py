@@ -10,8 +10,12 @@ PROJECT_SRC = Path(__file__).resolve().parents[1] / "src"
 if str(PROJECT_SRC) not in sys.path:
     sys.path.insert(0, str(PROJECT_SRC))
 
+from yj64_engineering_core.automation.council_result_consumer import (
+    handle_council_result_ready,
+)
 from yj64_engineering_core.automation.council_tasks import (
     POLL_TASK,
+    RESULT_READY_TASK,
     SUBMIT_TASK,
     handle_poll_council_request,
     handle_submit_council_request,
@@ -55,10 +59,11 @@ def main() -> int:
             handlers={
                 SUBMIT_TASK: handle_submit_council_request,
                 POLL_TASK: handle_poll_council_request,
+                RESULT_READY_TASK: handle_council_result_ready,
             },
             lease_seconds=300,
             recovery_limit=100,
-            allowed_task_types=[SUBMIT_TASK, POLL_TASK],
+            allowed_task_types=[SUBMIT_TASK, POLL_TASK, RESULT_READY_TASK],
         )
         stage = "run_once"
         result = runner.run_once()
@@ -83,7 +88,7 @@ def main() -> int:
         "ok": result.get("status") in {"completed", "idle", "blocked"},
         "worker": "council_gateway",
         "result": result,
-        "scope": "native_yj64_council_submit_poll_and_result_handoff",
+        "scope": "native_yj64_council_submit_poll_and_result_consumption",
     }, default=str, separators=(",", ":")))
     return 0 if result.get("status") in {"completed", "idle", "blocked"} else 1
 
