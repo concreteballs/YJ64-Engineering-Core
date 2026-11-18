@@ -45,6 +45,20 @@ class BrowserAgentEnvelopeTests(unittest.TestCase):
         self.assertEqual(envelope["task_id"], 91)
         self.assertEqual(validate_envelope(envelope, now=self.now)["payload"]["mode"], "consensus")
 
+    def test_stable_message_id_supports_idempotent_envelope_replay(self):
+        kwargs = {
+            "message_type": "council_result",
+            "task_id": 91,
+            "idempotency_key": "council-result-12345",
+            "payload": {"request_id": "request-123", "execution_status": "completed"},
+            "now": self.now,
+            "message_id": "stable-result-message-123456",
+            "ttl_seconds": 2592000,
+        }
+        first = create_envelope(**kwargs)
+        second = create_envelope(**kwargs)
+        self.assertEqual(first, second)
+
     def test_rejects_wrong_repository_or_branch(self):
         bad = dict(self.message, repository="someone/else")
         with self.assertRaisesRegex(ValueError, "scope"):
