@@ -1,2 +1,0 @@
-Temporary GitHub write-access probe.
-Created to test ChatGPT GitHub connector write permissions.
