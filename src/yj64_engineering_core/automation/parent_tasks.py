@@ -11,9 +11,9 @@ from typing import Any, Callable, Mapping
 
 from ..task_contracts import TaskRequest
 from .worker import TaskExecutionResult
+from .task_requests import PARENT_TASK_QUEUE_TYPE
 
 
-_PARENT_TASK_TYPE = "execute_task_request"
 _TASK_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 _CAPABILITY = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 
@@ -155,7 +155,7 @@ def handle_parent_task_request(
 ) -> TaskExecutionResult:
     """Validate, route and resume one generic parent task through a registered adapter."""
     try:
-        if not isinstance(task, dict) or task.get("task_type") != _PARENT_TASK_TYPE:
+        if not isinstance(task, dict) or task.get("task_type") != PARENT_TASK_QUEUE_TYPE:
             return TaskExecutionResult("blocked", "invalid_parent_task_type")
         payload = task.get("payload")
         if not isinstance(payload, dict) or set(payload) != {"task_request"}:
@@ -193,3 +193,15 @@ def handle_parent_task_request(
         return TaskExecutionResult("blocked", "council_use_forbidden")
     except (TypeError, ValueError, KeyError):
         return TaskExecutionResult("blocked", "invalid_parent_task_request")
+
+
+
+def create_parent_task_handler(registry: TaskAdapterRegistry) -> TaskAdapter:
+    """Bind an explicit registry for WorkerRunner's task-type handler map."""
+    if not isinstance(registry, TaskAdapterRegistry):
+        raise TypeError("registry must be a TaskAdapterRegistry")
+
+    def handler(task: dict, context: Any) -> TaskExecutionResult:
+        return handle_parent_task_request(task, context, registry=registry)
+
+    return handler
