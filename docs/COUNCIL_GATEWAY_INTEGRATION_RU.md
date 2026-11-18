@@ -45,7 +45,7 @@ Gateway не создаёт второй консилиум, не вызывае
 
 Это конкретное предложение контракта, а не утверждение, что маршруты уже существуют в приложении. Их необходимо реализовать на стороне YJ-64 или явно согласовать отображение маршрутов до запуска production-интеграции.
 
-Все операции используют отдельный Bearer token машинной идентичности. Приложение должно проверять владельца запроса и scope для каждой операции. Токен хранится только в серверных secrets.
+Все операции используют отдельный Bearer token машинной идентичности. Фактические scopes приложения: `council:submit`, `council:read`, `council:cancel`. Приложение проверяет владельца запроса и scope для каждой операции. Машинный токен хранится только в серверных secrets. Дополнительно каждый запрос передаёт публичный Supabase publishable key в заголовке `apikey`: он идентифицирует проект на уровне Supabase Gateway и не заменяет машинную аутентификацию. Машинный токен передаётся отдельно в `Authorization: Bearer`.
 
 ### Режимы и статусы
 
@@ -108,6 +108,7 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 - YJ64_DATABASE_URL;
 - YJ64_COUNCIL_API_URL — HTTPS origin внешнего API YJ-64;
 - YJ64_COUNCIL_AGENT_TOKEN — отдельный машинный токен с минимальными полномочиями;
+- YJ64_COUNCIL_SUPABASE_API_KEY — публичный Supabase publishable key для заголовка `apikey` (GitHub Actions repository variable, не машинный токен);
 - SUPABASE_URL;
 - SUPABASE_SERVICE_ROLE_KEY — только серверный ключ для private artifact storage.
 
