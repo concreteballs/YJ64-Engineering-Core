@@ -173,6 +173,31 @@ class CiLogAnalysisTests(unittest.TestCase):
         self.assertIsNone(report)
         self.assertEqual(error, "provider_candidate_missing")
 
+    def test_successful_ci_run_is_skipped_without_provider_call(self):
+        artifacts = FakeArtifactStore()
+        adapter = FakeAdapter(artifacts, b"{}")
+        store = FakeStore()
+        store.event["conclusion"] = "success"
+        context = FakeContext(store)
+        task = {
+            "task_id": context.task_id,
+            "task_type": "analyze_ci_logs",
+            "attempts": 1,
+            "payload": {
+                "event_id": 7,
+                "source_task_id": 44,
+                "payload_id": "ci-logs-7-1",
+            },
+        }
+        result = process_ci_log_analysis(
+            task, context, adapter=adapter, artifact_store=artifacts
+        )
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(adapter.sent, 0)
+        self.assertFalse(hasattr(adapter, "counted_payload"))
+        self.assertEqual(store.finished, [])
+        self.assertIsNone(store.saved)
+
     def test_worker_persists_report_and_finishes_zero_cost_reservation(self):
         artifacts = FakeArtifactStore()
         response = json.dumps({
