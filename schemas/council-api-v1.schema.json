@@ -156,6 +156,7 @@
         "tests_and_simulations": {"type": "array", "items": {"type": "object"}},
         "voting_summary": {
           "type": ["object", "null"],
+          "additionalProperties": false,
           "properties": {
             "enabled": {"type": "boolean"},
             "weighted_enabled": {"type": "boolean"},
