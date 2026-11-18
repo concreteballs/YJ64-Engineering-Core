@@ -80,7 +80,7 @@ class CouncilRequest:
             raise ValueError("idempotency_key must contain 8-256 characters")
         if not isinstance(agent_id, str) or not _ID_RE.fullmatch(agent_id):
             raise ValueError("agent_id is invalid")
-        if not isinstance(self.context or {}, Mapping):
+        if self.context is not None and not isinstance(self.context, Mapping):
             raise ValueError("context must be an object")
         if not isinstance(self.evidence_refs, (tuple, list)) or len(self.evidence_refs) > 100:
             raise ValueError("evidence_refs must contain at most 100 references")
@@ -266,10 +266,40 @@ class CouncilGatewayClient:
         summary = data.get("summary")
         if not isinstance(summary, str) or not summary.strip() or len(summary) > 50000:
             raise CouncilGatewayError("invalid_result_summary")
-        for key in ("claims", "participant_positions", "dissent", "evidence", "unresolved_questions"):
+        collections = (
+            "claims", "participant_positions", "dissent", "evidence",
+            "unresolved_questions", "assumptions", "limitations",
+            "tests_and_simulations",
+        )
+        for key in collections:
             value = data.get(key, [])
             if not isinstance(value, list):
                 raise CouncilGatewayError("invalid_result_structure")
+        claims = data.get("claims", [])
+        for claim in claims:
+            if (
+                not isinstance(claim, dict)
+                or not isinstance(claim.get("claim_id"), str)
+                or not isinstance(claim.get("statement"), str)
+                or claim.get("epistemic_type") not in {"fact", "inference", "hypothesis", "test_result"}
+                or not isinstance(claim.get("reasoning"), str)
+                or not isinstance(claim.get("evidence_refs", []), list)
+            ):
+                raise CouncilGatewayError("invalid_claim_structure")
+        evidence = data.get("evidence", [])
+        for item in evidence:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("evidence_id"), str)
+                or not isinstance(item.get("reference"), str)
+                or not isinstance(item.get("description"), str)
+                or item.get("evidence_type") not in {"source", "artifact", "test", "simulation", "measurement"}
+            ):
+                raise CouncilGatewayError("invalid_evidence_structure")
+        if any(not isinstance(item, dict) for key in ("participant_positions", "dissent", "tests_and_simulations") for item in data.get(key, [])):
+            raise CouncilGatewayError("invalid_result_structure")
+        if any(not isinstance(item, str) for key in ("unresolved_questions", "assumptions", "limitations") for item in data.get(key, [])):
+            raise CouncilGatewayError("invalid_result_structure")
         return {
             "protocol_version": PROTOCOL_VERSION,
             "request_id": request_id,
