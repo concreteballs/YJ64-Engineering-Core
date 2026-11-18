@@ -12,6 +12,7 @@ import json
 import os
 from typing import Any, Callable, Mapping
 
+from .browser_agent_bridge import create_envelope, validate_envelope
 from .checkpoints import create_checkpoint
 from .council_gateway import (
     CouncilGatewayClient,
@@ -39,6 +40,7 @@ def enqueue_council_request(
     context: Mapping[str, Any] | None = None,
     evidence_refs: list[str] | tuple[str, ...] = (),
     parent_task_id: int | None = None,
+    parent_task_ref: str | None = None,
     max_rounds: int = 3,
     timeout_seconds: int = 1800,
     max_output_tokens: int = 12000,
@@ -65,6 +67,12 @@ def enqueue_council_request(
         or parent_task_id < 1
     ):
         raise ValueError("parent_task_id must be a positive integer or None")
+    if parent_task_ref is not None and (
+        not isinstance(parent_task_ref, str) or not parent_task_ref.strip() or len(parent_task_ref) > 128
+    ):
+        raise ValueError("parent_task_ref must be a non-empty string of at most 128 characters")
+    if parent_task_id is not None and parent_task_ref is not None:
+        raise ValueError("provide parent_task_id or parent_task_ref, not both")
     if (
         not isinstance(max_poll_count, int) or isinstance(max_poll_count, bool)
         or not 1 <= max_poll_count <= 10000
@@ -86,6 +94,7 @@ def enqueue_council_request(
             "max_output_tokens": request.max_output_tokens,
         },
         "parent_task_id": parent_task_id,
+        "parent_task_ref": parent_task_ref,
         "max_poll_count": max_poll_count,
     }
     key_digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
@@ -94,6 +103,35 @@ def enqueue_council_request(
         payload,
         dedupe_key=f"council-submit:{key_digest}",
         max_attempts=5,
+    )
+
+
+def enqueue_council_request_from_envelope(
+    store: Any, envelope: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Accept a scoped browser-agent council_request envelope into the task queue."""
+    message = validate_envelope(envelope)
+    if message.get("message_type") != "council_request":
+        raise ValueError("browser-agent message is not a council_request")
+    request = message.get("payload")
+    if not isinstance(request, dict):
+        raise ValueError("council_request payload must be an object")
+    task_ref = message["task_id"]
+    return enqueue_council_request(
+        store,
+        mode=request.get("mode"),
+        title=request.get("title"),
+        prompt=request.get("prompt"),
+        correlation_id=request.get("correlation_id") or message["message_id"],
+        idempotency_key=message["idempotency_key"],
+        context=request.get("context", {}),
+        evidence_refs=request.get("evidence_refs", []),
+        parent_task_id=task_ref if isinstance(task_ref, int) else None,
+        parent_task_ref=task_ref if isinstance(task_ref, str) else None,
+        max_rounds=request.get("max_rounds", 3),
+        timeout_seconds=request.get("timeout_seconds", 1800),
+        max_output_tokens=request.get("max_output_tokens", 12000),
+        max_poll_count=request.get("max_poll_count", DEFAULT_MAX_POLLS),
     )
 
 
@@ -144,6 +182,7 @@ def _queue_poll(
         "request_id": request_id,
         "session_id": session_id,
         "parent_task_id": payload.get("parent_task_id"),
+        "parent_task_ref": payload.get("parent_task_ref"),
         "correlation_id": payload["request"]["correlation_id"],
         "idempotency_key": payload["request"]["idempotency_key"],
         "mode": payload["request"]["mode"],
@@ -224,11 +263,14 @@ def _enqueue_result_ready(
     reason: str | None = None,
 ) -> dict[str, Any]:
     request_id = payload["request_id"]
-    handoff = {
-        "protocol_version": PROTOCOL_VERSION,
+    envelope_task_id = (
+        payload.get("parent_task_id")
+        or payload.get("parent_task_ref")
+        or request_id
+    )
+    result_payload = {
         "request_id": request_id,
         "session_id": payload["session_id"],
-        "parent_task_id": payload.get("parent_task_id"),
         "correlation_id": payload.get("correlation_id"),
         "mode": payload.get("mode"),
         "execution_status": execution_status,
@@ -236,6 +278,19 @@ def _enqueue_result_ready(
         "result_artifact_ref": result_artifact_ref,
         "reason": reason,
         "source": "yj64_native_council",
+    }
+    result_envelope = create_envelope(
+        message_type="council_result",
+        task_id=envelope_task_id,
+        idempotency_key=f"council-result:{request_id}",
+        payload=result_payload,
+    )
+    handoff = {
+        "protocol_version": PROTOCOL_VERSION,
+        **result_payload,
+        "parent_task_id": payload.get("parent_task_id"),
+        "parent_task_ref": payload.get("parent_task_ref"),
+        "browser_agent_envelope": result_envelope,
     }
     return context.store.enqueue_task(
         RESULT_READY_TASK,
