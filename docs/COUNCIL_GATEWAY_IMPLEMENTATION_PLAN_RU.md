@@ -14,7 +14,7 @@
 - Текущий набор тестов на момент составления плана: **518 тестов, успешно**.
 - API приложения теперь реализован в `supabase/functions/council-api/index.ts`; фактические routes совпадают с контрактом `yj64.council-api.v1`.
 - Фактические scopes: `council:submit`, `council:read`, `council:cancel`; кроме машинного Bearer token требуется Supabase publishable key в `apikey`.
-- Текущий проход устраняет недостающий `apikey` в Gateway client и конфигурации worker; PR открыт, CI выполняется.
+- Текущий проход устраняет недостающий `apikey` в Gateway client и конфигурации worker; PR #2 открыт, GitHub Actions прошёл успешно: 525 tests passed (run 44398343929).
 - Сквозная интеграция с живым API консилиума ещё не подтверждена: worker приложения не развёрнут с реальными provider credentials.
 - Consumer `council_result_ready` уже реализован и зарегистрирован в Gateway worker; он проверяет artifact и сохраняет нормализованный результат в checkpoint своей задачи. Не завершено соединение с `record_council_resume_event(...)`, которое должно разбудить исходную parent task.
 - Gateway не должен дублировать консилиум, внутренние механизмы моделей, Consensus/Critique/Voting приложения. Приложение остаётся владельцем консилиума.
