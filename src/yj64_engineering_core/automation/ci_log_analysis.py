@@ -194,7 +194,7 @@ def _retry_delay(retry_at: Any) -> int:
 
 
 def _save_report(
-    *, task: dict, context, event: dict, payload_id: str, reservation: dict,
+    *, task: dict, context, event: dict, source_task_id: int, payload_id: str, reservation: dict,
     response_bytes: bytes, artifact_store,
 ) -> TaskExecutionResult:
     report, invalid_reason = parse_gemini_analysis(response_bytes)
@@ -218,7 +218,7 @@ def _save_report(
         analysis_task_id=context.task_id,
         worker_id=context.worker_id,
         lease_seconds=context.lease_seconds,
-        source_task_id=task["payload"]["source_task_id"],
+        source_task_id=source_task_id,
         event_id=event["event_id"],
         payload_id=payload_id,
         provider="gemini",
@@ -340,6 +340,7 @@ def process_ci_log_analysis(
             return TaskExecutionResult("blocked", "provider_capacity_hold")
         reservation = {
             "reservation_id": reserved["reservation_id"],
+            "idempotency_key": reserved.get("idempotency_key", idempotency_key),
             "state": reserved.get("state", "reserved"),
             "provider_result_ref": None,
             "input_tokens_estimated": input_tokens,
@@ -359,7 +360,7 @@ def process_ci_log_analysis(
         except Exception:
             return TaskExecutionResult("blocked", "provider_result_artifact_unavailable")
         return _save_report(
-            task=task, context=context, event=event, payload_id=payload_id,
+            task=task, context=context, event=event, source_task_id=source_task_id, payload_id=payload_id,
             reservation=reservation, response_bytes=response_bytes,
             artifact_store=artifact_store,
         )
@@ -374,7 +375,7 @@ def process_ci_log_analysis(
         provider="gemini",
         model=GEMINI_MODEL,
         endpoint="generateContent",
-        idempotency_key=idempotency_key,
+        idempotency_key=reservation.get("idempotency_key", idempotency_key),
         payload=request_payload,
         payload_sha256=request_hash,
         input_tokens=input_tokens,
@@ -432,7 +433,7 @@ def process_ci_log_analysis(
     except Exception:
         return TaskExecutionResult("blocked", "provider_result_artifact_unavailable")
     return _save_report(
-        task=task, context=context, event=event, payload_id=payload_id,
+        task=task, context=context, event=event, source_task_id=source_task_id, payload_id=payload_id,
         reservation=response_reservation, response_bytes=response_bytes,
         artifact_store=artifact_store,
     )
