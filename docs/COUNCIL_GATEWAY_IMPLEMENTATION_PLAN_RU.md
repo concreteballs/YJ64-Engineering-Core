@@ -1,7 +1,7 @@
 # План реализации Council Gateway и запуска инженерного цикла YJ-64
 
 **Репозиторий:** `concreteballs/YJ64-Engineering-Core`  
-**Рабочая ветка:** `main`  
+**Рабочая ветка:** отдельная feature branch; текущий проход — `fix/council-api-supabase-auth`  
 **Цель:** довести Gateway от готового клиентского/очередного слоя до работающего сквозного обмена с консилиумом приложения YJ-64 и автоматического продолжения инженерной задачи.  
 **Ограничение:** выполнять изменения только в этом репозитории. Репозиторий приложения `yj64-clean-bial2modFun5` и репозитории инженерного цикла не изменять. Для них подготовлены отдельные ТЗ ниже.
 
@@ -12,8 +12,10 @@
 - Gateway-клиент и контракт `yj64.council-api.v1` уже созданы.
 - Durable submit/poll tasks, checkpoints, artifact storage, result handoff и валидация результата реализованы.
 - Текущий набор тестов на момент составления плана: **518 тестов, успешно**.
-- Предварительные HTTP-маршруты Gateway конфигурируемы; их нужно подтвердить с API приложения.
-- Сквозная интеграция с живым API консилиума ещё не подтверждена.
+- API приложения теперь реализован в `supabase/functions/council-api/index.ts`; фактические routes совпадают с контрактом `yj64.council-api.v1`.
+- Фактические scopes: `council:submit`, `council:read`, `council:cancel`; кроме машинного Bearer token требуется Supabase publishable key в `apikey`.
+- Текущий проход устраняет недостающий `apikey` в Gateway client и конфигурации worker; PR открыт, CI выполняется.
+- Сквозная интеграция с живым API консилиума ещё не подтверждена: worker приложения не развёрнут с реальными provider credentials.
 - Не найден/не завершён consumer-runner, который забирает `council_result_ready`, проверяет artifact и возобновляет исходную инженерную задачу.
 - Gateway не должен дублировать консилиум, внутренние механизмы моделей, Consensus/Critique/Voting приложения. Приложение остаётся владельцем консилиума.
 
@@ -77,10 +79,11 @@
 
 # Блок 4 — Согласование и контракт с приложением (1 проход после ТЗ app-side)
 
-- [ ] Получить от владельца приложения подтверждение фактических endpoint paths, методов, payload/response и auth.
-- [ ] Сопоставить фактический API с `schemas/council-api-v1.schema.json`.
+- [x] Сверить фактические endpoint paths, методы, payload/response с `supabase/functions/council-api/index.ts` приложения (read-only аудит).
+- [x] Сопоставить фактические scopes `council:submit/read/cancel` и два обязательных заголовка: machine Bearer + Supabase `apikey`.
+- [x] Внести поддержку `YJ64_COUNCIL_SUPABASE_API_KEY` в клиент и worker workflow на отдельной feature branch.
 - [ ] Если контракт расходится, обновлять Gateway/config/schema/docs согласованно; не угадывать API и не ломать совместимость.
-- [ ] Добавить contract tests на реальные форматы, по возможности shared fixtures, полученные от app-side.
+- [ ] Добавить contract tests на реальные форматы; после готовности app worker выполнить live verification (текущие unit tests не заменяют live E2E).
 - [ ] Проверить status polling, result retrieval, cancellation, voting optional/default disabled и aggregate-only voting response.
 
 **Выход блока:** контракт зафиксирован и совместим с приложением.
