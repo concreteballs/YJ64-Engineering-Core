@@ -87,7 +87,7 @@ Lifecycle:
 4. The Gateway checkpoints the returned request/session IDs, enqueues a poll task, and completes the submit task. It does not hold a worker while the discussion runs.
 5. Each poll task performs one status request. If still running, it enqueues the next generation and completes itself.
 6. On completion, the structured result is validated, stored in the existing private content-addressed Supabase artifact store, and referenced by a `council_result_ready` queue item. The handoff also contains a `council_result` browser-agent envelope bound to the original task reference.
-7. The engineering-agent workflow consumes that handoff, reads the private artifact, independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
+7. The engineering-agent workflow consumes that handoff through `load_council_result_artifact(...)`, which validates the result envelope and request/session identity before loading the private artifact. The agent independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
 
 The Gateway never treats the council's conclusion as proof that a patch is correct. The consumer must validate the result and preserve the distinction between consensus, qualified consensus, unresolved disagreement, and insufficient evidence.
 
