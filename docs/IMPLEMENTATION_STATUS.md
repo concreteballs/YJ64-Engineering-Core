@@ -265,3 +265,21 @@ Acceptance evidence must distinguish observation, inferred skill, simulation, su
 The Supabase migration `durable_task_checkpoints` has been applied to project `YJ64-Autonomous-Core`. The `yj64_task_checkpoints` table exists with RLS enabled, no public policies, and access granted only to `service_role`. The table is currently empty. This is a persistence primitive, not a running worker or an end-to-end autonomous cycle. No worker has been started and no real task has yet been checkpointed through the application.
 
 The CI run for commit `c6ff86be7464a754c6fc3086ba9987e631b76237` passed, including unit, FEM and real 3D CAD integration tests. The separate CI completion webhook remains failing and is tracked independently.
+
+
+## CI diagnosis → repair proposal handoff
+
+**Status: Implemented prototype — real Gemini diagnoses are now handed to a durable, human-reviewable repair-plan queue. Automatic source edits are deliberately disabled.**
+
+Verified implementation:
+- `automation/ci_log_analysis.py` enqueues an idempotent `prepare_ci_fix` task after a validated analysis is persisted. Existing completed analyses also perform the handoff on retry, so a transient enqueue failure does not permanently orphan the diagnosis.
+- `automation/ci_fix_proposals.py` validates the stored diagnosis and creates a structured repair plan with source run/commit identity, root cause, confidence, log evidence, proposed actions, verification plan and risk notes.
+- The proposal records exact source identity and remains linked to the original analysis task. It is persisted in `yj64_ci_fix_proposals` and as an immutable private artifact in `yj64-private-artifacts`.
+- `migrations/0020_ci_fix_proposals.sql` is applied to the active Supabase project. RLS is enabled; public/anonymous/authenticated access is revoked; the database constraint requires `auto_apply=false`, `human_approval_required=true`, `patch_ready=false`, and matching proposal status.
+- `scripts/run_ci_fix_proposal_worker.py` and `.github/workflows/scheduled-ci-fix-proposal-worker.yml` process one proposal task per invocation, on a five-minute schedule and after the CI log analysis workflow.
+- The worker does not make another LLM request and therefore does not consume additional model quota. It does not inspect or modify repository files, create a diff, commit changes or merge a patch. Target files remain empty until a separate exact-commit inspection stage is implemented.
+- Confidence below 0.70, or an unknown failure classification, produces `needs_more_evidence`; otherwise the plan is marked `awaiting_review`. Neither status authorizes execution.
+- The first real proposal was persisted successfully for analysis task 36 and proposal task 158, with status `awaiting_review`. It identified a historical test-double signature mismatch and preserved the original failing run identity.
+- Python test run [44231036575](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44231036575) passed: 485 tests. The proposal worker run [44231111194](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44231111194) completed successfully.
+
+**Next required stage:** inspect the exact source commit and relevant files, generate a bounded unified-diff candidate, validate it with `git apply --check`, and persist it for explicit owner approval. Only a separate approved execution stage may create a branch or modify repository files. This is not yet an autonomous self-repair loop.
