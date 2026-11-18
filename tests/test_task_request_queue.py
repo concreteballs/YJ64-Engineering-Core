@@ -114,7 +114,7 @@ class TaskRequestQueueTests(unittest.TestCase):
 
     def test_postgres_store_accepts_exact_duplicate_but_rejects_conflicting_payload(self):
         original = self.make_request()
-        original_payload = {"task_request": original.to_dict()}
+        original_payload = json.loads(json.dumps({"task_request": original.to_dict()}))
         existing = (41, PARENT_TASK_QUEUE_TYPE, original_payload, "pending")
         cursor = QueueCursor(existing=existing)
         store = PostgresCycleStore(
