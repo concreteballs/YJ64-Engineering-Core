@@ -208,9 +208,10 @@ class CouncilTaskTests(unittest.TestCase):
             self.poll_task("running"), context,
             client_factory=lambda: WrongSessionClient("running"),
         )
-        self.assertEqual(result.outcome, "blocked")
-        self.assertEqual(result.reason, "council_session_id_mismatch")
-        self.assertEqual(context.store.enqueued, [])
+        self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(context.store.enqueued[0]["task_type"], RESULT_READY_TASK)
+        self.assertEqual(context.store.enqueued[0]["payload"]["execution_status"], "blocked")
+        self.assertEqual(context.store.enqueued[0]["payload"]["reason"], "council_session_id_mismatch")
 
 
 if __name__ == "__main__":
