@@ -19,8 +19,8 @@ class TaskExecutionResult:
     retry_delay_seconds: int = 60
 
     def __post_init__(self) -> None:
-        if self.outcome not in {"completed", "retry", "blocked"}:
-            raise ValueError("outcome must be completed, retry or blocked")
+        if self.outcome not in {"completed", "retry", "blocked", "suspended"}:
+            raise ValueError("outcome must be completed, retry, blocked or suspended")
         if not isinstance(self.reason, str) or (
             self.reason and not re.fullmatch(r"[a-z][a-z0-9_.:-]{0,119}", self.reason)
         ):
@@ -254,6 +254,15 @@ class WorkerRunner:
                 "recovery": recovery,
             }
 
+        if decision.outcome == "suspended":
+            # The handler has already atomically persisted its waiting checkpoint,
+            # enqueued the Council submit task and released this parent lease.
+            return {
+                "status": "waiting",
+                "task_id": task_id,
+                "reason": decision.reason or "waiting_for_council",
+                "recovery": recovery,
+            }
         if decision.outcome == "completed":
             completed = self.store.complete_task(task_id, self.worker_id)
             return {
