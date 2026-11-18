@@ -353,5 +353,50 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(len(cursor.statements), 4)
 
 
+    def test_record_council_resume_event_accepts_matching_duplicate_after_parent_requeued(self):
+        class ResumeCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (88,)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("pending",)
+                elif "SELECT result_task_id, result_artifact_ref, result_sha256, resume_event_id" in query:
+                    self._fetch = (71, "private://result/1", "a" * 64, 901)
+                else:
+                    self._fetch = None
+
+        cursor = ResumeCursor()
+        result = self.store(cursor).record_council_resume_event(
+            parent_task_id=12, result_task_id=88, worker_id="worker-a",
+            council_request_id="request-1",
+            result_artifact_ref="private://result/1", result_sha256="a" * 64,
+        )
+        self.assertEqual(result, {
+            "accepted": True, "duplicate": True, "resume_event_id": 901,
+            "parent_task_id": 12, "state": "pending",
+        })
+        self.assertFalse(any("UPDATE yj64_task_queue" in query for query, _ in cursor.statements))
+
+    def test_record_council_resume_event_rejects_conflicting_duplicate(self):
+        class ResumeCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (88,)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("pending",)
+                elif "SELECT result_task_id, result_artifact_ref, result_sha256, resume_event_id" in query:
+                    self._fetch = (71, "private://result/old", "b" * 64, 901)
+                else:
+                    self._fetch = None
+
+        with self.assertRaisesRegex(ValueError, "conflicts"):
+            self.store(ResumeCursor()).record_council_resume_event(
+                parent_task_id=12, result_task_id=88, worker_id="worker-a",
+                council_request_id="request-1",
+                result_artifact_ref="private://result/new", result_sha256="a" * 64,
+            )
+
 if __name__ == "__main__":
     unittest.main()
