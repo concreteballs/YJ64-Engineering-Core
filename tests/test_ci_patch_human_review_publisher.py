@@ -42,7 +42,11 @@ class CiPatchHumanReviewPublisherTests(unittest.TestCase):
                 "auto_commit": False,
             },
             "patch": {
-                "unified_diff": "--- a/allowed.py\\n+++ b/allowed.py\\n@@ -1 +1 @@\\n-old\\n+new\\n",
+                "unified_diff": "--- a/allowed.py\n+++ b/allowed.py
+@@ -1 +1 @@
+-old
++new
+",
                 "target_files": ["other.py"],
             },
             "source": {"current_head_sha": "a" * 40},
@@ -68,7 +72,12 @@ class CiPatchHumanReviewPublisherTests(unittest.TestCase):
                 "auto_commit": False,
             },
             "patch": {
-                "unified_diff": "--- a/../escape.py\\n+++ b/../escape.py\\n@@ -1 +1 @@\\n-old\\n+new\\n",
+                "unified_diff": "--- a/../escape.py
++++ b/../escape.py
+@@ -1 +1 @@
+-old
++new
+",
                 "target_files": ["../escape.py"],
             },
             "source": {"current_head_sha": "a" * 40},
