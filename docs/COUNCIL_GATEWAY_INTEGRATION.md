@@ -15,15 +15,21 @@ Application source audited for this integration:
 - Local chat persistence: `chat_workspace.py`
 - Application integration plan: `docs/YJ64-CLOUD-DEPLOYMENT-AND-INTEGRATION-PLAN.md`, section 8.2`
 
-## Verified application-side state and integration blocker
+## Verified application-side state (2026-11-18 audit)
 
-The current application source has a local `MessageDistributor` that dispatches to configured participants through `llm_api.generate_response`. `main.py` owns sequential multi-participant dialogue rounds, a separate group-dialogue loop, a prompt-based critique mode, stop controls, and the UI. `chat_workspace.py` stores chat messages in app-private JSON files.
+The current `main` branch of `concreteballs/yj64-clean-bial2modFun5` now contains the server-side Council API and execution components:
 
-The audit did not find a separate formal consensus decision engine, a structured critique/voting state machine, or a machine-readable consensus result lifecycle. The current `consensus_reached` flag and `[CONSENSUS: APPROVE/OBJECT]` prompt marker do not by themselves establish a verified consensus protocol. The planned Consensus/Critique/Voting/Decision Integrity work is described in the application integration plan, but documentation is not implementation evidence.
+- `supabase/functions/council-api/index.ts` — versioned external-agent API, machine-token authentication, per-agent scopes, idempotency, status/result/cancel routes, and readiness gate.
+- `supabase/config.toml` — `council-api` uses `verify_jwt = false`; the handler independently verifies the machine Bearer token.
+- `cloud_worker/engine.py` — server-side multi-model Council adapter using the application's existing `llm_api.generate_response` router.
+- `cloud_worker/worker.py` — persistent queue worker with claim leases, heartbeat, progress, cancellation checks, and retries.
+- `cloud_worker/Dockerfile` and `cloud_worker/README.md` — container build and deployment instructions.
 
-The audited source also does not expose a cloud HTTP API for an external agent, a server-side machine identity, durable remote council request/session records, or a remote polling/result endpoint. The configured diagnostic bridge is Android Content Provider IPC and is not a council API. The application README states that no cloud reporting endpoint is configured.
+The API implements the four versioned operations below under the Supabase function base URL. Machine scopes are exactly `council:submit`, `council:read`, and `council:cancel`. Each call also needs the Supabase project publishable key in the `apikey` header; this is separate from the machine Bearer token.
 
-Therefore the Gateway client and durable Engineering Core workflow can be implemented independently, but a real end-to-end council exchange cannot be claimed until the YJ-64 application implements the API contract below, connects it to its actual native multi-model workflow, and implements the agreed Consensus/Critique result semantics. The Gateway must not relabel an ordinary sequential chat as a completed consensus. A mock server is not proof of that integration.
+The app repository's CI has verified compilation, unit tests, and Docker image build. Those checks use deterministic test doubles; they do not prove that a persistent worker is deployed or that real provider calls have run. The application readiness gate intentionally rejects submit with `503` until a live worker heartbeat and server-side engine adapter readiness are present.
+
+**Current live-integration blockers:** deploy the app's persistent worker, configure at least two real provider routes in its secret manager, register a dedicated machine agent and token in the app database, and run a live request. This Gateway repository must separately connect its result-ready consumer to the engineering-agent continuation runner before the parent task can resume automatically. Do not modify the app repository from this workstream.
 
 ## Proposed versioned API contract
 
