@@ -1,13 +1,7 @@
 name: Scheduled CI Log Analysis Worker
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Python tests", "Scheduled CI Event Worker"]
-    types: [completed]
-    branches: ["main"]
 
 permissions:
   contents: read
@@ -18,7 +12,6 @@ concurrency:
 
 jobs:
   analyze-one:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
