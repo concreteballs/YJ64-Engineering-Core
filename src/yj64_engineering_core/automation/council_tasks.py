@@ -122,12 +122,114 @@ def enqueue_council_request(
         "max_poll_count": max_poll_count,
     }
     key_digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+    payload["resume_request_id"] = (
+        "council-resume:" + key_digest if parent_task_id is not None else None
+    )
     return store.enqueue_task(
         SUBMIT_TASK,
         payload,
         dedupe_key=f"council-submit:{key_digest}",
         max_attempts=5,
     )
+
+
+def handoff_parent_task_to_council(
+    context: Any,
+    *,
+    request: CouncilRequest,
+    parent_state: Mapping[str, Any],
+    budgets: Mapping[str, Any] | None = None,
+    approvals: Mapping[str, Any] | None = None,
+    artifact_refs: list[str] | tuple[str, ...] = (),
+    task_spec_version: str = PROTOCOL_VERSION,
+    submitted_at: str | None = None,
+    max_poll_count: int = DEFAULT_MAX_POLLS,
+) -> TaskExecutionResult:
+    """Atomically enqueue Council work and suspend the currently leased parent task.
+
+    The stable local resume ID is derived from the idempotency key because the
+    remote Gateway request ID is not known until the asynchronous submit task runs.
+    """
+    if not isinstance(request, CouncilRequest):
+        return TaskExecutionResult("blocked", "invalid_council_request")
+    if not isinstance(parent_state, Mapping):
+        return TaskExecutionResult("blocked", "invalid_parent_resume_state")
+
+    class _CaptureStore:
+        task_type = None
+        payload = None
+        dedupe_key = None
+
+        def enqueue_task(self, task_type, payload, dedupe_key, *, max_attempts=3):
+            self.task_type = task_type
+            self.payload = dict(payload)
+            self.dedupe_key = dedupe_key
+            return {"enqueued": True, "duplicate": False, "task_id": 0, "state": "pending"}
+
+    capture = _CaptureStore()
+    try:
+        enqueue_council_request(
+            capture,
+            mode=request.mode,
+            title=request.title,
+            prompt=request.prompt,
+            correlation_id=request.correlation_id,
+            idempotency_key=request.idempotency_key,
+            context=request.context,
+            evidence_refs=request.evidence_refs,
+            parent_task_id=context.task_id,
+            max_rounds=request.max_rounds,
+            timeout_seconds=request.timeout_seconds,
+            max_output_tokens=request.max_output_tokens,
+            voting_enabled=request.voting_enabled,
+            weighted_voting_enabled=request.weighted_voting_enabled,
+            allow_early_stop=request.allow_early_stop,
+            submitted_at=submitted_at,
+            max_poll_count=max_poll_count,
+        )
+        if capture.task_type != SUBMIT_TASK or capture.payload is None:
+            return TaskExecutionResult("blocked", "council_submit_payload_unavailable")
+        resume_id = capture.payload.get("resume_request_id")
+        previous = context.load_latest_checkpoint()
+        sequence = int(previous.get("sequence", 0)) + 1 if isinstance(previous, dict) else 1
+        previous_hash = previous.get("checkpoint_hash") if isinstance(previous, dict) else None
+        checkpoint = create_checkpoint(
+            task_id=str(context.task_id),
+            sequence=sequence,
+            state="checkpointed",
+            task_spec_version=task_spec_version,
+            task_state={
+                "stage": "waiting_council",
+                "expected_council_request_id": resume_id,
+                "resume_state": dict(parent_state),
+                "council_request": {
+                    "correlation_id": request.correlation_id,
+                    "idempotency_key": request.idempotency_key,
+                    "mode": request.mode,
+                    "resume_request_id": resume_id,
+                },
+            },
+            budgets=dict(budgets or {}),
+            approvals=dict(approvals or {}),
+            artifact_refs=list(artifact_refs),
+            previous_checkpoint_hash=previous_hash,
+        )
+        result = context.store.enqueue_council_task_and_suspend_parent(
+            queue_task_id=context.task_id,
+            worker_id=context.worker_id,
+            task_payload=capture.payload,
+            dedupe_key=capture.dedupe_key,
+            checkpoint=checkpoint,
+            council_request_id=resume_id,
+            lease_seconds=context.lease_seconds,
+        )
+        if not result.get("enqueued") and not result.get("duplicate"):
+            return TaskExecutionResult("retry", "council_parent_handoff_unavailable", 90)
+        return TaskExecutionResult("suspended", "waiting_for_council")
+    except (OSError, RuntimeError):
+        return TaskExecutionResult("retry", "council_parent_handoff_unavailable", 90)
+    except (TypeError, ValueError, KeyError):
+        return TaskExecutionResult("blocked", "invalid_council_parent_handoff")
 
 
 def enqueue_council_request_from_envelope(
@@ -211,6 +313,7 @@ def _queue_poll(
         "session_id": session_id,
         "parent_task_id": payload.get("parent_task_id"),
         "parent_task_ref": payload.get("parent_task_ref"),
+        "resume_request_id": payload.get("resume_request_id"),
         "submitted_at": payload["submitted_at"],
         "correlation_id": payload["request"]["correlation_id"],
         "idempotency_key": payload["request"]["idempotency_key"],
@@ -327,6 +430,7 @@ def _enqueue_result_ready(
         **result_payload,
         "parent_task_id": payload.get("parent_task_id"),
         "parent_task_ref": payload.get("parent_task_ref"),
+        "resume_request_id": payload.get("resume_request_id"),
         "browser_agent_envelope": result_envelope,
     }
     return context.store.enqueue_task(
