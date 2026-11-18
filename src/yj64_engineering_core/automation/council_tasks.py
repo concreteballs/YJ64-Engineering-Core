@@ -314,6 +314,54 @@ def _enqueue_result_ready(
     )
 
 
+def load_council_result_artifact(
+    handoff: Mapping[str, Any],
+    *,
+    artifact_store_factory: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
+    """Load and identity-check a completed council result for the agent consumer."""
+    if not isinstance(handoff, Mapping):
+        raise ValueError("council result handoff must be an object")
+    message = dict(handoff)
+    if "payload" in message and "browser_agent_envelope" not in message:
+        message = _payload(message)
+    envelope = validate_envelope(message.get("browser_agent_envelope", {}))
+    if envelope.get("message_type") != "council_result":
+        raise ValueError("handoff does not contain a council_result envelope")
+    envelope_payload = envelope.get("payload", {})
+    request_id = message.get("request_id")
+    session_id = message.get("session_id")
+    if (
+        message.get("execution_status") != "completed"
+        or not isinstance(request_id, str)
+        or not isinstance(session_id, str)
+        or envelope_payload.get("request_id") != request_id
+        or envelope_payload.get("session_id") != session_id
+    ):
+        raise ValueError("council result handoff identity or status mismatch")
+    artifact_ref = message.get("result_artifact_ref")
+    if not isinstance(artifact_ref, str) or not artifact_ref:
+        raise ValueError("completed council result is missing its artifact reference")
+    if artifact_store_factory is not None:
+        artifact_store = artifact_store_factory()
+    else:
+        from .supabase_storage import SupabaseStorageArtifactStore
+        artifact_store = SupabaseStorageArtifactStore.from_environment()
+    content = artifact_store.get(artifact_ref)
+    try:
+        result = json.loads(content.decode("utf-8"))
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("council result artifact is not valid JSON") from None
+    if (
+        not isinstance(result, dict)
+        or result.get("request_id") != request_id
+        or result.get("session_id") != session_id
+        or result.get("status") != "completed"
+    ):
+        raise ValueError("council result artifact identity mismatch")
+    return result
+
+
 def handle_poll_council_request(
     task: dict,
     context: Any,
