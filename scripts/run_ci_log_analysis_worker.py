@@ -31,7 +31,7 @@ def _write_step_summary(analysis: dict, model: str) -> None:
 
     def fenced(value) -> str:
         safe = str(value if value is not None else "").replace("```", "'''")
-        return "```text\\n" + safe + "\\n```"
+        return "```text\n" + safe + "\n```"
 
     lines = [
         "## YJ64 CI log analysis",
@@ -68,7 +68,7 @@ def _write_step_summary(analysis: dict, model: str) -> None:
             fenced(report.get("reason", "unknown")),
         ])
     with open(summary_path, "a", encoding="utf-8") as handle:
-        handle.write("\\n".join(lines) + "\\n")
+        handle.write("\n".join(lines) + "\n")
 
 def main() -> int:
     required = (
