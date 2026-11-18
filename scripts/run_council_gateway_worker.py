@@ -35,6 +35,9 @@ def main() -> int:
     if not os.environ.get("YJ64_COUNCIL_AGENT_TOKEN", "").strip():
         print("YJ64_COUNCIL_AGENT_TOKEN is not configured.", file=sys.stderr)
         return 2
+    if not (os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "").strip() or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()):
+        print("YJ64_COUNCIL_API_PUBLISHABLE_KEY is not configured.", file=sys.stderr)
+        return 2
     if not os.environ.get("SUPABASE_URL", "").strip():
         print("SUPABASE_URL is not configured.", file=sys.stderr)
         return 2

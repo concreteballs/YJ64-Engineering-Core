@@ -263,7 +263,7 @@ class WorkerRunner:
             return {"status": "waiting_council", "task_id": task_id, "recovery": recovery}
 
         if decision.outcome == "completed":
-            completed = self.store.complete_task(task_id, self.worker_id
+            completed = self.store.complete_task(task_id, self.worker_id)
             return {
                 "status": "completed" if completed else "lease_lost",
                 "task_id": task_id,
