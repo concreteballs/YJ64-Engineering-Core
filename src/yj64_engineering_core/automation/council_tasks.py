@@ -43,6 +43,9 @@ def enqueue_council_request(
     max_rounds: int = 3,
     timeout_seconds: int = 1800,
     max_output_tokens: int = 12000,
+    voting_enabled: bool = False,
+    weighted_voting_enabled: bool = False,
+    allow_early_stop: bool = True,
     max_poll_count: int = DEFAULT_MAX_POLLS,
 ) -> dict[str, Any]:
     """Enqueue one external council request using the existing PostgreSQL queue."""
@@ -59,6 +62,9 @@ def enqueue_council_request(
         max_rounds=max_rounds,
         timeout_seconds=timeout_seconds,
         max_output_tokens=max_output_tokens,
+        voting_enabled=voting_enabled,
+        weighted_voting_enabled=weighted_voting_enabled,
+        allow_early_stop=allow_early_stop,
     )
     request.to_payload("yj64-engineering-core")
     if parent_task_id is not None and (
@@ -91,6 +97,9 @@ def enqueue_council_request(
             "max_rounds": request.max_rounds,
             "timeout_seconds": request.timeout_seconds,
             "max_output_tokens": request.max_output_tokens,
+            "voting_enabled": request.voting_enabled,
+            "weighted_voting_enabled": request.weighted_voting_enabled,
+            "allow_early_stop": request.allow_early_stop,
         },
         "parent_task_id": parent_task_id,
         "parent_task_ref": parent_task_ref,
@@ -130,6 +139,9 @@ def enqueue_council_request_from_envelope(
         max_rounds=request.get("max_rounds", 3),
         timeout_seconds=request.get("timeout_seconds", 1800),
         max_output_tokens=request.get("max_output_tokens", 12000),
+        voting_enabled=request.get("voting_enabled", False),
+        weighted_voting_enabled=request.get("weighted_voting_enabled", False),
+        allow_early_stop=request.get("allow_early_stop", True),
         max_poll_count=request.get("max_poll_count", DEFAULT_MAX_POLLS),
     )
 
@@ -219,6 +231,9 @@ def handle_submit_council_request(
             max_rounds=raw.get("max_rounds", 3),
             timeout_seconds=raw.get("timeout_seconds", 1800),
             max_output_tokens=raw.get("max_output_tokens", 12000),
+            voting_enabled=raw.get("voting_enabled", False),
+            weighted_voting_enabled=raw.get("weighted_voting_enabled", False),
+            allow_early_stop=raw.get("allow_early_stop", True),
         )
         accepted = _client(client_factory).submit(request)
     except CouncilGatewayError as exc:
