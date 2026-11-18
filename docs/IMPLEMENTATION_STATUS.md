@@ -294,5 +294,8 @@ Verified implementation:
 - `migrations/0021_ci_patch_candidates.sql` is applied. RLS is enabled and public/anonymous/authenticated access is revoked.
 - Added `scripts/run_ci_patch_generation_worker.py` and a five-minute scheduled workflow. The workflow is read-only against GitHub and requires the existing Gemini and private Supabase secrets.
 - Unit tests cover evidence-based path extraction, refusal to guess paths, diff allowlisting, traversal rejection and unsafe file-operation rejection.
+- Full Python/FEM/CAD test run [44232559493](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44232559493) passed: **490 tests**.
+- The first real patch-inspection task (task 183, proposal 167) completed and persisted `source_files_changed_since_failure`: its candidate file `src/yj64_engineering_core/automation/worker.py` had changed between the failed commit and current `main`. The worker correctly stopped before Gemini generation. The database confirms no provider reservation was created for this task, so this stale diagnosis consumed no additional Gemini request.
+- Patch worker run [44232456732](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44232456732) completed successfully.
 
 This remains a **patch-candidate generator**, not autonomous self-repair. A human must review and separately approve any later execution stage.
