@@ -249,7 +249,7 @@ class CiLogAnalysisTests(unittest.TestCase):
         self.assertIn(store.saved["analysis_artifact_ref"], artifacts.items)
         self.assertEqual(store.enqueued[0][0][0], "prepare_ci_fix")
         self.assertEqual(store.enqueued[0][0][1]["analysis_task_id"], context.task_id)
-        self.assertEqual(store.enqueued[0][1]["dedupe_key"], "ci-fix-proposal:90")
+        self.assertEqual(store.enqueued[0][0][2], "ci-fix-proposal:90")
 
 
 if __name__ == "__main__":
