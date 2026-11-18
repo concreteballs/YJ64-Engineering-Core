@@ -35,7 +35,7 @@ The app repository's CI has verified compilation, unit tests, and Docker image b
 
 Protocol: `yj64.council-api.v1`
 
-The paths below are the concrete proposed defaults used by `CouncilGatewayClient`. They must be implemented by the YJ-64 application or explicitly mapped through the environment-configured API base path before production use.
+The paths below are implemented by the YJ-64 Supabase Edge Function and are the defaults used by `CouncilGatewayClient`. Set `YJ64_COUNCIL_API_URL` to the function base URL (for example, the Supabase project URL ending in `/functions/v1/council-api`); the versioned route is appended to that base path.
 
 | Operation | Method and path | Purpose |
 |---|---|---|
