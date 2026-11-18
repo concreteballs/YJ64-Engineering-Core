@@ -58,12 +58,40 @@ def publish_candidate_for_review(candidate: dict, *, repository: str, token: str
     if (
         not isinstance(diff, str) or not diff.strip()
         or not isinstance(files, list) or not files
-        or any(not isinstance(p, str) or p.startswith("/") or ".." in p.split("/") for p in files)
+        or any(
+            not isinstance(p, str) or not p or p.startswith("/")
+            or "\\\\" in p or any(part in {"", ".", ".."} for part in p.split("/"))
+            for p in files
+        )
+        or len(files) != len(set(files))
         or not isinstance(base_sha, str) or len(base_sha) != 40
         or not isinstance(proposal_id, int) or isinstance(proposal_id, bool)
         or not isinstance(digest, str) or len(digest) != 64
     ):
         raise ValueError("patch_review_candidate_invalid")
+
+    # Validate the diff's own file headers before touching git. The declared
+    # allowlist must match exactly, with one header pair per target file.
+    header_paths = re.findall(r"^(?:--- a/|\\+\\+\\+ b/)(.+)$", diff, re.MULTILINE)
+    if not header_paths or len(header_paths) % 2:
+        raise ValueError("patch_review_diff_headers_invalid")
+    normalized_headers = []
+    for header_path in header_paths:
+        if (
+            not header_path or header_path.startswith("/")
+            or "\\\\" in header_path
+            or any(part in {"", ".", ".."} for part in header_path.split("/"))
+        ):
+            raise ValueError("patch_review_diff_path_invalid")
+        normalized_headers.append(header_path)
+    header_set = set(normalized_headers)
+    if (
+        len(header_set) != len(files)
+        or len(normalized_headers) != len(header_set) * 2
+        or header_set != set(files)
+        or any(normalized_headers[i] != normalized_headers[i + 1] for i in range(0, len(normalized_headers), 2))
+    ):
+        raise ValueError("patch_review_diff_file_set_mismatch")
 
     branch = f"ci-patch/review-{proposal_id}-{digest[:10]}"
     env = {**os.environ, "GH_TOKEN": token}
