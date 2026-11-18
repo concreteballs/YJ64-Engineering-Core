@@ -63,10 +63,19 @@ class CouncilRequest:
     max_rounds: int = 3
     timeout_seconds: int = 1800
     max_output_tokens: int = 12000
+    voting_enabled: bool = False
+    weighted_voting_enabled: bool = False
+    allow_early_stop: bool = True
 
     def to_payload(self, agent_id: str) -> dict[str, Any]:
         if self.mode not in MODES:
             raise ValueError("mode must be consensus or critique")
+        if not isinstance(self.voting_enabled, bool) or not isinstance(self.weighted_voting_enabled, bool):
+            raise ValueError("voting flags must be booleans")
+        if not isinstance(self.allow_early_stop, bool):
+            raise ValueError("allow_early_stop must be a boolean")
+        if self.weighted_voting_enabled and not self.voting_enabled:
+            raise ValueError("weighted voting requires voting_enabled")
         for name, value, maximum in (
             ("title", self.title, 500),
             ("prompt", self.prompt, 50000),
@@ -114,6 +123,11 @@ class CouncilRequest:
                 "timeout_seconds": self.timeout_seconds,
                 "max_output_tokens": self.max_output_tokens,
                 "minimum_critique_rounds": 1,
+                "allow_early_stop": self.allow_early_stop,
+            },
+            "voting": {
+                "enabled": self.voting_enabled,
+                "weighted": self.weighted_voting_enabled,
             },
         }
 
