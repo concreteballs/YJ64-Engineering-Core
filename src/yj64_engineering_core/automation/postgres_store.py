@@ -116,7 +116,10 @@ class PostgresCycleStore:
         *, max_attempts: int = 3,
     ) -> dict:
         """Idempotently enqueue one allowlisted internal task in the existing queue."""
-        allowed_types = {"process_ci_event", "analyze_ci_logs", "prepare_ci_fix", "generate_ci_patch"}
+        allowed_types = {
+            "process_ci_event", "analyze_ci_logs", "prepare_ci_fix", "generate_ci_patch",
+            "submit_council_request", "poll_council_request", "council_result_ready",
+        }
         if task_type not in allowed_types:
             raise ValueError("task_type is not allowlisted")
         if not isinstance(payload, dict):
