@@ -82,7 +82,7 @@ def select_diagnostic_log_excerpt(log_text: str, max_chars: int = 90_000) -> str
     )
     selected: dict[int, str] = {}
     used = len(header) + 1
-    budget = max_chars - 5_000
+    budget = max_chars - 20_000
     for index, _score in sorted(
         priorities.items(), key=lambda item: (-item[1], -item[0])
     ):
