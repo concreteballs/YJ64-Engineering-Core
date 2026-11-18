@@ -22,6 +22,54 @@ from yj64_engineering_core.automation.supabase_storage import SupabaseStorageArt
 from yj64_engineering_core.automation.worker import WorkerRunner
 
 
+def _write_step_summary(analysis: dict, model: str) -> None:
+    """Expose the durable report in the Actions run summary without rendering model Markdown."""
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
+    if not summary_path:
+        return
+    report = analysis.get("analysis_json") or {}
+
+    def fenced(value) -> str:
+        safe = str(value if value is not None else "").replace("```", "'''")
+        return "```text\\n" + safe + "\\n```"
+
+    lines = [
+        "## YJ64 CI log analysis",
+        "",
+        f"- Model: `{model}`",
+        "- Provider cost recorded: $0.00",
+        f"- Analysis status: `{analysis.get('analysis_status', 'unknown')}`",
+        "",
+    ]
+    if analysis.get("analysis_status") == "completed":
+        lines.extend([
+            "### Summary",
+            "",
+            fenced(report.get("summary", "")),
+            "",
+            "### Likely root cause",
+            "",
+            fenced(report.get("root_cause", "")),
+            "",
+            f"Confidence: {report.get('confidence', 'not provided')}",
+            "",
+            "### Suggested actions",
+            "",
+        ])
+        for item in report.get("suggested_actions", []):
+            lines.extend([fenced(item), ""])
+        lines.extend(["### Verification steps", ""])
+        for item in report.get("verification_steps", []):
+            lines.extend([fenced(item), ""])
+    else:
+        lines.extend([
+            "The provider response was saved, but it did not pass report validation.",
+            "",
+            fenced(report.get("reason", "unknown")),
+        ])
+    with open(summary_path, "a", encoding="utf-8") as handle:
+        handle.write("\\n".join(lines) + "\\n")
+
 def main() -> int:
     required = (
         "YJ64_DATABASE_URL", "GEMINI_API_KEY",
@@ -78,6 +126,10 @@ def main() -> int:
             allowed_task_types=["analyze_ci_logs"],
         )
         result = runner.run_once()
+        if isinstance(result.get("task_id"), int):
+            saved_analysis = store.get_ci_log_analysis(result["task_id"])
+            if saved_analysis is not None:
+                _write_step_summary(saved_analysis, GEMINI_MODEL)
         print(json.dumps({
             "ok": result.get("status") in {"completed", "idle", "blocked"},
             "worker": "ci_log_analysis",
