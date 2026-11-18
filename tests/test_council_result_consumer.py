@@ -15,11 +15,23 @@ class FakeArtifactStore:
         return self.content
 
 
+class FakeResumeStore:
+    def __init__(self):
+        self.calls = []
+        self.result = {"accepted": True, "duplicate": False}
+
+    def record_council_resume_event(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.result
+
+
 class FakeContext:
     task_id = 71
+    worker_id = "result-worker"
 
     def __init__(self):
         self.checkpoints = []
+        self.store = FakeResumeStore()
 
     def load_latest_checkpoint(self):
         return self.checkpoints[-1] if self.checkpoints else None
@@ -96,6 +108,24 @@ class CouncilResultConsumerTests(unittest.TestCase):
         self.assertEqual(state["parent_task_id"], 12)
         self.assertEqual(state["council_result"]["outcome"], "unresolved_disagreement")
         self.assertTrue(state["model_output_is_untrusted_data"])
+        self.assertEqual(len(context.store.calls), 1)
+        self.assertEqual(context.store.calls[0]["parent_task_id"], 12)
+        self.assertEqual(context.store.calls[0]["result_task_id"], 71)
+        self.assertEqual(context.store.calls[0]["council_request_id"], "req-1")
+        self.assertEqual(context.store.calls[0]["result_sha256"], state["result_sha256"])
+        self.assertEqual(len(state["result_sha256"]), 64)
+
+    def test_parent_resume_rejection_blocks_after_preserving_result_checkpoint(self):
+        task, content = make_task()
+        context = FakeContext()
+        context.store.result = {"accepted": False, "duplicate": False, "reason": "parent_not_waiting"}
+        decision = handle_council_result_ready(
+            task, context,
+            artifact_store_factory=lambda: FakeArtifactStore(content),
+        )
+        self.assertEqual(decision, TaskExecutionResult("blocked", "parent_not_waiting"))
+        self.assertEqual(len(context.checkpoints), 1)
+        self.assertEqual(context.checkpoints[0]["task_state"]["stage"], "council_result_verified")
 
     def test_incomplete_result_is_blocked_and_checkpointed(self):
         task, _ = make_task(status="blocked")
