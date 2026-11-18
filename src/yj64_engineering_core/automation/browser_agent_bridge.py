@@ -43,6 +43,13 @@ def validate_envelope(envelope: Mapping[str, Any], *, now: datetime | None = Non
     if not isinstance(envelope, Mapping):
         raise ValueError("envelope must be an object")
     data = dict(envelope)
+    allowed = {
+        "schema_version", "message_id", "message_type", "created_at", "expires_at",
+        "repository", "branch", "task_id", "run_id", "run_attempt", "commit_sha",
+        "payload_sha256", "idempotency_key", "payload",
+    }
+    if set(data) - allowed:
+        raise ValueError("envelope contains unknown fields")
     required = {
         "schema_version", "message_id", "message_type", "created_at",
         "expires_at", "repository", "branch", "task_id", "payload_sha256", "payload",
