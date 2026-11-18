@@ -116,7 +116,7 @@ class PostgresCycleStore:
         *, max_attempts: int = 3,
     ) -> dict:
         """Idempotently enqueue one allowlisted internal task in the existing queue."""
-        allowed_types = {"process_ci_event", "analyze_ci_logs"}
+        allowed_types = {"process_ci_event", "analyze_ci_logs", "prepare_ci_fix"}
         if task_type not in allowed_types:
             raise ValueError("task_type is not allowlisted")
         if not isinstance(payload, dict):
@@ -1347,6 +1347,123 @@ class PostgresCycleStore:
                     "analysis_sha256": analysis_sha256,
                     "analysis_artifact_ref": analysis_artifact_ref,
                     "analysis_status": analysis_status,
+                }
+
+    def get_ci_fix_proposal(self, proposal_task_id: int) -> dict | None:
+        """Read one durable repair proposal by its unique queue task."""
+        if not isinstance(proposal_task_id, int) or isinstance(proposal_task_id, bool) or proposal_task_id < 1:
+            raise ValueError("proposal_task_id must be a positive integer")
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT analysis_task_id, event_id, proposal_status, proposal_json,
+                           proposal_artifact_ref, proposal_sha256
+                    FROM yj64_ci_fix_proposals
+                    WHERE proposal_task_id = %s
+                    """,
+                    (proposal_task_id,),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                proposal = row[3]
+                if isinstance(proposal, str):
+                    proposal = json.loads(proposal)
+                return {
+                    "proposal_task_id": proposal_task_id,
+                    "analysis_task_id": row[0],
+                    "event_id": row[1],
+                    "proposal_status": row[2],
+                    "proposal_json": proposal,
+                    "proposal_artifact_ref": row[4],
+                    "proposal_sha256": str(row[5]).strip(),
+                }
+
+    def save_ci_fix_proposal(
+        self, *, proposal_task_id: int, worker_id: str, lease_seconds: int,
+        analysis_task_id: int, event_id: int, proposal_status: str,
+        proposal_json: dict, proposal_artifact_ref: str, proposal_sha256: str,
+    ) -> dict:
+        """Persist a repair proposal only under the live queue-task lease."""
+        import hashlib
+        import re
+
+        for name, value in (
+            ("proposal_task_id", proposal_task_id),
+            ("analysis_task_id", analysis_task_id),
+            ("event_id", event_id),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        if proposal_status not in {"awaiting_review", "needs_more_evidence"}:
+            raise ValueError("unsupported initial proposal status")
+        if not isinstance(proposal_json, dict):
+            raise ValueError("proposal_json must be an object")
+        if not isinstance(proposal_artifact_ref, str) or not proposal_artifact_ref.strip():
+            raise ValueError("proposal_artifact_ref is required")
+        if "?" in proposal_artifact_ref or "#" in proposal_artifact_ref:
+            raise ValueError("proposal artifact reference must be opaque")
+        if not isinstance(proposal_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", proposal_sha256):
+            raise ValueError("proposal_sha256 must be a lowercase SHA-256 digest")
+        proposal_text = json.dumps(
+            proposal_json, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        if hashlib.sha256(proposal_text.encode("utf-8")).hexdigest() != proposal_sha256:
+            raise ValueError("proposal hash does not match canonical JSON")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT task_id FROM yj64_task_queue
+                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                      AND locked_at >= now() - (%s * interval '1 second')
+                    FOR UPDATE
+                    """,
+                    (proposal_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot persist proposal without a live task lease")
+                cursor.execute(
+                    """
+                    INSERT INTO yj64_ci_fix_proposals
+                        (proposal_task_id, analysis_task_id, event_id, proposal_status,
+                         proposal_json, proposal_artifact_ref, proposal_sha256)
+                    VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s)
+                    ON CONFLICT (analysis_task_id) DO NOTHING
+                    """,
+                    (
+                        proposal_task_id, analysis_task_id, event_id, proposal_status,
+                        proposal_text, proposal_artifact_ref, proposal_sha256,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    SELECT proposal_task_id, event_id, proposal_status,
+                           proposal_artifact_ref, proposal_sha256
+                    FROM yj64_ci_fix_proposals
+                    WHERE analysis_task_id = %s
+                    """,
+                    (analysis_task_id,),
+                )
+                saved = cursor.fetchone()
+                if saved is None or (
+                    saved[0] != proposal_task_id or saved[1] != event_id
+                    or saved[2] != proposal_status or saved[3] != proposal_artifact_ref
+                    or str(saved[4]).strip() != proposal_sha256
+                ):
+                    raise ValueError("analysis already has a conflicting CI fix proposal")
+                return {
+                    "persisted": True, "proposal_task_id": proposal_task_id,
+                    "analysis_task_id": analysis_task_id,
+                    "proposal_status": proposal_status,
+                    "proposal_sha256": proposal_sha256,
                 }
 
     def set_task_usage_budget(
