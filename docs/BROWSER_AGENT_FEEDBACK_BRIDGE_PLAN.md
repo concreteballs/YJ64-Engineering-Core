@@ -42,5 +42,8 @@ Suggested message categories: ci_observation, test_report, verification_request,
 8. Test lifecycle and adversarial cases: duplicate/stale messages, wrong commit, spoofed result, missing evidence, redacted logs, timeout, repeat failures, council non-consensus, budget exhaustion, completion terminal state.
 9. End-to-end acceptance: browser observation → verified message → worker decision → next task/repair → exact commit CI → terminal stop. Do not claim operational until tested end-to-end.
 
+## Current implementation checkpoint
+The versioned envelope schema and initial validation primitives now exist: schema version, allowlisted repository/branch, message type, ID, task/run identity, commit SHA, timestamps/expiry, payload object, and payload SHA-256 integrity. The validator rejects unknown fields, invalid identities, expired messages and tampered payload hashes. This is not yet durable message storage, browser control, or a live feedback loop; CI validation is pending.
+
 ## Immediate first step
-Create this protocol and a machine-readable message-envelope schema. This is an additive, reviewable foundation only; it does not yet mean the browser agent is connected or the cycle is autonomous.
+Protocol/schema and envelope validation have been delivered as an additive foundation. Next audit the current queue and artifact store to decide how immutable messages and acknowledgements can reuse durable storage. Do not claim browser-agent integration until the end-to-end acceptance sequence passes.
