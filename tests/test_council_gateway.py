@@ -91,7 +91,7 @@ class CouncilGatewayClientTests(unittest.TestCase):
             "status": "completed",
             "outcome": "qualified_consensus",
             "summary": "Agreement with one unresolved limitation.",
-            "claims": [{"claim": "A", "kind": "inference"}],
+            "claims": [{"claim_id": "claim-1", "statement": "A", "epistemic_type": "inference", "reasoning": "Derived from evidence.", "evidence_refs": ["evidence-1"]}],
             "participant_positions": [{"participant": "P1", "position": "agree"}],
             "dissent": [{"participant": "P2", "reason": "missing test"}],
             "evidence": [{"ref": "artifact://evidence/1"}],
@@ -121,6 +121,19 @@ class CouncilGatewayClientTests(unittest.TestCase):
             "status": "completed",
             "outcome": "forced_agreement",
             "summary": "Done",
+        })
+        with self.assertRaises(CouncilGatewayError):
+            self.client(opener).get_result("request-123", "session-123")
+
+    def test_rejects_claim_without_epistemic_classification(self):
+        opener = FakeOpener({
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": "request-123",
+            "session_id": "session-123",
+            "status": "completed",
+            "outcome": "consensus",
+            "summary": "Done",
+            "claims": [{"claim_id": "c1", "statement": "A", "epistemic_type": "guess", "reasoning": "", "evidence_refs": []}],
         })
         with self.assertRaises(CouncilGatewayError):
             self.client(opener).get_result("request-123", "session-123")
