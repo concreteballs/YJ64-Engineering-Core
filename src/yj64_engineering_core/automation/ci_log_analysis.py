@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -37,6 +38,81 @@ _FAILURE_CLASSES = {
 }
 
 
+
+_SIGNAL_PATTERN = re.compile(
+    r"\\b(error|failed|failure|exception|traceback|fatal|panic|timeout|timed out|"
+    r"denied|not found|no matching|unable|cannot|could not|refused|unavailable|"
+    r"segmentation|assertion|warning|build failed|exit code [1-9])\\b",
+    re.IGNORECASE,
+)
+_CRITICAL_PATTERN = re.compile(
+    r"\\b(error|failed|failure|exception|traceback|fatal|panic|timeout|timed out|"
+    r"denied|not found|no matching|segmentation|assertion|build failed)\\b",
+    re.IGNORECASE,
+)
+
+
+def select_diagnostic_log_excerpt(log_text: str, max_chars: int = 90_000) -> str:
+    """Keep the head, tail and high-signal error windows with original line numbers."""
+    if not isinstance(log_text, str) or not log_text:
+        raise ValueError("log_text must be a non-empty string")
+    if not isinstance(max_chars, int) or isinstance(max_chars, bool) or max_chars < 10_000:
+        raise ValueError("max_chars must be at least 10000")
+    if len(log_text) <= max_chars:
+        return log_text
+
+    lines = log_text.splitlines()
+    priorities: dict[int, int] = {}
+    for index in range(min(20, len(lines))):
+        priorities[index] = max(priorities.get(index, 0), 55)
+    for index in range(max(0, len(lines) - 80), len(lines)):
+        priorities[index] = max(priorities.get(index, 0), 85)
+
+    for index, line in enumerate(lines):
+        if not _SIGNAL_PATTERN.search(line):
+            continue
+        severity = 125 if _CRITICAL_PATTERN.search(line) else 75
+        for nearby in range(max(0, index - 4), min(len(lines), index + 7)):
+            score = severity - abs(nearby - index) * 5
+            priorities[nearby] = max(priorities.get(nearby, 0), score)
+
+    header = (
+        f"[DIAGNOSTIC EXCERPT: selected from {len(lines)} original lines; "
+        "omitted sections remain in the private source log.]"
+    )
+    selected: dict[int, str] = {}
+    used = len(header) + 1
+    budget = max_chars - 5_000
+    for index, _score in sorted(
+        priorities.items(), key=lambda item: (-item[1], -item[0])
+    ):
+        line = lines[index]
+        if len(line) > 800:
+            line = line[:800] + " [line shortened]"
+        rendered = f"[line {index + 1}] {line}"
+        cost = len(rendered) + 1
+        if used + cost <= budget:
+            selected[index] = rendered
+            used += cost
+
+    output = [header]
+    previous = -2
+    for index in sorted(selected):
+        if index > previous + 1:
+            start = previous + 2
+            end = index
+            if start <= end:
+                output.append(f"[... omitted original lines {start}-{end} ...]")
+        output.append(selected[index])
+        previous = index
+    if previous < len(lines) - 1:
+        output.append(f"[... omitted original lines {previous + 2}-{len(lines)} ...]")
+    excerpt = "\\n".join(output)
+    if len(excerpt) > max_chars:
+        excerpt = excerpt[:max_chars - 40] + "\\n[excerpt hard limit reached]"
+    return excerpt
+
+
 def build_gemini_request(event: dict, log_text: str) -> bytes:
     """Serialize one bounded diagnostic request; the log is explicitly untrusted."""
     if not isinstance(event, dict) or not isinstance(log_text, str) or not log_text:
@@ -49,6 +125,8 @@ def build_gemini_request(event: dict, log_text: str) -> bytes:
         "If evidence is insufficient, say so and use failure_classification=unknown. "
         "Return only JSON matching the supplied response schema."
     )
+    excerpt = select_diagnostic_log_excerpt(log_text)
+    excerpt_note = "The original log is complete in private storage. " if excerpt == log_text else "This is a deterministic diagnostic excerpt; omitted lines remain in private storage. "
     user_text = (
         "Diagnose this completed GitHub Actions run. Identify the most likely root cause, cite "
         "short exact log excerpts, explain confidence, and suggest safe next checks. Do not write "
@@ -61,7 +139,7 @@ def build_gemini_request(event: dict, log_text: str) -> bytes:
         f"Commit: {event.get('commit_sha', '')}\n"
         f"Run URL: {event.get('run_url', '')}\n\n"
         "BEGIN UNTRUSTED CI LOG\n"
-        + log_text
+        + excerpt
         + "\nEND UNTRUSTED CI LOG"
     )
     schema = {
