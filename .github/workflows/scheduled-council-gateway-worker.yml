@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   process-one:
-    name: Process one council task (worker \${{ matrix.slot }})
+    name: Process one council task (worker ${{ matrix.slot }})
     runs-on: ubuntu-latest
     timeout-minutes: 4
     strategy:
@@ -56,11 +56,11 @@ jobs:
       - name: Process one Council Gateway task
         if: steps.config.outputs.enabled == 'true'
         env:
-          YJ64_DATABASE_URL: \${{ secrets.YJ64_DATABASE_URL }}
-          YJ64_COUNCIL_API_URL: \${{ secrets.YJ64_COUNCIL_API_URL }}
-          YJ64_COUNCIL_AGENT_TOKEN: \${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
+          YJ64_DATABASE_URL: ${{ secrets.YJ64_DATABASE_URL }}
+          YJ64_COUNCIL_API_URL: ${{ secrets.YJ64_COUNCIL_API_URL }}
+          YJ64_COUNCIL_AGENT_TOKEN: ${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
           YJ64_COUNCIL_AGENT_ID: yj64-engineering-core
-          SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          YJ64_WORKER_SLOT: \${{ matrix.slot }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          YJ64_WORKER_SLOT: ${{ matrix.slot }}
         run: python scripts/run_council_gateway_worker.py
