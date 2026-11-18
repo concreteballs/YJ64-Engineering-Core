@@ -1,6 +1,11 @@
 name: Poll Android runtime runs
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/poll-android-runtime-runs.yml"
+      - "scripts/poll_android_runtime_runs.py"
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
