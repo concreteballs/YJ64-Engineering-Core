@@ -99,7 +99,7 @@ class CouncilGatewayClientTests(unittest.TestCase):
         })
         result = self.client(opener).get_result("request-123", "session-123")
         self.assertEqual(result["outcome"], "qualified_consensus")
-        self.assertEqual(result["dissent"][0]["participant"], "P2")
+        self.assertEqual(result["dissent"][0]["participant_id"], "P2")
 
     def test_rejects_result_for_another_session(self):
         opener = FakeOpener({
