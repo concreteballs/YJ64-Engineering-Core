@@ -189,6 +189,30 @@ class CouncilGatewayClientTests(unittest.TestCase):
         with self.assertRaises(CouncilGatewayError):
             self.client(opener).get_result("request-123", "session-123")
 
+    def test_api_routes_can_be_mapped_to_the_agreed_application_contract(self):
+        opener = FakeOpener({
+            "protocol_version": PROTOCOL_VERSION,
+            "request_id": "request-123",
+            "session_id": "session-123",
+            "status": "running",
+        })
+        client = CouncilGatewayClient(
+            base_url="https://yj64.example",
+            token="server-only-token",
+            opener=opener,
+            status_path_template="/v2/native-council/jobs/{request_id}/state",
+        )
+        client.get_status("request-123")
+        self.assertTrue(opener.requests[0][0].full_url.endswith("/v2/native-council/jobs/request-123/state"))
+
+    def test_api_route_templates_cannot_change_the_configured_origin(self):
+        with self.assertRaises(ValueError):
+            CouncilGatewayClient(
+                base_url="https://yj64.example",
+                token="token",
+                status_path_template="https://attacker.example/{request_id}",
+            )
+
     def test_rejects_plain_http_by_default(self):
         with self.assertRaises(ValueError):
             CouncilGatewayClient(base_url="http://yj64.example", token="token")
