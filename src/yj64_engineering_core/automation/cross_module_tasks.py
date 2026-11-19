@@ -143,6 +143,8 @@ def enqueue_cross_module_assessment_from_parent(
         if len(set(relevant_modules)) != len(relevant_modules):
             return TaskExecutionResult("blocked", "cross_module_parent_scope_invalid")
         candidate_data = dict(candidate)
+        if candidate_data.get("schema_id") != "yj64.cross_module.candidate.v1" or candidate_data.get("schema_version") != "1.0":
+            return TaskExecutionResult("blocked", "cross_module_parent_candidate_schema_invalid")
         candidate_digest = _digest(candidate_data)
         candidate_id = candidate_data.get("candidate_id")
         version = candidate_data.get("version")
@@ -176,6 +178,8 @@ def enqueue_cross_module_assessment_from_parent(
             if not isinstance(previous_state, dict):
                 return TaskExecutionResult("blocked", "cross_module_parent_checkpoint_invalid")
             task_state = dict(previous_state)
+            if task_state.get("stage") == "parent_resume_ready":
+                return TaskExecutionResult("blocked", "cross_module_parent_resume_must_be_consumed_first")
             if task_state.get("stage") == "waiting_child":
                 if (
                     task_state.get("expected_child_correlation_key") != correlation_key
