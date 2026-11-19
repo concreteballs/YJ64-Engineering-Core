@@ -145,3 +145,142 @@ def to_wire_condition_disposition(value: ConditionDisposition) -> dict[str, Any]
         "decided_by": value.decided_by,
         "decision_version": value.decision_version,
     }
+
+
+def evaluate_cross_module_acceptance(
+    candidate: Mapping[str, Any],
+    relevant_modules: Iterable[str],
+    reviews: Iterable[Mapping[str, Any]],
+    contributions: Iterable[Mapping[str, Any]],
+    dispositions: Iterable[ConditionDisposition] = (),
+) -> dict[str, Any]:
+    """Build a fail-closed canonical assessment envelope.
+
+    This is a pure parent-side gate. It does not execute tasks or grant
+    permissions. All relevant modules must independently review and provide
+    an enhancement contribution for the exact candidate revision.
+    """
+    target = _candidate_key(candidate)
+    modules = tuple(sorted(set(relevant_modules)))
+    if not modules or any(not isinstance(m, str) or not m.strip() for m in modules):
+        raise ValueError("relevant_modules must contain non-empty module identifiers")
+    if target[3] not in modules:
+        raise ValueError("origin_module must be included in relevant_modules")
+
+    review_list = tuple(reviews)
+    contribution_list = tuple(contributions)
+    blockers: list[str] = []
+    missing_reviews: list[str] = []
+    missing_contributions: list[str] = []
+    by_reviewer: dict[str, Mapping[str, Any]] = {}
+    by_contributor: dict[str, Mapping[str, Any]] = {}
+
+    for review in review_list:
+        if not isinstance(review, Mapping):
+            raise TypeError("reviews must contain mapping objects")
+        ref = review.get("candidate")
+        if not isinstance(ref, Mapping) or _candidate_key(ref) != target:
+            continue
+        reviewer = review.get("reviewer_module")
+        if not isinstance(reviewer, str) or reviewer not in modules:
+            blockers.append("review-from-unknown-or-invalid-module")
+            continue
+        if reviewer in by_reviewer:
+            blockers.append(f"duplicate-review:{reviewer}")
+            continue
+        by_reviewer[reviewer] = review
+
+    for contribution in contribution_list:
+        if not isinstance(contribution, Mapping):
+            raise TypeError("contributions must contain mapping objects")
+        ref = contribution.get("candidate")
+        if not isinstance(ref, Mapping) or _candidate_key(ref) != target:
+            continue
+        module = contribution.get("module_id")
+        if not isinstance(module, str) or module not in modules:
+            blockers.append("contribution-from-unknown-or-invalid-module")
+            continue
+        if module in by_contributor:
+            blockers.append(f"duplicate-contribution:{module}")
+            continue
+        by_contributor[module] = contribution
+
+    for module in modules:
+        review = by_reviewer.get(module)
+        if review is None:
+            missing_reviews.append(module)
+            continue
+        status = review.get("status")
+        if status == "reject":
+            blockers.append(f"review-rejected:{module}")
+        elif status == "not_reviewed":
+            blockers.append(f"review-not-completed:{module}")
+        elif status not in ("pass", "not_applicable", "conditional"):
+            blockers.append(f"invalid-review-status:{module}")
+        if status == "not_applicable" and not str(review.get("rationale", "")).strip():
+            blockers.append(f"not-applicable-without-rationale:{module}")
+        if review.get("hard_constraints"):
+            blockers.append(f"hard-constraints:{module}")
+
+        contribution = by_contributor.get(module)
+        if contribution is None:
+            missing_contributions.append(module)
+        else:
+            proposals = contribution.get("proposals", [])
+            no_proposal = contribution.get("no_proposal", False)
+            rationale = contribution.get("rationale", "")
+            if no_proposal is True:
+                if proposals or not isinstance(rationale, str) or not rationale.strip():
+                    blockers.append(f"invalid-no-proposal-response:{module}")
+            elif not isinstance(proposals, list) or not proposals:
+                blockers.append(f"missing-enhancement-proposal-or-rationale:{module}")
+            else:
+                for proposal in proposals:
+                    if not isinstance(proposal, Mapping):
+                        blockers.append(f"invalid-proposal:{module}")
+                        continue
+                    pref = proposal.get("candidate")
+                    if not isinstance(pref, Mapping) or _candidate_key(pref) != target:
+                        blockers.append(f"proposal-candidate-mismatch:{module}")
+                    if proposal.get("proposing_module") != module:
+                        blockers.append(f"proposal-origin-mismatch:{module}")
+                    if not proposal.get("evidence") or not proposal.get("success_criteria"):
+                        blockers.append(f"proposal-evidence-or-criteria-missing:{module}")
+
+    conditional_reviews = [
+        r for r in by_reviewer.values() if r.get("status") == "conditional"
+    ]
+    conditions_ok, condition_blockers = evaluate_condition_dispositions(
+        candidate, conditional_reviews, dispositions
+    )
+    if not conditions_ok:
+        blockers.extend(condition_blockers)
+
+    if missing_reviews:
+        blockers.extend(f"missing-review:{m}" for m in missing_reviews)
+    if missing_contributions:
+        blockers.extend(f"missing-contribution:{m}" for m in missing_contributions)
+
+    independent_reviewers = {
+        module for module, review in by_reviewer.items()
+        if module != target[3] and review.get("status") in ("pass", "not_applicable", "conditional")
+    }
+    if not independent_reviewers:
+        blockers.append("no-independent-reviewer")
+
+    decision = "accepted" if not blockers else (
+        "rejected" if any(x.startswith("review-rejected:") for x in blockers) else "pending"
+    )
+    return {
+        "schema_id": "yj64.cross_module.assessment.v1",
+        "schema_version": "1.0",
+        "candidate": dict(candidate),
+        "relevant_modules": list(modules),
+        "reviews": list(review_list),
+        "contributions": list(contribution_list),
+        "missing_reviews": missing_reviews,
+        "missing_contributions": missing_contributions,
+        "blocking_findings": sorted(set(blockers)),
+        "condition_dispositions": [to_wire_condition_disposition(x) for x in dispositions],
+        "decision": decision,
+    }
