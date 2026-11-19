@@ -3,6 +3,7 @@ import json
 import unittest
 
 from yj64_engineering_core.automation.checkpoints import create_checkpoint
+from yj64_engineering_core.automation.worker import TaskContext
 from yj64_engineering_core.automation.parent_resume import (
     PARENT_RESUME_PROTOCOL,
     build_parent_resume_checkpoint,
@@ -20,6 +21,14 @@ class FakeArtifactStore:
     def get(self, reference):
         self.requested.append(reference)
         return self.content
+
+
+class FakeTaskStore:
+    def __init__(self, checkpoint):
+        self.checkpoint = checkpoint
+
+    def load_latest_checkpoint(self, task_id):
+        return self.checkpoint
 
 
 class ParentResumeTests(unittest.TestCase):
@@ -60,6 +69,17 @@ class ParentResumeTests(unittest.TestCase):
         self.assertEqual(resume["parent_task_state"]["objective"], "preserve parent objective")
         self.assertEqual(checkpoint["approvals"], {"repository_write": False})
         self.assertIn("private://assessment/rev-7", checkpoint["artifact_refs"])
+
+
+    def test_task_context_loads_verified_parent_artifact(self):
+        content = json.dumps({"schema_id": "yj64.cross_module.assessment-artifact.v1", "schema_version": "1.0", "candidate_digest": "b" * 64, "assessment": {"decision": "pending"}}).encode()
+        digest = hashlib.sha256(content).hexdigest()
+        result = {**self.child_result(), "result_sha256": digest}
+        checkpoint = build_parent_resume_checkpoint(self.parent_checkpoint(), result, resume_event_id=8)
+        context = TaskContext(store=FakeTaskStore(checkpoint), task_id=11, worker_id="test-worker", lease_seconds=300)
+        loaded = context.load_parent_resume_artifact(FakeArtifactStore(content))
+        self.assertEqual(loaded["resume"]["child_task_id"], 22)
+        self.assertEqual(loaded["artifact"]["assessment"]["decision"], "pending")
 
     def test_rejects_wrong_parent(self):
         result = self.child_result()
