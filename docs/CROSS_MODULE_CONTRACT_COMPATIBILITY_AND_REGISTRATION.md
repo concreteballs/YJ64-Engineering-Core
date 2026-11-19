@@ -172,9 +172,10 @@ constructs the idempotent child task payload, enqueues it through the existing
 task store, preserves the parent's current objective/budgets/approvals/artifacts
 in a waiting_child checkpoint, and calls context.suspend_for_child(...). The
 correlation key is bound to the parent task and exact candidate revision. On
-re-entry the parent calls context.load_parent_resume(), retrieves the artifact
-through the private artifact store, checks the candidate revision/digest,
-incorporates the result into its own state, and calls
+re-entry the parent calls context.load_parent_resume_artifact(artifact_store),
+which verifies the checkpoint identity and artifact SHA-256 before parsing the
+JSON. The parent must still validate the domain schema and candidate revision,
+incorporate the untrusted result into its own state, and call
 context.checkpoint_parent_resume_consumed(...) before returning completed.
 The child result is explicitly untrusted data. A completed assessment computation
 does not mean that the candidate was accepted; the parent must interpret pending,
