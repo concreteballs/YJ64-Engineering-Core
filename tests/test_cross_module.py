@@ -88,3 +88,70 @@ class CrossModuleConditionDispositionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+from yj64_engineering_core.cross_module import evaluate_cross_module_acceptance
+
+PASS_REVIEW = {
+    "candidate": CANDIDATE, "reviewer_module": "biology",
+    "reviewer_version": "0.1.0", "status": "pass", "rationale": "Reviewed",
+}
+MATERIALS_REVIEW = {
+    "candidate": CANDIDATE, "reviewer_module": "materials",
+    "reviewer_version": "0.2.0", "status": "pass", "rationale": "Reviewed",
+}
+BIO_CONTRIBUTION = {
+    "candidate": CANDIDATE, "module_id": "biology",
+    "no_proposal": True, "rationale": "No evidence-backed improvement identified",
+}
+MATERIALS_CONTRIBUTION = {
+    "candidate": CANDIDATE, "module_id": "materials",
+    "no_proposal": True, "rationale": "No evidence-backed improvement identified",
+}
+
+
+class CrossModuleAcceptanceGateTests(unittest.TestCase):
+    def test_acceptance_requires_complete_independent_reviews_and_contributions(self):
+        result = evaluate_cross_module_acceptance(
+            CANDIDATE, ["biology", "materials"],
+            [PASS_REVIEW, MATERIALS_REVIEW],
+            [BIO_CONTRIBUTION, MATERIALS_CONTRIBUTION],
+        )
+        self.assertEqual(result["decision"], "accepted")
+        self.assertEqual(result["blocking_findings"], [])
+
+    def test_missing_contribution_blocks_acceptance(self):
+        result = evaluate_cross_module_acceptance(
+            CANDIDATE, ["biology", "materials"],
+            [PASS_REVIEW, MATERIALS_REVIEW], [BIO_CONTRIBUTION],
+        )
+        self.assertEqual(result["decision"], "pending")
+        self.assertEqual(result["missing_contributions"], ["materials"])
+
+    def test_origin_module_cannot_self_certify(self):
+        result = evaluate_cross_module_acceptance(
+            CANDIDATE, ["biology"], [PASS_REVIEW], [BIO_CONTRIBUTION],
+        )
+        self.assertEqual(result["decision"], "pending")
+        self.assertIn("no-independent-reviewer", result["blocking_findings"])
+
+    def test_conditional_review_needs_parent_disposition(self):
+        conditional = dict(MATERIALS_REVIEW, status="conditional",
+                           conditions=["validate interface tolerance"])
+        blocked = evaluate_cross_module_acceptance(
+            CANDIDATE, ["biology", "materials"], [PASS_REVIEW, conditional],
+            [BIO_CONTRIBUTION, MATERIALS_CONTRIBUTION],
+        )
+        self.assertEqual(blocked["decision"], "pending")
+        disposition = ConditionDisposition(
+            candidate=CANDIDATE, reviewer_module="materials", condition_id="c-tolerance",
+            condition_text="validate interface tolerance", status=ConditionStatus.SATISFIED,
+            rationale="Parent checked the validation evidence", decided_by="parent_coordinator",
+            decision_version=1, evidence=({"evidence_id": "ev-tolerance"},),
+        )
+        accepted = evaluate_cross_module_acceptance(
+            CANDIDATE, ["biology", "materials"], [PASS_REVIEW, conditional],
+            [BIO_CONTRIBUTION, MATERIALS_CONTRIBUTION], (disposition,),
+        )
+        self.assertEqual(accepted["decision"], "accepted")
+        self.assertEqual(len(accepted["condition_dispositions"]), 1)
