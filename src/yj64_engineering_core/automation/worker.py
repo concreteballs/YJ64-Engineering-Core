@@ -88,6 +88,8 @@ class CycleStore(Protocol):
     def load_latest_checkpoint(self, queue_task_id: int) -> dict | None: ...
     def suspend_task_for_council(self, queue_task_id: int, worker_id: str, checkpoint: dict, council_request_id: str, lease_seconds: int = 300) -> bool: ...
     def record_council_resume_event(self, parent_task_id: int, result_task_id: int, worker_id: str, council_request_id: str, result_artifact_ref: str, result_sha256: str, resume_payload: dict) -> dict: ...
+    def suspend_task_for_child(self, queue_task_id: int, worker_id: str, checkpoint: dict, correlation_key: str, protocol_version: str, lease_seconds: int = 300) -> bool: ...
+    def record_parent_resume_event(self, parent_task_id: int, child_task_id: int, worker_id: str, child_result: dict) -> dict: ...
     def complete_task(self, task_id: int, worker_id: str) -> bool: ...
     def fail_task(self, task_id: int, worker_id: str, error: str, retry_delay_seconds: int = 60) -> str | None: ...
     def block_task(self, task_id: int, worker_id: str, reason: str) -> bool: ...
@@ -124,6 +126,9 @@ class TaskContext:
     _council_resume_required: bool = field(default=False, init=False, compare=False, repr=False)
     _council_resume_loaded: bool = field(default=False, init=False, compare=False, repr=False)
     _council_resume_expected_request_id: str | None = field(default=None, init=False, compare=False, repr=False)
+    _parent_resume_required: bool = field(default=False, init=False, compare=False, repr=False)
+    _parent_resume_loaded: bool = field(default=False, init=False, compare=False, repr=False)
+    _parent_resume_expected_correlation_key: str | None = field(default=None, init=False, compare=False, repr=False)
 
     def record_council_resume_event(
         self, parent_task_id: int, council_request_id: str,
@@ -208,6 +213,37 @@ class TaskContext:
                 key: value for key, value in state.items() if key != "council_resume"
             },
         }
+
+    def suspend_for_child(self, checkpoint: dict, correlation_key: str, protocol_version: str) -> bool:
+        """Persist the parent checkpoint and release its lease while awaiting a child task."""
+        return self.store.suspend_task_for_child(
+            self.task_id, self.worker_id, checkpoint, correlation_key,
+            protocol_version, self.lease_seconds,
+        )
+
+    def record_parent_resume_event(self, parent_task_id: int, child_result: dict) -> dict:
+        """Atomically attach a child's durable result to its waiting parent."""
+        return self.store.record_parent_resume_event(
+            parent_task_id, self.task_id, self.worker_id, child_result,
+        )
+
+    def _require_parent_resume(self, checkpoint: dict) -> None:
+        from .parent_resume import validate_parent_resume_checkpoint
+        resume = validate_parent_resume_checkpoint(checkpoint, parent_task_id=self.task_id)
+        object.__setattr__(self, "_parent_resume_required", True)
+        object.__setattr__(self, "_parent_resume_expected_correlation_key", resume["correlation_key"])
+
+    def load_parent_resume(self) -> dict | None:
+        """Load and validate the generic child-result handoff from this task checkpoint."""
+        from .parent_resume import validate_parent_resume_checkpoint
+        checkpoint = self.load_latest_checkpoint()
+        if checkpoint is None:
+            return None
+        resume = validate_parent_resume_checkpoint(checkpoint, parent_task_id=self.task_id)
+        object.__setattr__(self, "_parent_resume_required", True)
+        object.__setattr__(self, "_parent_resume_expected_correlation_key", resume["correlation_key"])
+        object.__setattr__(self, "_parent_resume_loaded", True)
+        return resume
 
     def list_recovered_provider_results(self) -> list[dict]:
         """Return durable result references; task handlers must consume these before issuing new calls."""
@@ -340,6 +376,18 @@ class WorkerRunner:
                         "reason": "invalid_council_resume_checkpoint",
                         "recovery": recovery,
                     }
+        if isinstance(claimed_checkpoint, dict):
+            claimed_state = claimed_checkpoint.get("task_state")
+            if isinstance(claimed_state, dict) and claimed_state.get("stage") == "parent_resume_ready":
+                try:
+                    context._require_parent_resume(claimed_checkpoint)
+                except ValueError:
+                    blocked = self.store.block_task(task_id, self.worker_id, "invalid_parent_resume_checkpoint")
+                    return {
+                        "status": "blocked" if blocked else "lease_lost",
+                        "task_id": task_id, "reason": "invalid_parent_resume_checkpoint",
+                        "recovery": recovery,
+                    }
         try:
             decision = handler(task, context)
             if not isinstance(decision, TaskExecutionResult):
@@ -360,7 +408,9 @@ class WorkerRunner:
             }
 
         if decision.outcome == "suspended":
-            return {"status": "waiting_council", "task_id": task_id, "recovery": recovery}
+            claimed_state = claimed_checkpoint.get("task_state") if isinstance(claimed_checkpoint, dict) else None
+            waiting_status = "waiting_child" if isinstance(claimed_state, dict) and claimed_state.get("stage") == "waiting_child" else "waiting_council"
+            return {"status": waiting_status, "task_id": task_id, "recovery": recovery}
 
         if decision.outcome == "completed":
             if context._council_resume_required:
@@ -394,6 +444,24 @@ class WorkerRunner:
                         "status": "blocked" if blocked else "lease_lost",
                         "task_id": task_id,
                         "reason": "council_resume_not_checkpointed",
+                        "recovery": recovery,
+                    }
+            if context._parent_resume_required:
+                try:
+                    latest = context.load_latest_checkpoint()
+                    from .parent_resume import validate_parent_resume_checkpoint
+                    latest_resume = validate_parent_resume_checkpoint(latest, parent_task_id=task_id) if isinstance(latest, dict) else None
+                except Exception:
+                    latest_resume = None
+                if (
+                    not context._parent_resume_loaded
+                    or not isinstance(latest_resume, dict)
+                    or latest_resume.get("correlation_key") != context._parent_resume_expected_correlation_key
+                ):
+                    blocked = self.store.block_task(task_id, self.worker_id, "parent_resume_not_consumed")
+                    return {
+                        "status": "blocked" if blocked else "lease_lost",
+                        "task_id": task_id, "reason": "parent_resume_not_consumed",
                         "recovery": recovery,
                     }
             completed = self.store.complete_task(task_id, self.worker_id)
