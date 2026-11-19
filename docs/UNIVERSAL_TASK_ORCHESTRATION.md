@@ -103,6 +103,59 @@ The engineering adapter requires an explicit operation and an
 integrity-checked checkpoint, and records artifact references. Unknown
 operations or unregistered backends are blocked rather than guessed.
 
+## Read-only GitHub execution adapter
+
+The universal registry can compose engineering and GitHub capabilities without
+creating another worker or queue. The GitHub adapter is deliberately GET-only:
+it can read repository metadata, a commit, workflow-run metadata, a bounded list
+of workflow runs, or a bounded UTF-8 repository file. It cannot write files,
+create branches or commits, open/merge pull requests, dispatch workflows, or
+change repository settings.
+
+Configure a read-only GitHub token in the worker environment and pass it to the
+client; never place credentials in a task envelope:
+
+```python
+import os
+
+from yj64_engineering_core.automation import (
+    GitHubReadOnlyClient,
+    create_engineering_task_registry,
+    create_universal_task_worker_runner,
+    register_github_read_adapter,
+)
+
+registry = create_engineering_task_registry(dispatcher)
+github_client = GitHubReadOnlyClient(os.environ["YJ64_GITHUB_READ_TOKEN"])
+register_github_read_adapter(
+    registry,
+    github_client,
+    allowed_repositories=["concreteballs/YJ64-Engineering-Core"],
+)
+
+runner = create_universal_task_worker_runner(
+    store,
+    registry=registry,
+    worker_id="universal-worker-1",
+    additional_handlers=existing_handlers,
+)
+runner.run_once()
+```
+
+A GitHub task uses `task_type="github.read"`, requests capability
+`github.read`, and selects one of these explicit operations in
+`input_data.operation`: `repository.get`, `commit.get`,
+`workflow_run.get`, `workflow_runs.list`, or `file.get`. The deployment
+must provide a non-empty repository allowlist. File reads are limited to 128
+KiB; API responses are limited to 256 KiB. Results are saved in the normal
+integrity-checked parent checkpoint and explicitly marked as untrusted evidence.
+The adapter never treats repository text, commit messages, or workflow metadata
+as instructions or as proof that a task is complete.
+
+This adapter is the first GitHub executor boundary, not a general GitHub
+administration interface. Repository writes and workflow dispatch require a
+separate adapter, narrower permissions, and explicit human approval.
+
 ## Council and approval policies
 
 - `never`: the parent handler wraps the task context and blocks Council
