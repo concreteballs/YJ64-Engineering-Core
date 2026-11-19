@@ -53,7 +53,7 @@ Next flow-analysis layers:
 6. Transfer loads into structural FEM models.
 7. Optimise a cruising catamaran subject to payload, accommodation, range, stability, strength and operating-envelope constraints.
 
-The displacement-to-foil transition must be simulated as a transient process, not inferred from a single steady-state lift calculation.
+The displacement-to-foil transition must be simulated as a transient problem, not inferred from a single steady-state lift calculation.
 
 ## Structural physics roadmap
 
@@ -80,9 +80,20 @@ The result is a mass/cost/maintenance comparison only. It does not prove structu
 
 The long-term architecture is defined in [UNIVERSAL_ENGINEERING_ROADMAP.md](UNIVERSAL_ENGINEERING_ROADMAP.md). It extends the core beyond yacht-specific calculations to general components and assemblies, materials and material condition, polymer and metal additive manufacturing, CNC machining, heat treatment, reverse engineering and TRIZ-based candidate generation. These are capability targets to be implemented incrementally through versioned contracts and isolated specialist workers, not claims about current solver coverage.
 
-
 ## Persistent project store and declarative extension registry
 
 The additive `ProjectStore` persists append-only project snapshots, calculation records and artifact references in SQLite. Snapshot writes use expected-revision checks; calculation records preserve solver identity/version, input/result digests and pinned component revisions. A changed component revision marks dependent calculations and linked artifacts stale, including transitive dependencies declared in the snapshot. The store does not own large artifact bytes.
 
 The additive `ExtensionRegistry` stores declarative capability manifests: API and semantic versions, operations, input/output schema IDs, units, coordinate frames, time scales, dependencies, licence, permissions, safety class, network/offline support and resource metadata. It checks metadata compatibility only. It does not load or execute plugin code. Existing dispatcher, pipeline, CAD and physics implementations remain unchanged. See [PROJECT_PERSISTENCE_AND_EXTENSION_REGISTRY.md](PROJECT_PERSISTENCE_AND_EXTENSION_REGISTRY.md).
+
+## Universal task assembly and cross-domain coordination
+
+The universal task orchestrator owns lifecycle, identity, context references, dependency scheduling, checkpoints, result validation and policy enforcement. It does not own discipline-specific scientific meaning. Specialist task handlers implement common lifecycle interfaces while retaining domain-specific schemas, models, assumptions and validation. The cross-domain coordinator composes those handlers into typed dependency graphs and propagates constraints and hazards across interfaces.
+
+This is intentionally distinct from the existing engineering dispatcher: the dispatcher selects a concrete CAD/physics operation, while universal task assembly coordinates arbitrary task types and may invoke the engineering dispatcher as one specialist capability. It must reuse the existing WorkerRunner/TaskContext lifecycle rather than creating a parallel worker loop. The detailed target contract, context layers, goal graph, risk/autonomy model and incremental implementation plan are in [UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md](UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md).
+
+## Biohybrid engineering and robot hygiene
+
+Biohybrid engineering is a planned optional discipline pack connected to materials, mechanics, robotics, chemistry, electronics, manufacturing, reliability and biosafety. Its research scope includes bio-derived materials, exploratory living actuators, surface colonisation/anti-fouling, contamination monitoring and validated decontamination. These are research categories, not implemented capabilities.
+
+Robots used around people or in contaminated environments require a fomite/carrier threat model covering external surfaces, tools, seams, internal cavities, ventilation/liquid paths, service access and transport between zones. Cleanability, inspectability, validated decontamination, replaceable sealed modules and service traceability are design requirements. Bacteriophages are bacteria-specific biological agents, not universal disinfectants. Biological approaches require qualified biosafety review, containment, exposure assessment and validated inactivation/waste handling; they must not replace established infection-control procedures. The Engineering Core architecture does not specify organism construction or biological operating protocols. See [UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md](UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md).
