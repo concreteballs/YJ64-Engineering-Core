@@ -673,6 +673,225 @@ class PostgresCycleStore:
                 return blocked
 
 
+    def suspend_task_for_child(
+        self, queue_task_id: int, worker_id: str, checkpoint: dict,
+        correlation_key: str, protocol_version: str, lease_seconds: int = 300,
+    ) -> bool:
+        """Persist a generic child wait checkpoint and release the parent lease."""
+        from .checkpoints import verify_checkpoint
+        if not isinstance(queue_task_id, int) or isinstance(queue_task_id, bool) or queue_task_id < 1:
+            raise ValueError("queue_task_id must be a positive integer")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if not isinstance(correlation_key, str) or not correlation_key.strip() or len(correlation_key) > 256:
+            raise ValueError("correlation_key must be a non-empty string of at most 256 characters")
+        if not isinstance(protocol_version, str) or not protocol_version.strip() or len(protocol_version) > 128:
+            raise ValueError("protocol_version must be a non-empty string of at most 128 characters")
+        if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or not 30 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 30 and 3600")
+        verify_checkpoint(checkpoint)
+        if checkpoint.get("task_id") != str(queue_task_id):
+            raise ValueError("checkpoint task_id does not match queue_task_id")
+        state = checkpoint.get("task_state")
+        if (
+            not isinstance(state, dict) or state.get("stage") != "waiting_child"
+            or state.get("expected_child_correlation_key") != correlation_key
+            or state.get("expected_child_protocol_version") != protocol_version
+        ):
+            raise ValueError("checkpoint must identify the expected child result")
+        payload = json.dumps(checkpoint, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT task_id FROM yj64_task_queue
+                       WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                         AND locked_at >= now() - (%s * interval '1 second')
+                       FOR UPDATE""",
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.fetchone() is None:
+                    raise RuntimeError("cannot suspend without a live parent task lease")
+                cursor.execute(
+                    """SELECT sequence, checkpoint_hash FROM yj64_task_checkpoints
+                       WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1 FOR UPDATE""",
+                    (queue_task_id,),
+                )
+                latest = cursor.fetchone()
+                expected_sequence = latest[0] + 1 if latest else 1
+                expected_hash = latest[1].strip() if latest else None
+                if (
+                    checkpoint["sequence"] != expected_sequence
+                    or checkpoint["previous_checkpoint_hash"] != expected_hash
+                ):
+                    raise ValueError("child wait checkpoint must immediately follow the latest checkpoint")
+                cursor.execute(
+                    """INSERT INTO yj64_task_checkpoints
+                       (queue_task_id, sequence, schema_version, checkpoint_hash,
+                        previous_checkpoint_hash, checkpoint)
+                       VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+                    (
+                        queue_task_id, checkpoint["sequence"], checkpoint["schema_version"],
+                        checkpoint["checkpoint_hash"], checkpoint["previous_checkpoint_hash"], payload,
+                    ),
+                )
+                cursor.execute(
+                    """UPDATE yj64_task_queue
+                       SET state = 'waiting', locked_at = NULL, lock_owner = NULL, updated_at = now()
+                       WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                         AND locked_at >= now() - (%s * interval '1 second')""",
+                    (queue_task_id, worker_id, lease_seconds),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("parent task lease was lost while entering child wait")
+                return True
+
+    def record_parent_resume_event(
+        self, parent_task_id: int, child_task_id: int, worker_id: str,
+        child_result: dict,
+    ) -> dict:
+        """Atomically checkpoint a generic child result and requeue its waiting parent."""
+        from .parent_resume import (
+            PARENT_RESUME_PROTOCOL, build_parent_resume_checkpoint,
+            validate_child_result,
+        )
+        result = validate_child_result(child_result)
+        if result["parent_task_id"] != parent_task_id or result["child_task_id"] != child_task_id:
+            raise ValueError("child_result_task_identity_mismatch")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id is required")
+        if (
+            result["protocol_version"] != PARENT_RESUME_PROTOCOL
+            or result.get("result_is_untrusted_data") is not True
+        ):
+            raise ValueError("unsupported_or_trusted_child_result")
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT payload FROM yj64_task_queue
+                       WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                       FOR UPDATE""",
+                    (child_task_id, worker_id),
+                )
+                child_row = cursor.fetchone()
+                if child_row is None:
+                    raise RuntimeError("child result task lease is not owned by this worker")
+                child_payload = child_row[0]
+                if isinstance(child_payload, str):
+                    try:
+                        child_payload = json.loads(child_payload)
+                    except (TypeError, ValueError):
+                        raise ValueError("child task payload is invalid") from None
+                expected_fields = (
+                    ("parent_task_id", parent_task_id),
+                    ("correlation_key", result["correlation_key"]),
+                    ("protocol_version", result["protocol_version"]),
+                )
+                if not isinstance(child_payload, dict) or any(
+                    child_payload.get(key) != value for key, value in expected_fields
+                ):
+                    raise ValueError("child task payload does not match parent resume identity")
+
+                cursor.execute(
+                    "SELECT state FROM yj64_task_queue WHERE task_id = %s FOR UPDATE",
+                    (parent_task_id,),
+                )
+                parent_row = cursor.fetchone()
+                if parent_row is None:
+                    return {"accepted": False, "duplicate": False, "reason": "parent_not_found"}
+                cursor.execute(
+                    """SELECT resume_event_id, child_task_id, result_artifact_ref, result_sha256
+                       FROM yj64_parent_task_resume_events
+                       WHERE parent_task_id = %s AND correlation_key = %s""",
+                    (parent_task_id, result["correlation_key"]),
+                )
+                existing = cursor.fetchone()
+                identity = (
+                    child_task_id, result["result_artifact_ref"], result["result_sha256"],
+                )
+                if existing is not None:
+                    stored = (
+                        existing[1], existing[2],
+                        existing[3].strip() if isinstance(existing[3], str) else existing[3],
+                    )
+                    if stored != identity:
+                        raise ValueError("parent resume identity conflicts with an existing event")
+                    return {
+                        "accepted": True, "duplicate": True,
+                        "resume_event_id": existing[0], "parent_task_id": parent_task_id,
+                        "state": parent_row[0],
+                    }
+                if parent_row[0] != "waiting":
+                    return {"accepted": False, "duplicate": False, "reason": "parent_not_waiting"}
+
+                cursor.execute(
+                    """SELECT checkpoint FROM yj64_task_checkpoints
+                       WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1 FOR UPDATE""",
+                    (parent_task_id,),
+                )
+                checkpoint_row = cursor.fetchone()
+                if checkpoint_row is None:
+                    return {"accepted": False, "duplicate": False, "reason": "parent_checkpoint_missing"}
+                parent_checkpoint = checkpoint_row[0]
+                if isinstance(parent_checkpoint, str):
+                    try:
+                        parent_checkpoint = json.loads(parent_checkpoint)
+                    except (TypeError, ValueError):
+                        raise ValueError("parent checkpoint is invalid") from None
+                resumed_checkpoint = build_parent_resume_checkpoint(
+                    parent_checkpoint, result, resume_event_id=1,
+                )
+                cursor.execute(
+                    """INSERT INTO yj64_parent_task_resume_events
+                       (parent_task_id, child_task_id, protocol_version, correlation_key,
+                        result_artifact_ref, result_sha256, result_status, event_payload)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                       ON CONFLICT (parent_task_id, correlation_key) DO NOTHING
+                       RETURNING resume_event_id""",
+                    (
+                        parent_task_id, child_task_id, result["protocol_version"],
+                        result["correlation_key"], result["result_artifact_ref"],
+                        result["result_sha256"], result["result_status"],
+                        json.dumps({
+                            "result_is_untrusted_data": True,
+                            "child_task_id": child_task_id,
+                        }, sort_keys=True, separators=(",", ":")),
+                    ),
+                )
+                inserted = cursor.fetchone()
+                if inserted is None:
+                    raise RuntimeError("parent resume event conflicted during insertion")
+                # Rebuild with the durable event id before writing the checkpoint.
+                resumed_checkpoint = build_parent_resume_checkpoint(
+                    parent_checkpoint, result, resume_event_id=inserted[0],
+                )
+                cursor.execute(
+                    """INSERT INTO yj64_task_checkpoints
+                       (queue_task_id, sequence, schema_version, checkpoint_hash,
+                        previous_checkpoint_hash, checkpoint)
+                       VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+                    (
+                        parent_task_id, resumed_checkpoint["sequence"],
+                        resumed_checkpoint["schema_version"], resumed_checkpoint["checkpoint_hash"],
+                        resumed_checkpoint["previous_checkpoint_hash"],
+                        json.dumps(resumed_checkpoint, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+                    ),
+                )
+                cursor.execute(
+                    """UPDATE yj64_task_queue
+                       SET state = 'pending', available_at = now(), blocked_reason = NULL,
+                           locked_at = NULL, lock_owner = NULL, updated_at = now()
+                       WHERE task_id = %s AND state = 'waiting'""",
+                    (parent_task_id,),
+                )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("waiting parent could not be atomically requeued")
+                return {
+                    "accepted": True, "duplicate": False,
+                    "resume_event_id": inserted[0], "parent_task_id": parent_task_id,
+                    "state": "pending",
+                }
+
     def suspend_task_for_council(
         self, queue_task_id: int, worker_id: str, checkpoint: dict,
         council_request_id: str, lease_seconds: int = 300,
