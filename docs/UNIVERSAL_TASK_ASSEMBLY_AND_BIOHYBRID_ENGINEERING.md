@@ -32,11 +32,11 @@ Handlers may be specialised; their lifecycle, checkpoint, provenance, policy and
 
 ### 1.3 Cross-domain coordinator
 
-A cross-domain coordinator decomposes a goal into typed subtasks and connects the relevant discipline packs. It maintains a dependency graph and checks compatibility at interfaces.
+A cross-domain coordinator decomposes a goal into typed subtasks and connects independent discipline modules. It maintains a dependency graph, identifies affected domains and checks compatibility at interfaces. Modules remain separately versioned and deployable; integration does not merge their internal implementations.
 
 Example: designing an artificial muscle for a humanoid robot may involve materials science, mechanics, chemistry, biology, electrical/control engineering, manufacturing, reliability, human factors and occupational/environmental safety.
 
-A local success in one discipline is not global success. A material can satisfy strength, elasticity and cost targets while failing toxicity, sensitisation, infection-control, degradation or end-of-life requirements. A safety constraint discovered in one discipline must propagate to all dependent tasks and candidate designs.
+A local success in one discipline is not global success. A material can satisfy strength, elasticity and cost targets while failing toxicity, sensitisation, infection-control, degradation or end-of-life requirements. A safety constraint discovered in one discipline must propagate to all dependent tasks and candidate designs. The originating module cannot self-certify system-level acceptability.
 
 ## 2. Task graph and shared information contracts
 
@@ -101,9 +101,9 @@ The coordinator must support hard constraints and stop conditions, not only weig
 
 A specialist oversight module may provide independent review. This document defines only the Engineering Core integration boundary; it does not attempt to specify the application's supervisory module.
 
-## 6. Biohybrid engineering discipline pack
+## 6. Biological Engineering Module — independent module boundary
 
-Biohybrid engineering should be a first-class optional discipline family, connected to materials, mechanics, robotics, chemistry, electronics, manufacturing, reliability and biosafety. Its inclusion is a research and modelling capability, not permission to culture, engineer, release or deploy organisms.
+The Biological Engineering Module is a first-class optional, independently versioned module connected through shared contracts to materials, mechanics, robotics, chemistry, electronics, manufacturing, reliability and biosafety. It owns biological materials, biohybrid systems and biological surface/contamination questions. It does not own molecular/genetic design. Its inclusion is a research and modelling capability, not permission to culture, engineer, release or deploy organisms.
 
 Potential research categories:
 
@@ -138,6 +138,20 @@ Any proposed biological cleaning, coating or actuator system requires a containm
 
 This architecture does not specify organism construction, genetic modifications, culture conditions, propagation protocols or operational procedures for biological agents.
 
+## 6A. Molecular & Genetic Engineering Module — independent module boundary
+
+Molecular & Genetic Engineering is a separate optional module, not a subcomponent of Biological Engineering or the Engineering Core. It owns computational molecular design/analysis and genetic-system representation/design/analysis, including molecular component libraries, interaction modelling, phenotype prediction, stability assessment, uncertainty and biosafety evidence. It publishes versioned candidate records through shared contracts. It does not execute wet-lab operations, authorize synthesis or release, or certify downstream biological systems. Detailed scope is in [MOLECULAR_GENETIC_ENGINEERING_MODULE.md](MOLECULAR_GENETIC_ENGINEERING_MODULE.md).
+
+## 6B. Mandatory cross-module validation protocol
+
+Every module output is a candidate result. The coordinator constructs an impact map from the output's declared dependencies, interfaces, intended use and foreseeable lifecycle effects, then requests reviews from all relevant modules. A review result is one of: **pass**, **conditional**, **reject**, or **not applicable with rationale**. Silence, timeout, missing integration or unavailable module is **not reviewed**, never approval.
+
+The review set may include physics, chemistry, materials, mechanics, electrical/control, manufacturing, biological, molecular/genetic, robotics, human factors, occupational/clinical safety, cybersecurity, environmental impact, reliability, maintenance, legal/compliance and lifecycle/end-of-life modules as relevant. The set is task-specific; it is not a requirement to invoke every installed module for every trivial task.
+
+Each review returns the candidate/version reviewed, scope, assumptions, evidence and provenance, uncertainty, interface checks, hazards, hard constraints, conditions, unresolved questions and reviewer/module version. Conflicting reviews are preserved and escalated; the coordinator must not average away a hard constraint or hide dissent. Hard constraints and unacceptable residual hazards block acceptance regardless of performance/cost scores.
+
+Acceptance requires all relevant reviews to be complete, no unresolved blocking constraint, and explicit handling of conditional findings. The original module may revise its candidate and resubmit; all downstream reviews invalidated by the revision must be repeated. Review dependencies and results are stored in the task/project graph. This protocol applies to all modules, not only biological technologies.
+
 ## 7. Evidence and acceptance gates
 
 Keep these evidence levels separate:
@@ -159,8 +173,8 @@ A model consensus is not validation. A successful simulation or software test do
 3. Add typed task/project graph records and context provenance; keep postulates, thesis summaries, full context and goals distinct.
 4. Add declarative risk/autonomy policy models in non-enforcing design/test mode first; no new runtime permissions are granted by this step.
 5. Add cross-domain decomposition, dependency/interface validation and hazard propagation.
-6. Register biohybrid engineering as a discipline-pack specification with evidence and biosafety gates; do not implement biological execution capabilities.
-7. Add independent tests for policy bypass, conflicting constraints, missing evidence, stale context, dependency cycles, cross-domain hazard propagation, replay and worker restart.
+6. Define independent Biological Engineering and Molecular & Genetic Engineering module manifests/contracts and evidence/biosafety gates; do not implement autonomous biological execution capabilities.
+7. Implement mandatory cross-module review orchestration and independent tests for missing reviews, conflicts, hard-constraint propagation, stale downstream approvals, policy bypass, missing evidence, dependency cycles, replay and worker restart.
 8. Only after the policy engine and execution boundary are independently tested should bounded executor capabilities be enabled.
 
 Each increment must preserve backward compatibility or provide explicit versioned migrations. Do not modify the YJ64 application repository or live queues/databases as part of this Engineering Core work.
