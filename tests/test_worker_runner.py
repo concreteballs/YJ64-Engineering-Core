@@ -47,6 +47,11 @@ class FakeStore:
         self.calls.append(("block", task_id, worker_id, reason))
         return self.lease_ok
 
+    def record_parent_resume_event(self, parent_task_id, child_task_id, worker_id, child_result):
+        self.calls.append(("parent_resume", parent_task_id, child_task_id, worker_id, child_result))
+        self.parent_resume_event = child_result
+        return {"accepted": True, "duplicate": False}
+
 
 class WorkerRunnerTests(unittest.TestCase):
     def task(self, task_type="demo"):
@@ -153,6 +158,93 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertIn(("block", 7, "worker-a", "council_resume_not_checkpointed"), store.calls)
         self.assertNotIn(("complete", 7, "worker-a"), store.calls)
+
+    def test_generic_parent_resume_requires_load_and_checkpoint_before_completion(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.parent_resume import (
+            PARENT_RESUME_PROTOCOL, build_parent_resume_checkpoint,
+        )
+        waiting = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={
+                "stage": "waiting_child",
+                "expected_child_correlation_key": "parent:7:revision:2",
+                "expected_child_protocol_version": PARENT_RESUME_PROTOCOL,
+            }, budgets={"tokens": 1000}, approvals={"repository_write": False},
+        )
+        child_result = {
+            "protocol_version": PARENT_RESUME_PROTOCOL,
+            "parent_task_id": 7, "child_task_id": 71,
+            "correlation_key": "parent:7:revision:2",
+            "result_artifact_ref": "private://assessment/2",
+            "result_sha256": "c" * 64, "result_status": "completed",
+            "result_is_untrusted_data": True,
+        }
+        ready = build_parent_resume_checkpoint(waiting, child_result, resume_event_id=9)
+        store = FakeStore(self.task())
+        store.checkpoint = ready
+        store.task["checkpoint"] = ready
+        observed = {}
+
+        def handler(task, context):
+            observed["resume"] = context.load_parent_resume()
+            self.assertTrue(context.checkpoint_parent_resume_consumed({"objective": "continue"}))
+            return TaskExecutionResult("completed")
+
+        result = WorkerRunner(store, worker_id="worker-a", handlers={"demo": handler}).run_once()
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(observed["resume"]["child_task_id"], 71)
+        self.assertEqual(store.checkpoint["task_state"]["stage"], "parent_resume_consumed")
+
+    def test_generic_parent_resume_cannot_be_ignored(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.parent_resume import (
+            PARENT_RESUME_PROTOCOL, build_parent_resume_checkpoint,
+        )
+        waiting = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={
+                "stage": "waiting_child",
+                "expected_child_correlation_key": "parent:7:revision:3",
+                "expected_child_protocol_version": PARENT_RESUME_PROTOCOL,
+            }, budgets={}, approvals={},
+        )
+        ready = build_parent_resume_checkpoint(waiting, {
+            "protocol_version": PARENT_RESUME_PROTOCOL,
+            "parent_task_id": 7, "child_task_id": 72,
+            "correlation_key": "parent:7:revision:3",
+            "result_artifact_ref": "private://assessment/3",
+            "result_sha256": "d" * 64, "result_status": "blocked",
+            "result_is_untrusted_data": True,
+        }, resume_event_id=10)
+        store = FakeStore(self.task())
+        store.checkpoint = ready
+        store.task["checkpoint"] = ready
+        result = WorkerRunner(
+            store, worker_id="worker-a",
+            handlers={"demo": lambda task, context: TaskExecutionResult("completed")},
+        ).run_once()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn(("block", 7, "worker-a", "parent_resume_not_consumed"), store.calls)
+
+    def test_blocked_child_wakes_waiting_parent_with_untrusted_terminal_result(self):
+        task = self.task()
+        task["payload"] = {
+            "parent_task_id": 19,
+            "correlation_key": "parent:19:child:7",
+            "parent_resume_protocol_version": "yj64.parent-resume.v1",
+        }
+        store = FakeStore(task)
+        result = WorkerRunner(
+            store, worker_id="worker-a",
+            handlers={"demo": lambda task, context: TaskExecutionResult("blocked", "review_rejected")},
+        ).run_once()
+        self.assertEqual(result["status"], "blocked")
+        event = store.parent_resume_event
+        self.assertEqual(event["result_status"], "blocked")
+        self.assertEqual(event["result_summary"], "review_rejected")
+        self.assertTrue(event["result_is_untrusted_data"])
+        self.assertTrue(any(call[0] == "parent_resume" for call in store.calls))
 
     def test_unknown_task_type_is_blocked_not_discarded(self):
         store = FakeStore(self.task("unregistered"))
