@@ -2,6 +2,8 @@
 
 A modular engineering service for the YJ64 multi-agent system. The current practical workflow is parametric yacht geometry plus independently routed engineering solvers.
 
+**Repository boundary:** this repository owns engineering disciplines, domain task handlers and specialist solvers. The autonomous Council/cycle orchestration runtime is maintained separately in [concreteballs/Motocicl](https://github.com/concreteballs/Motocicl). This repository must not grow a second global cycle scheduler, model-provider runtime or CI-repair loop. The YJ-64 application remains the owner of its native multi-model Council engine.
+
 ## Current capabilities
 
 - Versioned JSON engineering requests and responses using SI units.
