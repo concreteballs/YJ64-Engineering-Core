@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.yj64.dev/cross-module/contribution.v1.schema.json",
+  "title": "YJ64 Cross-Module Enhancement Contribution v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "candidate",
+    "module_id"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "yj64.cross_module.contribution.v1"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "candidate": {
+      "$ref": "candidate.v1.schema.json"
+    },
+    "module_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposals": {
+      "type": "array",
+      "items": {
+        "$ref": "enhancement-proposal.v1.schema.json"
+      }
+    },
+    "no_proposal": {
+      "type": "boolean"
+    },
+    "rationale": {
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "proposals"
+      ],
+      "properties": {
+        "proposals": {
+          "minItems": 1
+        },
+        "no_proposal": {
+          "const": false
+        }
+      }
+    },
+    {
+      "required": [
+        "no_proposal",
+        "rationale"
+      ],
+      "properties": {
+        "no_proposal": {
+          "const": true
+        },
+        "rationale": {
+          "minLength": 1
+        },
+        "proposals": {
+          "maxItems": 0
+        }
+      }
+    }
+  ]
+}
