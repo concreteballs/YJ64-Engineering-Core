@@ -1,6 +1,11 @@
 """Autonomous cycle infrastructure."""
 
 from .engineering_task_adapter import EngineeringDispatcherTaskAdapter
+from .github_read_adapter import (
+    GitHubReadOnlyClient,
+    GitHubReadTaskAdapter,
+    register_github_read_adapter,
+)
 from .engineering_runtime import (
     ENGINEERING_CAPABILITIES,
     ENGINEERING_TASK_TYPE,
@@ -18,6 +23,9 @@ from .task_requests import PARENT_TASK_QUEUE_TYPE, enqueue_task_request
 
 __all__ = [
     "EngineeringDispatcherTaskAdapter",
+    "GitHubReadOnlyClient",
+    "GitHubReadTaskAdapter",
+    "register_github_read_adapter",
     "ENGINEERING_CAPABILITIES",
     "ENGINEERING_TASK_TYPE",
     "create_engineering_task_registry",
