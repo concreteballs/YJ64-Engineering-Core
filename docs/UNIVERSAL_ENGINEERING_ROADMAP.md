@@ -108,3 +108,12 @@ The authoritative design and implementation sequence are in [UNIFIED_ENGINEERING
 ## Molecular, genetic and biohybrid disciplines
 
 Molecular & Genetic Engineering is a distinct computational discipline pack covering molecular components/interactions, genetic-system representation, phenotype and evolutionary-stability prediction, biosafety assessment and experimental evidence feedback. Biohybrid Engineering covers biological materials, biohybrid actuators, microbial/fungal surface interactions, controlled surface maintenance, contamination monitoring, validated decontamination and environmental persistence. These are research targets, not claims of proven capability or authorization for autonomous wet-lab activity. Biological systems near people require containment and validated hygiene/decontamination; phages are host-specific and not universal disinfectants.
+
+
+## Independent biological and molecular/genetic modules
+
+The biological constructor and molecular/genetic constructor are separate optional modules, not subpackages embedded in the engineering module. They share the universal task, evidence, extension and hazard contracts and are coordinated with materials, chemistry, physics, mechanics, robotics, electronics, manufacturing, operations and environmental safety. See [BIOLOGICAL_ENGINEERING_MODULE.md](BIOLOGICAL_ENGINEERING_MODULE.md) and [MOLECULAR_GENETIC_ENGINEERING_MODULE.md](MOLECULAR_GENETIC_ENGINEERING_MODULE.md).
+
+## Mandatory cross-module validation
+
+Every module's output is a candidate, not a system-level approval. The coordinator identifies affected disciplines and obtains independent reviews before acceptance. Relevant modules must assess their own domain's constraints and return pass, conditional, reject, or not-applicable-with-rationale, with evidence and unresolved hazards. Missing review is not approval. Hard safety constraints cannot be offset by performance or cost gains. Review results, model versions, assumptions and dependencies are retained in the project graph.
