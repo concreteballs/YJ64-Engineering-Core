@@ -84,7 +84,7 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 
 ## Реализация в Engineering Core
 
-- automation/browser_agent_bridge.py — создание и проверка существующих сообщений yj64.browser-agent-envelope.v1 типов council_request и council_result.
+- automation/browser_agent_bridge.py — оставленный в Engineering Core совместимый helper для формирования/проверки envelope `yj64.browser-agent-envelope.v1`, используемый Gateway adapter. Общий browser-agent feedback transport и cycle-side bridge принадлежат Motocicl; helper здесь не означает владение циклом.
 - automation/council_gateway.py — HTTPS-клиент, машинная аутентификация, лимиты, проверка протокола, идентификаторов и структуры результата.
 - automation/council_tasks.py — постановка запроса, асинхронный polling, checkpoints, сохранение результата, handoff и load_council_result_artifact(...) для агента-потребителя.
 - scripts/run_council_gateway_worker.py — одношаговый worker.
