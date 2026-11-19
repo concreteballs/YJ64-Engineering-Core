@@ -29,6 +29,7 @@
       "minimum": 1
     },
     "candidate_schema_version": { "type": "string", "minLength": 1 },
+    "candidate_schema_version": { "type": "string", "minLength": 1 },
     "origin_module": {
       "type": "string",
       "minLength": 1
