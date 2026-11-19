@@ -73,7 +73,7 @@ The result includes request/session identity, execution status, substantive outc
 ## Engineering Core implementation
 
 Files:
-- `src/yj64_engineering_core/automation/browser_agent_bridge.py` — builds and validates the existing `yj64.browser-agent-envelope.v1` messages for `council_request` and `council_result`.
+- `src/yj64_engineering_core/automation/browser_agent_bridge.py` — retained compatibility helper for building/validating `yj64.browser-agent-envelope.v1` Council messages used by this Gateway adapter. Generic browser-agent feedback transport and cycle-side bridging belong to Motocicl; this helper does not make Engineering Core the cycle owner.
 - `src/yj64_engineering_core/automation/council_gateway.py`: HTTPS client, machine authentication, bounded payloads, protocol validation, request/session identity checks, and result validation.
 - `src/yj64_engineering_core/automation/council_tasks.py`: durable queue entrypoint, submit/poll handlers, checkpointing, result artifact persistence, and result-ready handoff.
 - `scripts/run_council_gateway_worker.py`: one-task worker entrypoint.
