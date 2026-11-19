@@ -1,6 +1,12 @@
 """Autonomous cycle infrastructure."""
 
 from .engineering_task_adapter import EngineeringDispatcherTaskAdapter
+from .engineering_runtime import (
+    ENGINEERING_CAPABILITIES,
+    ENGINEERING_TASK_TYPE,
+    create_engineering_task_registry,
+    create_engineering_worker_runner,
+)
 from .parent_tasks import (
     ParentTaskState,
     TaskAdapterRegistry,
@@ -11,6 +17,10 @@ from .task_requests import PARENT_TASK_QUEUE_TYPE, enqueue_task_request
 
 __all__ = [
     "EngineeringDispatcherTaskAdapter",
+    "ENGINEERING_CAPABILITIES",
+    "ENGINEERING_TASK_TYPE",
+    "create_engineering_task_registry",
+    "create_engineering_worker_runner",
     "PARENT_TASK_QUEUE_TYPE",
     "ParentTaskState",
     "TaskAdapterRegistry",
