@@ -15,12 +15,14 @@ REVIEW = {
 
 
 def disposition(text, status=ConditionStatus.SATISFIED, **kwargs):
+    evidence_refs = kwargs.pop("evidence", ({"evidence_id": "ev-1"},)
+                               if status is ConditionStatus.SATISFIED else ())
     return ConditionDisposition(
         candidate=CANDIDATE, reviewer_module="materials",
         condition_id="cond-" + str(len(text)), condition_text=text,
         status=status, rationale="Parent coordinator reviewed supporting record",
         decided_by="parent_coordinator", decision_version=3,
-        evidence=({"evidence_id": "ev-1"},) if status is ConditionStatus.SATISFIED else (),
+        evidence=evidence_refs,
         **kwargs,
     )
 
@@ -65,8 +67,8 @@ def test_wrong_candidate_revision_cannot_be_dispositioned():
         changed, "materials", "c1", "validate fatigue life", ConditionStatus.SATISFIED,
         "rationale", "parent_coordinator", 4, ({"evidence_id": "ev-2"},),
     )
-    with pytest.raises(ValueError, match="does not match"):
-        evaluate_condition_dispositions(CANDIDATE, [REVIEW], [wrong])
+    ok, blockers = evaluate_condition_dispositions(CANDIDATE, [REVIEW], [wrong])
+    assert not ok and blockers
 
 
 def test_duplicate_disposition_is_rejected():
