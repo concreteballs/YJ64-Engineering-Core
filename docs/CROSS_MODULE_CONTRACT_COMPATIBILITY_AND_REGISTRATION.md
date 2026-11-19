@@ -110,7 +110,7 @@ The two module repositories publish declarative manifests compatible with the ex
 - offline metadata support;
 - safety class explicitly marks computational research with biosafety review required.
 
-The manifests are metadata, not executable adapters. They must be parsed through `ExtensionManifest.from_json` and registered through the existing registry only after schema and adapter compatibility tests are added. Do not create a second registry.
+The manifests are metadata, not executable adapters. Core tests now parse checked-in snapshots through `ExtensionManifest.from_json` and register both in an isolated instance of the existing `ExtensionRegistry`; capability discovery, empty permissions and offline declarations are verified. This is test-only registration: production discovery/routing is not enabled. Do not create a second registry.
 
 ## 7. Integration sequence
 
@@ -118,7 +118,7 @@ The manifests are metadata, not executable adapters. They must be parsed through
 2. Add JSON Schema definitions and round-trip/negative tests for the canonical envelopes.
 3. Implement native-to-wire adapters and tests; add reverse deserialization and round-trip tests before declaring bidirectional interoperability.
 4. Add parent-coordinator condition-disposition aggregation and reviewer-version enforcement; reject unresolved conditional findings.
-5. Validate both manifests with the existing ExtensionManifest parser and register them in an isolated test registry.
+5. DONE: validate both manifests with the existing ExtensionManifest parser and register them in an isolated test registry.
 6. Add coordinator-side routing through the existing universal task lifecycle and ExtensionRegistry.
 7. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
 8. Only then enable production discovery/routing. No runtime permissions are added by registration.
