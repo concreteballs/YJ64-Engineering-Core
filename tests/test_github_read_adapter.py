@@ -12,6 +12,7 @@ from yj64_engineering_core.automation.parent_tasks import (
     TaskAdapterRegistry,
 )
 from yj64_engineering_core.automation.worker import TaskExecutionResult
+from yj64_engineering_core.automation import create_universal_task_worker_runner
 from yj64_engineering_core.task_contracts import TaskRequest
 
 
@@ -163,6 +164,21 @@ class GitHubReadAdapterTests(unittest.TestCase):
         self.assertIsNotNone(registration)
         self.assertEqual(registration.capabilities, frozenset({"github.read"}))
         self.assertFalse(registration.council_enabled)
+
+    def test_universal_worker_factory_wires_composed_registry(self):
+        registry = TaskAdapterRegistry()
+        register_github_read_adapter(
+            registry,
+            FakeClient({}),
+            allowed_repositories=[self.repository],
+        )
+        runner = create_universal_task_worker_runner(
+            object(),
+            registry=registry,
+            worker_id="github-read-worker",
+        )
+        self.assertIn("execute_task_request", runner.handlers)
+        self.assertEqual(runner.allowed_task_types, ["execute_task_request"])
 
     def test_http_client_rejects_non_repository_endpoint(self):
         class NeverCalled:
