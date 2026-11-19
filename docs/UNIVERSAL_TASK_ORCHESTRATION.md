@@ -78,6 +78,25 @@ The factory registers the concrete `engineering.analysis` adapter with the
 `engineering.dispatch` capability and wires `execute_task_request` to the
 parent handler. Additional task types remain explicit; no browser, repository
 write, provider, FEM or CAD execution capability is implied by this registration.
+A one-shot worker entry point is provided at
+`scripts/run_engineering_task_worker.py`. It requires `YJ64_DATABASE_URL`
+and optionally accepts `YJ64_ENGINEERING_WORKER_ID` and
+`YJ64_CAD_WORKSPACE`. Without a CAD workspace it registers only the built-in
+axial screening solver. With a workspace it additionally registers the
+OpenSCAD-source, FreeCAD-macro and SVG-drawing writers. These writers create
+files only; they do not execute external CAD applications.
+
+Run it on a worker host after installing the project and applying the existing
+PostgreSQL migrations:
+
+```sh
+python scripts/run_engineering_task_worker.py
+```
+
+This is a one-task invocation, not a background service. Schedule or supervise
+it through the deployment platform. No database, server, secret or deployment
+configuration is changed by this repository code.
+
 The engineering adapter requires an explicit operation and an
 `EngineeringRequest` object in `input_data`. It calls the existing
 `EngineeringDispatcher`, stores the structured response in the parent's
