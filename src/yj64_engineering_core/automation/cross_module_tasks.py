@@ -12,7 +12,6 @@ from typing import Any, Mapping
 
 from ..cross_module import (
     ConditionDisposition,
-    ConditionStatus,
     evaluate_cross_module_acceptance,
 )
 from ..extensions import CapabilityRequirement, ExtensionRegistry
@@ -72,34 +71,12 @@ def _checkpoint(context: Any, state: dict[str, Any]) -> bool:
     return bool(context.save_checkpoint(checkpoint))
 
 
-def _condition_dispositions(values: Any) -> tuple[ConditionDisposition, ...]:
-    if values is None:
-        return ()
-    if not isinstance(values, list):
-        raise ValueError("invalid_condition_dispositions")
-    result = []
-    for item in values:
-        if not isinstance(item, dict):
-            raise ValueError("invalid_condition_disposition")
-        result.append(ConditionDisposition(
-            candidate=item.get("candidate"),
-            reviewer_module=item.get("reviewer_module"),
-            condition_id=item.get("condition_id"),
-            condition_text=item.get("condition_text"),
-            status=ConditionStatus(item.get("status")),
-            rationale=item.get("rationale"),
-            decided_by=item.get("decided_by"),
-            decision_version=item.get("decision_version"),
-            evidence=tuple(item.get("evidence", ())),
-        ))
-    return tuple(result)
-
-
 def create_cross_module_task_handler(
     *,
     registry: ExtensionRegistry,
     module_bindings: Mapping[str, str],
     adapters: Mapping[str, Any],
+    disposition_provider: Any = None,
 ):
     """Create a TaskHandler to register under TASK_TYPE in the existing worker.
 
@@ -113,6 +90,10 @@ def create_cross_module_task_handler(
         raise ValueError("module_bindings is required")
     if not isinstance(adapters, Mapping):
         raise ValueError("adapters must be a mapping")
+    if len(set(module_bindings.values())) != len(module_bindings):
+        raise ValueError("each discipline must have a distinct extension binding")
+    if disposition_provider is not None and not callable(disposition_provider):
+        raise ValueError("disposition_provider must be callable")
 
     def handler(task: dict, context: Any) -> TaskExecutionResult:
         try:
@@ -120,7 +101,9 @@ def create_cross_module_task_handler(
             if payload.get("protocol_version") != PROTOCOL_VERSION:
                 return TaskExecutionResult("blocked", "cross_module_protocol_unsupported")
             candidate = payload.get("candidate")
-            if not isinstance(candidate, dict):
+            if (not isinstance(candidate, dict)
+                    or candidate.get("schema_id") != "yj64.cross_module.candidate.v1"
+                    or candidate.get("schema_version") != "1.0"):
                 return TaskExecutionResult("blocked", "cross_module_candidate_invalid")
             modules = payload.get("relevant_modules")
             if (not isinstance(modules, list) or not modules
@@ -222,7 +205,14 @@ def create_cross_module_task_handler(
                 reviews.append(review)
                 contributions.append(contribution)
 
-            dispositions = _condition_dispositions(payload.get("condition_dispositions"))
+            dispositions = ()
+            if disposition_provider is not None:
+                supplied = disposition_provider(dict(candidate), tuple(reviews), context)
+                if not isinstance(supplied, (list, tuple)) or any(
+                    not isinstance(item, ConditionDisposition) for item in supplied
+                ):
+                    return TaskExecutionResult("blocked", "cross_module_disposition_invalid")
+                dispositions = tuple(supplied)
             assessment = evaluate_cross_module_acceptance(
                 candidate, modules, reviews, contributions, dispositions
             )
