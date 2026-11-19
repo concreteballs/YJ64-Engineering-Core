@@ -73,6 +73,55 @@ def _checkpoint(context: Any, state: dict[str, Any]) -> bool:
     return bool(context.save_checkpoint(checkpoint))
 
 
+def _handoff_assessment(
+    payload: Mapping[str, Any], context: Any, candidate_digest: str,
+    assessment: Mapping[str, Any], artifact_store_factory: Any,
+) -> bool:
+    parent_task_id = payload.get("parent_task_id")
+    correlation_key = payload.get("correlation_key")
+    parent_protocol = payload.get("parent_resume_protocol_version")
+    if all(value is None for value in (parent_task_id, correlation_key, parent_protocol)):
+        return True
+    from .parent_resume import PARENT_RESUME_PROTOCOL
+    if (
+        not isinstance(parent_task_id, int) or isinstance(parent_task_id, bool) or parent_task_id < 1
+        or not isinstance(correlation_key, str) or not correlation_key.strip() or len(correlation_key) > 256
+        or parent_protocol != PARENT_RESUME_PROTOCOL
+    ):
+        raise ValueError("cross_module_parent_handoff_invalid")
+    artifact = json.dumps({
+        "schema_id": "yj64.cross_module.assessment-artifact.v1",
+        "schema_version": "1.0",
+        "candidate_digest": candidate_digest,
+        "assessment": assessment,
+    }, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+    digest = hashlib.sha256(artifact).hexdigest()
+    if artifact_store_factory is not None:
+        artifact_store = artifact_store_factory()
+    else:
+        from .supabase_storage import SupabaseStorageArtifactStore
+        artifact_store = SupabaseStorageArtifactStore.from_environment()
+    artifact_ref = artifact_store.put(
+        namespace=f"cross-module/{context.task_id}/{candidate_digest}",
+        content=artifact,
+        content_type="application/json",
+    )
+    if not isinstance(artifact_ref, str) or not artifact_ref.strip() or "?" in artifact_ref or "#" in artifact_ref:
+        raise ValueError("cross_module_artifact_reference_invalid")
+    child_result = {
+        "protocol_version": PARENT_RESUME_PROTOCOL,
+        "parent_task_id": parent_task_id,
+        "child_task_id": context.task_id,
+        "correlation_key": correlation_key,
+        "result_artifact_ref": artifact_ref,
+        "result_sha256": digest,
+        "result_status": "completed",
+        "result_is_untrusted_data": True,
+    }
+    handoff = context.record_parent_resume_event(parent_task_id, child_result)
+    return isinstance(handoff, dict) and handoff.get("accepted") is True
+
+
 def create_cross_module_task_handler(
     *,
     registry: ExtensionRegistry,
@@ -151,6 +200,14 @@ def create_cross_module_task_handler(
                         return TaskExecutionResult("blocked", "cross_module_checkpoint_candidate_mismatch")
                     if state.get("relevant_modules") != sorted(modules):
                         return TaskExecutionResult("blocked", "cross_module_checkpoint_scope_mismatch")
+                    assessment = state.get("assessment")
+                    if not isinstance(assessment, dict):
+                        return TaskExecutionResult("blocked", "cross_module_checkpoint_invalid")
+                    try:
+                        if not _handoff_assessment(payload, context, candidate_digest, assessment, artifact_store_factory):
+                            return TaskExecutionResult("retry", "cross_module_parent_handoff_pending", 90)
+                    except Exception:
+                        return TaskExecutionResult("retry", "cross_module_parent_handoff_failed", 90)
                     return TaskExecutionResult("completed")
                 if isinstance(state, dict) and state.get("stage") == "cross_module_assessment":
                     if state.get("candidate_digest") != candidate_digest:
@@ -239,54 +296,18 @@ def create_cross_module_task_handler(
             if not _checkpoint(context, final_state):
                 return TaskExecutionResult("retry", "cross_module_checkpoint_failed", 90)
 
-            # Parent handoff is opt-in per task payload. The child assessment is
-            # persisted as an immutable artifact before the parent is requeued.
-            parent_task_id = payload.get("parent_task_id")
-            correlation_key = payload.get("correlation_key")
-            parent_protocol = payload.get("parent_resume_protocol_version")
-            if any(value is not None for value in (parent_task_id, correlation_key, parent_protocol)):
-                from .parent_resume import PARENT_RESUME_PROTOCOL
-                if (
-                    not isinstance(parent_task_id, int) or isinstance(parent_task_id, bool) or parent_task_id < 1
-                    or not isinstance(correlation_key, str) or not correlation_key.strip() or len(correlation_key) > 256
-                    or parent_protocol != PARENT_RESUME_PROTOCOL
-                ):
+            # Parent handoff is opt-in per task payload. Artifact storage is
+            # content-addressed and the parent event is idempotent, so retries
+            # can safely repeat this publication after a checkpointed result.
+            try:
+                if not _handoff_assessment(payload, context, candidate_digest, assessment, artifact_store_factory):
+                    return TaskExecutionResult("retry", "cross_module_parent_handoff_pending", 90)
+            except ValueError as exc:
+                if str(exc) == "cross_module_parent_handoff_invalid":
                     return TaskExecutionResult("blocked", "cross_module_parent_handoff_invalid")
-                try:
-                    artifact = json.dumps({
-                        "schema_id": "yj64.cross_module.assessment-artifact.v1",
-                        "schema_version": "1.0",
-                        "candidate_digest": candidate_digest,
-                        "assessment": assessment,
-                    }, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
-                    digest = hashlib.sha256(artifact).hexdigest()
-                    if artifact_store_factory is not None:
-                        artifact_store = artifact_store_factory()
-                    else:
-                        from .supabase_storage import SupabaseStorageArtifactStore
-                        artifact_store = SupabaseStorageArtifactStore.from_environment()
-                    artifact_ref = artifact_store.put(
-                        namespace=f"cross-module/{context.task_id}/{candidate_digest}",
-                        content=artifact,
-                        content_type="application/json",
-                    )
-                    if not isinstance(artifact_ref, str) or not artifact_ref.strip() or "?" in artifact_ref or "#" in artifact_ref:
-                        return TaskExecutionResult("retry", "cross_module_artifact_reference_invalid", 90)
-                    child_result = {
-                        "protocol_version": PARENT_RESUME_PROTOCOL,
-                        "parent_task_id": parent_task_id,
-                        "child_task_id": context.task_id,
-                        "correlation_key": correlation_key,
-                        "result_artifact_ref": artifact_ref,
-                        "result_sha256": digest,
-                        "result_status": "completed",
-                        "result_is_untrusted_data": True,
-                    }
-                    handoff = context.record_parent_resume_event(parent_task_id, child_result)
-                    if not isinstance(handoff, dict) or handoff.get("accepted") is not True:
-                        return TaskExecutionResult("retry", "cross_module_parent_handoff_pending", 90)
-                except Exception:
-                    return TaskExecutionResult("retry", "cross_module_parent_handoff_failed", 90)
+                return TaskExecutionResult("retry", "cross_module_parent_handoff_failed", 90)
+            except Exception:
+                return TaskExecutionResult("retry", "cross_module_parent_handoff_failed", 90)
 
             # Completing this queue item means assessment computation finished;
             # it does not mean the candidate was accepted.
