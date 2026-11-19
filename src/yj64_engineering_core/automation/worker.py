@@ -6,6 +6,8 @@ A deployment must explicitly construct a WorkerRunner and call run_once().
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 import re
 from typing import Callable, Mapping, Protocol, Sequence
 
@@ -363,6 +365,52 @@ class WorkerRunner:
         self.recovery_limit = recovery_limit
         self.allowed_task_types = list(allowed_task_types) if allowed_task_types is not None else None
 
+    def _handoff_terminal_child_result(
+        self, task: dict, context: TaskContext, *, status: str, reason: str,
+    ) -> bool:
+        """Wake a waiting parent when its child ends without a normal result artifact."""
+        payload = task.get("payload")
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                return False
+        if not isinstance(payload, dict):
+            return True
+        parent_id = payload.get("parent_task_id")
+        correlation_key = payload.get("correlation_key")
+        protocol = payload.get("parent_resume_protocol_version")
+        if parent_id is None and correlation_key is None and protocol is None:
+            return True
+        from .parent_resume import PARENT_RESUME_PROTOCOL
+        if (
+            not isinstance(parent_id, int) or isinstance(parent_id, bool) or parent_id < 1
+            or not isinstance(correlation_key, str) or not correlation_key.strip() or len(correlation_key) > 256
+            or protocol != PARENT_RESUME_PROTOCOL
+            or status not in {"blocked", "failed", "cancelled"}
+        ):
+            return False
+        summary = str(reason or "child_task_terminal")[:512]
+        encoded = json.dumps({
+            "child_task_id": context.task_id,
+            "status": status,
+            "summary": summary,
+        }, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        digest = hashlib.sha256(encoded).hexdigest()
+        child_result = {
+            "protocol_version": PARENT_RESUME_PROTOCOL,
+            "parent_task_id": parent_id,
+            "child_task_id": context.task_id,
+            "correlation_key": correlation_key,
+            "result_artifact_ref": f"yj64-task-terminal://{context.task_id}/{digest}",
+            "result_sha256": digest,
+            "result_status": status,
+            "result_summary": summary,
+            "result_is_untrusted_data": True,
+        }
+        outcome = context.record_parent_resume_event(parent_id, child_result)
+        return isinstance(outcome, dict) and outcome.get("accepted") is True
+
     def run_once(self) -> dict:
         """Run recovery and process no more than one task; never loops in background."""
         recovery = self.store.run_recovery_maintenance(limit=self.recovery_limit)
@@ -441,6 +489,15 @@ class WorkerRunner:
             if not isinstance(decision, TaskExecutionResult):
                 raise TypeError("handler_must_return_TaskExecutionResult")
         except Exception as exc:
+            attempts = task.get("attempts", 0)
+            maximum = task.get("max_attempts", 0)
+            if isinstance(attempts, int) and isinstance(maximum, int) and attempts >= maximum > 0:
+                try:
+                    self._handoff_terminal_child_result(
+                        task, context, status="failed", reason="handler_exception:" + type(exc).__name__,
+                    )
+                except Exception:
+                    pass
             state = self.store.fail_task(
                 task_id,
                 self.worker_id,
@@ -522,6 +579,15 @@ class WorkerRunner:
                 "recovery": recovery,
             }
         if decision.outcome == "retry":
+            attempts = task.get("attempts", 0)
+            maximum = task.get("max_attempts", 0)
+            if isinstance(attempts, int) and isinstance(maximum, int) and attempts >= maximum > 0:
+                try:
+                    self._handoff_terminal_child_result(
+                        task, context, status="failed", reason=decision.reason or "child_retry_exhausted",
+                    )
+                except Exception:
+                    pass
             state = self.store.fail_task(
                 task_id,
                 self.worker_id,
@@ -535,6 +601,25 @@ class WorkerRunner:
                 "recovery": recovery,
             }
 
+        try:
+            if not self._handoff_terminal_child_result(
+                task, context, status="blocked", reason=decision.reason or "handler_requested_block",
+            ):
+                state = self.store.fail_task(
+                    task_id, self.worker_id, "parent_terminal_handoff_failed", retry_delay_seconds=90,
+                )
+                return {
+                    "status": state or "lease_lost", "task_id": task_id,
+                    "reason": "parent_terminal_handoff_retry", "recovery": recovery,
+                }
+        except Exception:
+            state = self.store.fail_task(
+                task_id, self.worker_id, "parent_terminal_handoff_failed", retry_delay_seconds=90,
+            )
+            return {
+                "status": state or "lease_lost", "task_id": task_id,
+                "reason": "parent_terminal_handoff_retry", "recovery": recovery,
+            }
         blocked = self.store.block_task(
             task_id, self.worker_id, decision.reason or "handler_requested_block"
         )
