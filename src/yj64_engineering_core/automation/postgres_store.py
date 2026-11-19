@@ -873,6 +873,7 @@ class PostgresCycleStore:
                         json.dumps({
                             "result_is_untrusted_data": True,
                             "child_task_id": child_task_id,
+                            "result_summary": result.get("result_summary"),
                         }, sort_keys=True, separators=(",", ":")),
                     ),
                 )
