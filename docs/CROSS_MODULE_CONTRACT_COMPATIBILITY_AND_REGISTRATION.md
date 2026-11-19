@@ -49,7 +49,7 @@ Required: evidence_id, evidence_type, source. Optional: version, limitations, co
 ### Independent review
 Required: candidate reference, reviewer_module, reviewer_version, status, rationale. Status is one of PASS, CONDITIONAL, REJECT, NOT_APPLICABLE, NOT_REVIEWED. Optional collections: evidence, assumptions, uncertainty, interface_checks, hazards, hard_constraints, conditions, unresolved_questions.
 
-CONDITIONAL is blocking until every condition has a recorded disposition by the parent coordinator. `schemas/cross_module/condition-disposition.v1.schema.json` defines a separate, auditable record tied to the exact candidate revision and review. Only `decided_by: parent_coordinator` is accepted. A `satisfied` disposition requires evidence; rejected, deferred and unresolved dispositions remain blocking. The original module review is immutable and is never rewritten to PASS.
+CONDITIONAL is blocking until every condition has a recorded disposition by the parent coordinator. `schemas/cross_module/condition-disposition.v1.schema.json` defines a separate, auditable record tied to the exact candidate revision and review. Only `decided_by: parent_coordinator` is accepted. A `satisfied` disposition requires evidence; rejected, deferred and unresolved dispositions remain blocking. The original module review is immutable and is never rewritten to PASS. The Core library exposes `ConditionDisposition`, `ConditionStatus` and `evaluate_condition_dispositions()` in `yj64_engineering_core.cross_module`; this is a pure validation helper, not yet connected to task orchestration or final assessment acceptance.
 
 ### Enhancement contribution
 Each relevant module returns either one or more evidence-linked proposals or an explicit no_proposal with rationale. A proposal contains proposal_id, candidate reference, proposing_module, objective, improvement, mechanism, expected_benefit, measurable success_criteria, evidence and optional assumptions, tradeoffs, risks, dependencies and validation_plan.
@@ -92,7 +92,7 @@ Each module may retain its domain-specific internal types. The first adapter inc
 - Molecular `EvidenceRef` already contains the canonical evidence identity and provenance fields.
 - Molecular `interface_checks`, `objective` and `rationale` already use the canonical names.
 - Both adapters must include reviewer_version in the wire review; Biological receives it explicitly from the host and rejects an empty value.
-- Both native assessment implementations still fail closed on every CONDITIONAL review. Parent-side disposition aggregation is not yet implemented in either module or the Engineering Core runtime.
+- Both specialist-native assessment implementations still fail closed on every CONDITIONAL review. The Core helper evaluates parent dispositions, but it is not yet wired into coordinator task orchestration or the production acceptance path.
 
 No adapter may convert missing evidence, missing review, unavailable modules or unresolved conditions into PASS.
 
