@@ -8,7 +8,7 @@
 >
 > The existing cycle plan below is deliberately preserved as historical/source material. Its cycle-related implementation work is now assigned to Motocicl. Use the extraction inventory and authoritative execution plan in [Motocicl — Repository Split Plan](https://github.com/concreteballs/Motocicl/blob/main/REPOSITORY_SPLIT_PLAN.md). Do not execute cycle tasks from this file in this repository. Only Engineering Core-specific work and the integration contract between the two repositories remain actionable here.
 >
-> **Migration status:** plan and repository boundary notice only. Source files have not yet been moved. The next migration step must follow the file-by-file inventory in Motocicl and preserve working interfaces/tests.
+> **Migration status:** the first extraction pass is committed in Motocicl: 18 cycle runtime modules, 5 scripts, 20 SQL migration files (not applied), 1 browser-agent schema, 9 cycle documents and 25 cycle tests. The Motocicl unit suite passes (227 tests). Operational workflows, Gemini registry workflows, the Council API schema and mixed Gateway documents remain under review; do not resume cycle implementation here. See the Motocicl migration ledger for the exact status.
 
 ---
 
