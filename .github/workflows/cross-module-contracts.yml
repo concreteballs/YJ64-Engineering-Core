@@ -17,7 +17,9 @@ on:
     paths:
       - "src/yj64_engineering_core/cross_module.py"
       - "src/yj64_engineering_core/extensions.py"
+      - "src/yj64_engineering_core/automation/cross_module_tasks.py"
       - "tests/test_cross_module.py"
+      - "tests/test_cross_module_tasks.py"
       - "tests/test_extension_packs.py"
       - "tests/fixtures/cross_module/**"
       - "pyproject.toml"
