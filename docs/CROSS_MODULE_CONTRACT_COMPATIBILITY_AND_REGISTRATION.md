@@ -167,20 +167,22 @@ parent-resume protocol is now implemented alongside the Council-specific path:
   Publication is retry-safe: the artifact is content-addressed and the event is
   idempotent.
 
-The parent must create a waiting_child checkpoint containing
-expected_child_correlation_key and expected_child_protocol_version, then call
-context.suspend_for_child(...). On re-entry it calls context.load_parent_resume(),
-retrieves the artifact through the private artifact store, checks the candidate
-revision/digest, incorporates the result into its own state, and calls
+The parent-side helper enqueue_cross_module_assessment_from_parent(...)
+constructs the idempotent child task payload, enqueues it through the existing
+task store, preserves the parent's current objective/budgets/approvals/artifacts
+in a waiting_child checkpoint, and calls context.suspend_for_child(...). The
+correlation key is bound to the parent task and exact candidate revision. On
+re-entry the parent calls context.load_parent_resume(), retrieves the artifact
+through the private artifact store, checks the candidate revision/digest,
+incorporates the result into its own state, and calls
 context.checkpoint_parent_resume_consumed(...) before returning completed.
 The child result is explicitly untrusted data. A completed assessment computation
 does not mean that the candidate was accepted; the parent must interpret pending,
 rejected and accepted assessment decisions separately.
 
 The repository still does not expose a single production deployment assembly
-point that builds all WorkerRunner handler maps. Production worker registration,
-host adapter implementations, task enqueue construction, private artifact-store
-configuration and applying migration 0022 remain deployment steps. No live queue
+point that builds all WorkerRunner handler maps. Production worker registration, host adapter implementations, private
+artifact-store configuration and applying migration 0022 remain deployment steps. No live queue
 or database was modified.
 
 ## 7. Integration sequence
