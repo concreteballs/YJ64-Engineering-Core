@@ -43,6 +43,9 @@ def validate_child_result(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("invalid_result_status")
     if data.get("result_is_untrusted_data") is not True:
         raise ValueError("child_result_must_be_marked_untrusted")
+    summary = data.get("result_summary")
+    if summary is not None and (not isinstance(summary, str) or len(summary) > 512):
+        raise ValueError("invalid_result_summary")
     return data
 
 
@@ -115,6 +118,7 @@ def build_parent_resume_checkpoint(
         "result_artifact_ref": result["result_artifact_ref"],
         "result_sha256": result["result_sha256"],
         "result_status": result["result_status"],
+        "result_summary": result.get("result_summary"),
         "result_is_untrusted_data": True,
     }
     artifact_refs = parent_checkpoint.get("artifact_refs", [])
