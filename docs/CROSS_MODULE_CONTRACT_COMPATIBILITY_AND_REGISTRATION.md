@@ -2,7 +2,7 @@
 
 ## Status
 
-This document defines the integration boundary for the independent Biological Engineering and Molecular & Genetic Engineering repositories. It is a compatibility specification and registration plan; it does not claim that runtime adapters or automatic dispatch are already implemented.
+This document defines the integration boundary for the independent Biological Engineering and Molecular & Genetic Engineering repositories. Native-to-wire adapters, the durable child assessment handler, parent condition-disposition evaluation and verified parent-side artifact retrieval are implemented. Production worker assembly, enqueue integration and domain-specific parent consumption remain outstanding.
 
 The coordinator remains the owner of task lifecycle, candidate routing, relevant-discipline selection, review aggregation, proposal decisions and acceptance. Both modules remain independently versioned specialist packs. No parallel worker, scheduler or registry is introduced.
 
@@ -194,6 +194,10 @@ or database was modified.
 7. DONE (code and focused CI): add generic durable child-to-parent result handoff, immutable assessment artifact publication, idempotent event recording, parent checkpoint requeue and explicit parent-consumption enforcement. Migration 0022 is not applied to live infrastructure.
 8. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
 9. Only then enable production discovery/routing. No runtime permissions are added by registration.
+
+## 7A. Verified parent-side artifact retrieval
+
+`yj64_engineering_core.automation.parent_resume.fetch_child_result_artifact(resume, artifact_store)` provides a shared integrity boundary for parent handlers. It accepts only a completed child result, fetches through the supplied artifact store, checks SHA-256 against the immutable resume envelope, and parses only a non-empty UTF-8 JSON object. It does not interpret domain fields or grant trust. Parent handlers must still validate the artifact schema, candidate identity, and assessment decision before acting. Negative tests cover digest mismatch, malformed JSON, and non-completed child results.
 
 ## 8. Explicit non-goals
 
