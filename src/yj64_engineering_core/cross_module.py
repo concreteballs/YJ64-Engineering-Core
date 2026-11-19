@@ -25,7 +25,7 @@ def _candidate_key(value: Mapping[str, Any]) -> tuple[str, int, str, str]:
         raise ValueError("candidate reference is incomplete") from exc
     if not isinstance(key[0], str) or not key[0].strip():
         raise ValueError("candidate_id is required")
-    if not isinstance(key[1], int) or key[1] < 1:
+    if type(key[1]) is not int or key[1] < 1:
         raise ValueError("candidate version must be a positive integer")
     if not isinstance(key[2], str) or not key[2].strip():
         raise ValueError("candidate_schema_version is required")
@@ -125,3 +125,23 @@ def evaluate_condition_dispositions(
             blockers.append(f"{reviewer}:missing-disposition:{condition}")
 
     return (not blockers, tuple(sorted(blockers)))
+
+
+
+def to_wire_condition_disposition(value: ConditionDisposition) -> dict[str, Any]:
+    """Serialize a validated parent disposition using the shared wire schema."""
+    if not isinstance(value, ConditionDisposition):
+        raise TypeError("value must be ConditionDisposition")
+    return {
+        "schema_id": "yj64.cross_module.condition_disposition.v1",
+        "schema_version": "1.0",
+        "candidate": dict(value.candidate),
+        "reviewer_module": value.reviewer_module,
+        "condition_id": value.condition_id,
+        "condition_text": value.condition_text,
+        "status": value.status.value,
+        "rationale": value.rationale,
+        "evidence": [dict(item) for item in value.evidence],
+        "decided_by": value.decided_by,
+        "decision_version": value.decision_version,
+    }
