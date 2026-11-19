@@ -183,7 +183,8 @@ def create_cross_module_task_handler(
                     if (review.get("reviewer_module") != module
                             or review.get("reviewer_version") != registry.get(extension_id).version
                             or review.get("candidate") != candidate
-                            or review.get("schema_id") != "yj64.cross_module.review.v1"\n                            or review.get("schema_version") != "1.0"):
+                            or review.get("schema_id") != "yj64.cross_module.review.v1"
+                            or review.get("schema_version") != "1.0"):
                         return TaskExecutionResult("blocked", "cross_module_review_identity_mismatch")
                     output["review"] = review
                     saved[module] = output
@@ -204,7 +205,8 @@ def create_cross_module_task_handler(
                         return TaskExecutionResult("blocked", "cross_module_contribution_invalid")
                     if (contribution.get("module_id") != module
                             or contribution.get("candidate") != candidate
-                            or contribution.get("schema_id") != "yj64.cross_module.contribution.v1"\n                            or contribution.get("schema_version") != "1.0"):
+                            or contribution.get("schema_id") != "yj64.cross_module.contribution.v1"
+                            or contribution.get("schema_version") != "1.0"):
                         return TaskExecutionResult("blocked", "cross_module_contribution_identity_mismatch")
                     output["contribution"] = contribution
                     saved[module] = output
