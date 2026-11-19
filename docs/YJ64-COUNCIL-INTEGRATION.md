@@ -1,5 +1,8 @@
 # YJ-64 Council integration
 
+> Engineering Core Gateway adapter configuration only. Cycle orchestration and model-provider runtime belong to [Motocicl](https://github.com/concreteballs/Motocicl); the application owns its internal Council engine.
+
+
 ## Gateway environment
 
 Configure these values in the Engineering Core worker environment:
