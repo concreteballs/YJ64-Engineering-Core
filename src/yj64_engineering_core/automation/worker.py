@@ -249,6 +249,19 @@ class TaskContext:
         object.__setattr__(self, "_parent_resume_loaded", True)
         return resume
 
+    def load_parent_resume_artifact(self, artifact_store: Any) -> dict | None:
+        """Load a completed child artifact after validating its immutable resume envelope and digest.
+
+        The returned artifact is untrusted input. The parent handler must validate
+        its domain schema and candidate identity before using any field.
+        """
+        from .parent_resume import fetch_child_result_artifact
+        resume = self.load_parent_resume()
+        if resume is None:
+            return None
+        artifact = fetch_child_result_artifact(resume, artifact_store)
+        return {"resume": resume, "artifact": artifact}
+
     def checkpoint_parent_resume_consumed(self, task_state: dict) -> bool:
         """Persist the parent's next state while retaining the consumed child-result identity."""
         from .checkpoints import create_checkpoint, verify_checkpoint
