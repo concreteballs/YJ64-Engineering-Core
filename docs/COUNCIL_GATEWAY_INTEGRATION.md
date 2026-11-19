@@ -47,7 +47,7 @@ All operations require a dedicated machine identity using a server-side Bearer t
 
 ### Submit request
 
-The request schema is `schemas/council-api-v1.schema.json`. It contains:
+The canonical request schema is [owned by Motocicl](https://github.com/concreteballs/Motocicl/blob/main/schemas/council-api-v1.schema.json). The local `schemas/council-api-v1.schema.json` in Engineering Core is retained only as a compatibility snapshot; update the Motocicl canonical schema first and synchronize this snapshot in the same coordinated change. It contains:
 - `protocol_version`, `agent_id`, `correlation_id`, and `idempotency_key`;
 - `mode`: `consensus` or `critique`;
 - task title, prompt, bounded context, and evidence references;
