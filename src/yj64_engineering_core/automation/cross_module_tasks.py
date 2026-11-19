@@ -122,6 +122,98 @@ def _handoff_assessment(
     return isinstance(handoff, dict) and handoff.get("accepted") is True
 
 
+def enqueue_cross_module_assessment_from_parent(
+    context: Any,
+    candidate: Mapping[str, Any],
+    relevant_modules: list[str],
+    *,
+    max_attempts: int = 5,
+) -> TaskExecutionResult:
+    """Enqueue one idempotent child assessment and suspend its parent task.
+
+    The parent checkpoint is written before its lease is released. If enqueue
+    succeeds but suspension fails, retrying uses the same dedupe key.
+    """
+    from .parent_resume import PARENT_RESUME_PROTOCOL
+    try:
+        if not isinstance(candidate, Mapping) or not isinstance(relevant_modules, list) or not relevant_modules:
+            return TaskExecutionResult("blocked", "cross_module_parent_input_invalid")
+        if any(not isinstance(module, str) or not module.strip() for module in relevant_modules):
+            return TaskExecutionResult("blocked", "cross_module_parent_scope_invalid")
+        if len(set(relevant_modules)) != len(relevant_modules):
+            return TaskExecutionResult("blocked", "cross_module_parent_scope_invalid")
+        candidate_data = dict(candidate)
+        candidate_digest = _digest(candidate_data)
+        candidate_id = candidate_data.get("candidate_id")
+        version = candidate_data.get("version")
+        if not isinstance(candidate_id, str) or not candidate_id.strip() or not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            return TaskExecutionResult("blocked", "cross_module_parent_candidate_identity_invalid")
+        correlation_key = f"cross-module:{context.task_id}:{candidate_id}:{version}:{candidate_digest}"
+        if len(correlation_key) > 256:
+            return TaskExecutionResult("blocked", "cross_module_parent_correlation_key_too_long")
+        payload = {
+            "protocol_version": PROTOCOL_VERSION,
+            "candidate": candidate_data,
+            "relevant_modules": sorted(relevant_modules),
+            "parent_task_id": context.task_id,
+            "correlation_key": correlation_key,
+            "parent_resume_protocol_version": PARENT_RESUME_PROTOCOL,
+        }
+        queued = context.store.enqueue_task(
+            TASK_TYPE, payload,
+            dedupe_key=f"cross-module-parent:{context.task_id}:{candidate_digest}",
+            max_attempts=max_attempts,
+        )
+        if not isinstance(queued, dict) or not (queued.get("enqueued") or queued.get("duplicate")):
+            return TaskExecutionResult("retry", "cross_module_child_enqueue_failed", 90)
+
+        previous = context.load_latest_checkpoint()
+        if previous is not None:
+            verify_checkpoint(previous)
+            if previous.get("task_id") != str(context.task_id):
+                return TaskExecutionResult("blocked", "cross_module_parent_checkpoint_identity_mismatch")
+            previous_state = previous.get("task_state")
+            if not isinstance(previous_state, dict):
+                return TaskExecutionResult("blocked", "cross_module_parent_checkpoint_invalid")
+            task_state = dict(previous_state)
+            if task_state.get("stage") == "waiting_child":
+                if (
+                    task_state.get("expected_child_correlation_key") != correlation_key
+                    or task_state.get("expected_child_protocol_version") != PARENT_RESUME_PROTOCOL
+                ):
+                    return TaskExecutionResult("blocked", "cross_module_parent_wait_conflict")
+            else:
+                task_state["stage_before_child"] = task_state.get("stage")
+            sequence = previous["sequence"] + 1
+            previous_hash = previous["checkpoint_hash"]
+            task_spec_version = previous["task_spec_version"]
+            budgets, approvals = previous.get("budgets", {}), previous.get("approvals", {})
+            artifacts = previous.get("artifact_refs", [])
+        else:
+            task_state, sequence, previous_hash = {}, 1, None
+            task_spec_version, budgets, approvals, artifacts = PROTOCOL_VERSION, {}, {}, []
+        task_state.update({
+            "stage": "waiting_child",
+            "expected_child_correlation_key": correlation_key,
+            "expected_child_protocol_version": PARENT_RESUME_PROTOCOL,
+            "child_task_type": TASK_TYPE,
+            "child_candidate_digest": candidate_digest,
+        })
+        checkpoint = create_checkpoint(
+            task_id=str(context.task_id), sequence=sequence, state="checkpointed",
+            task_spec_version=task_spec_version, task_state=task_state,
+            budgets=budgets, approvals=approvals, artifact_refs=artifacts,
+            previous_checkpoint_hash=previous_hash,
+        )
+        if not context.suspend_for_child(checkpoint, correlation_key, PARENT_RESUME_PROTOCOL):
+            return TaskExecutionResult("retry", "cross_module_parent_suspend_failed", 90)
+        return TaskExecutionResult("suspended")
+    except (TypeError, ValueError):
+        return TaskExecutionResult("blocked", "cross_module_parent_invalid_state")
+    except Exception:
+        return TaskExecutionResult("retry", "cross_module_parent_orchestration_failed", 90)
+
+
 def create_cross_module_task_handler(
     *,
     registry: ExtensionRegistry,
