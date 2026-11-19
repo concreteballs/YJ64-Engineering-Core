@@ -12,6 +12,7 @@ from .engineering_runtime import (
     create_engineering_task_registry,
     create_engineering_worker_runner,
     create_reference_engineering_dispatcher,
+    create_universal_task_worker_runner,
 )
 from .parent_tasks import (
     ParentTaskState,
@@ -31,6 +32,7 @@ __all__ = [
     "create_engineering_task_registry",
     "create_engineering_worker_runner",
     "create_reference_engineering_dispatcher",
+    "create_universal_task_worker_runner",
     "PARENT_TASK_QUEUE_TYPE",
     "ParentTaskState",
     "TaskAdapterRegistry",
