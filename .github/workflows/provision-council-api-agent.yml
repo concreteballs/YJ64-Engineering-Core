@@ -1,0 +1,45 @@
+name: Provision Council API agent
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yj64-council-agent-provisioning
+  cancel-in-progress: false
+
+jobs:
+  register-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out trusted main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate required secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          YJ64_COUNCIL_AGENT_TOKEN: ${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ] || [ -z "$YJ64_COUNCIL_AGENT_TOKEN" ]; then
+            echo "::error::Required provisioning secrets are missing."
+            exit 1
+          fi
+          if [ "${#YJ64_COUNCIL_AGENT_TOKEN}" -lt 32 ]; then
+            echo "::error::YJ64_COUNCIL_AGENT_TOKEN must contain at least 32 characters."
+            exit 1
+          fi
+      - name: Register agent token hash in Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          YJ64_COUNCIL_AGENT_TOKEN: ${{ secrets.YJ64_COUNCIL_AGENT_TOKEN }}
+        run: python scripts/register_council_api_agent.py
