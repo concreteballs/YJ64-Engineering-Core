@@ -1,3 +1,17 @@
+> [!IMPORTANT]
+> ## Repository boundary — autonomous cycle moved to Motocicl
+> The autonomous Council/cycle runtime, durable orchestration, provider execution, CI self-repair and cycle-owned infrastructure are being separated into **[concreteballs/Motocicl](https://github.com/concreteballs/Motocicl)**.
+>
+> **This Engineering Core repository is no longer the place to implement or extend the autonomous cycle itself.** Do not add a second queue, scheduler, general-purpose worker, model-provider runtime, cycle controller or browser-agent transport here.
+>
+> Engineering Core remains responsible for domain engineering, specialist solvers, engineering task handlers, evidence/validation within engineering disciplines, and its narrow adapter to the external Council/cycle API.
+>
+> The existing cycle plan below is deliberately preserved as historical/source material. Its cycle-related implementation work is now assigned to Motocicl. Use the extraction inventory and authoritative execution plan in [Motocicl — Repository Split Plan](https://github.com/concreteballs/Motocicl/blob/main/REPOSITORY_SPLIT_PLAN.md). Do not execute cycle tasks from this file in this repository. Only Engineering Core-specific work and the integration contract between the two repositories remain actionable here.
+>
+> **Migration status:** plan and repository boundary notice only. Source files have not yet been moved. The next migration step must follow the file-by-file inventory in Motocicl and preserve working interfaces/tests.
+
+---
+
 # YJ64 Engineering Core — Autonomous Cycle and Master Roadmap
 
 Last reconciled: 2026-11-17
