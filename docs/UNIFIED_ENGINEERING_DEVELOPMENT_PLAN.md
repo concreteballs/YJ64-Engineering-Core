@@ -10,7 +10,9 @@
 - UNIVERSAL_ENGINEERING_ROADMAP.md — concise architecture and domain roadmap.
 - EXTERNAL_ENGINEERING_ECOSYSTEM.md — candidate inventory, evaluation policy, adapter requirements and integration gates.
 - IMPLEMENTATION_STATUS.md — factual implementation ledger; code and tests, not plans, determine status.
-- UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md — universal task lifecycle, context/goal model, cross-domain coordination, authority boundaries and biohybrid research scope.
+- UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md — universal task lifecycle, context/goal model, cross-domain coordination, authority boundaries and cross-module validation protocol.
+- BIOLOGICAL_ENGINEERING_MODULE.md — independent biological materials, biohybrid systems, contamination-control and biosafety module specification.
+- MOLECULAR_GENETIC_ENGINEERING_MODULE.md — independent molecular/genetic design and analysis module specification.
 
 ## 1. Mission
 
@@ -48,7 +50,7 @@ Task handlers share versioned lifecycle contracts, declared inputs/outputs, capa
 
 Context is selected by task purpose, not indiscriminately maximized. Provide three traceable levels: (1) concise foundational postulates, (2) thesis/claim summary, and (3) full context with source links and provenance. Fundamental philosophical/metaphysical postulates are stored separately from project goals and empirical claims. Goals are independent, versioned entities with long-, medium- and short-term horizons and explicit graph relationships. Context selection records what was included, omitted and why; it must not silently replace source material or confuse a postulate with verified evidence.
 
-The interdisciplinary coordinator checks consequences across related disciplines, propagates hazards and constraints through the task graph, and detects local improvements that create unacceptable system-level effects. Example: an actuator material can be mechanically effective yet toxic, contamination-prone or able to transport biological hazards. Every affected subsystem and lifecycle stage must be considered.
+The interdisciplinary coordinator checks every proposed solution across all relevant independent modules, propagates hazards and constraints through the task graph, and detects local improvements that create unacceptable system-level effects. No module may self-certify a cross-domain solution: its result remains a candidate until required independent modules have returned compatible reviews or explicitly marked a domain not applicable with reasons. Example: an actuator material can be mechanically effective yet toxic, contamination-prone or able to transport biological hazards. Every affected subsystem and lifecycle stage must be considered. See the cross-module validation protocol in UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md.
 
 The application already has a supervisory/monitor module. Engineering Core exposes a stable, least-privilege integration boundary and auditable events for it, but this plan does not prescribe or duplicate the monitor's internal implementation.
 
@@ -190,7 +192,9 @@ Build together:
 - polymer/composite and metal additive manufacturing, CNC machining, joining/welding and hybrid manufacturing, with process-aware models and validated machine/process boundaries;
 - responsive actuator materials and artificial-muscle discovery, including electrically/magnetically active polymers and composites, microstructure design, multi-scale simulation and experiment feedback (research target; no material generator or actuator solver is claimed implemented);
 - **Biohybrid engineering research:** biologically derived materials, biocomposites, biohybrid actuators, microbial/fungal surface interactions, controlled surface protection/cleaning, contamination monitoring, validated decontamination and environmental persistence/end-of-life. Compare against non-biological alternatives on force, controllability, response, durability, energy, stability, maintenance, waste and lifecycle cost. Biological mechanisms remain hypotheses until independently evidenced;
-- **Molecular & Genetic Engineering discipline:** computational molecular design and analysis (proteins, enzymes, receptors, complexes and interactions); computational genetic-system design and analysis; phenotype and whole-organism effect prediction; evolutionary/genetic stability and unintended-effect assessment; biosafety and containment assessment; and experiment-to-model evidence feedback. It is a separate discipline pack interoperating with Chemistry & Molecular Design, Biohybrid Engineering, Materials, Robotics and the cross-domain coordinator. Predictions, designed sequences and in-silico results are not evidence of a safe or functional organism. This plan authorizes research architecture and computational modelling, not unsupervised wet-lab execution or operational protocols for engineering pathogens, increasing transmissibility/virulence, evading detection or spreading organisms.
+- **Independent Biological Engineering Module:** biological/bio-derived materials, biohybrid actuator concepts, microbial/fungal material interactions, surface maintenance, contamination monitoring, validated decontamination, containment and environmental persistence. This module owns biological-material and organism/system-level biological questions; it does not own genetic design. See BIOLOGICAL_ENGINEERING_MODULE.md.
+- **Independent Molecular & Genetic Engineering Module:** computational molecular design and analysis, genetic-system design/analysis, phenotype prediction, evolutionary stability and biosafety assessment. This module owns molecular/genetic design questions; it does not own robot/material integration or biological deployment. See MOLECULAR_GENETIC_ENGINEERING_MODULE.md.
+- Both modules use common extension/task contracts and are independently reviewable. Their outputs must be cross-checked by all affected modules. Computational predictions and designs are not evidence of a safe or functional organism. The plan authorizes architecture and bounded computational research, not autonomous wet-lab execution or operational design of harmful biological capabilities.
 - tolerances, fits, GD&T, inspection, non-destructive testing, dimensional metrology and process quality records;
 - CAD/CAM exchange and machine-specific postprocessor boundaries;
 - reverse engineering from measurements, scans, images and samples with uncertainty;
@@ -392,39 +396,25 @@ This is a platform-wide capability, not an engineering-only queue wrapper.
 
 Implementation sequence: verify and complete parent-task resume using current TaskContext/task store/checkpoint APIs; establish a generic handler contract using existing ExtensionRegistry and WorkerRunner; add typed task/goal/context records and graph validation; add cross-domain hazard propagation; add permission-policy declarations in inactive mode; then integrate specialist packs. Each increment requires unit tests for idempotency, restart recovery, context fidelity, permission bypass and stale/missing dependencies.
 
-## 15. Molecular, genetic and biohybrid engineering
+## 15. Independent biological and molecular/genetic modules
 
-Molecular & Genetic Engineering is a first-class discipline pack, coordinated with but not merged into Chemistry & Molecular Design or Biohybrid Engineering.
+The biological constructor and molecular/genetic constructor are separate, independently versioned modules. Neither is embedded inside the Engineering Core or inside the other. They connect to YJ64 through the same versioned task, evidence, material, component, hazard and extension contracts as every other discipline.
 
-### Molecular design
-- Evidence-indexed catalogue of known molecular components and their provenance: proteins, enzymes, receptors, complexes, binding/interaction data and experimentally characterized properties.
-- Computational structure/function analysis, molecular interaction modelling and uncertainty-aware candidate comparison.
-- Clear distinction between measured structures/properties, inferred annotations, simulation outputs and speculative designs.
+### 15.1 Biological Engineering Module
 
-### Genetic-system design
-- Computational representation and analysis of genetic systems and their relationships to molecular components and organism-level traits.
-- Versioned design records, assumptions, dependency maps, compatibility checks and predicted outcomes.
-- No automatic transition from computational design to synthesis, transformation, release or other wet-lab action. Any experimental implementation is a separately governed activity requiring qualified human oversight and biosafety approval.
+The module owns biological materials and organism/system-level biological engineering: bio-derived materials and biocomposites; biohybrid actuator research; microbial/fungal interactions with materials; surface maintenance concepts; contamination monitoring; validated decontamination; containment; environmental persistence; waste and end-of-life. It does not own genetic design.
 
-### Whole-organism prediction and stability
-- Phenotype prediction must expose uncertainty, model scope and possible interactions beyond the intended trait.
-- Assess genetic/evolutionary stability, loss or drift of intended properties, unintended effects, ecological persistence and horizontal gene-transfer concerns at an appropriate non-operational risk-assessment level.
-- Distinguish organism-level predictions from experimentally demonstrated outcomes.
+Detailed specification: [BIOLOGICAL_ENGINEERING_MODULE.md](BIOLOGICAL_ENGINEERING_MODULE.md).
 
-### Biosafety and experimental evidence
-- Include containment, host range, toxicity/pathogenicity screening, environmental persistence, shedding, waste handling and exposure pathways in safety review.
-- Prefer well-characterized non-pathogenic research systems where biological investigation is justified; no open self-spreading biological systems in robots operating around people.
-- Preserve experiment protocols as controlled external records only where authorized; this engineering plan does not provide operational protocols for pathogens or hazardous genetic modifications.
-- Compare predictions against independently reviewed experimental observations. Experimental verification is not inferred from a successful model run.
+### 15.2 Molecular & Genetic Engineering Module
 
-### Biohybrid engineering
-Research areas: (a) biological materials and biocomposites; (b) biohybrid actuators; (c) microbial/fungal surface interactions; (d) controlled surface protection and cleaning; (e) contamination monitoring and validated decontamination; (f) environmental persistence and end-of-life.
-Evaluate mechanical/electrical performance, controllability, durability, energy and resource needs, stability, metabolites/by-products, waste, maintenance, containment and lifecycle. Compare every candidate with non-biological solutions.
+The module owns computational molecular design/analysis and genetic-system representation/design/analysis, including proteins, enzymes, receptors, complexes, molecular interactions, phenotype prediction, genetic/evolutionary stability, unintended-effect assessment and biosafety evidence. It does not own physical robot integration, biological deployment or wet-lab execution.
 
-Bacteriophages are host-specific biological agents, not universal disinfectants; they do not act as general antiviral agents and do not replace validated cleaning/disinfection. Biological cleaning remains supplementary unless independently validated for the exact use.
+Detailed specification: [MOLECULAR_GENETIC_ENGINEERING_MODULE.md](MOLECULAR_GENETIC_ENGINEERING_MODULE.md).
 
-### Evidence and maturity labels
-Every capability is labelled as one of: concept/hypothesis, computational prototype, independently benchmarked model, controlled experimental evidence, replicated evidence, or qualified application. No design output is described as a proven technology without supporting evidence.
+### 15.3 Independent review and evidence
+
+Both modules publish versioned candidate outputs with assumptions, source provenance, uncertainty, applicability, evidence maturity, hazards and required reviews. A module may validate its own domain-specific calculations but cannot certify overall acceptability. Every output must be routed to all relevant affected modules before system acceptance. No response from a relevant module is not approval. A domain may be marked not applicable only with an explicit rationale and recorded reviewer/result.
 
 ## 16. Interdisciplinary safety and whole-system effects
 
@@ -441,9 +431,9 @@ A proposed solution is not accepted merely because it improves one metric. The c
 3. Add typed context levels, postulate/claim separation, goal horizons and goal/task graph persistence.
 4. Implement cross-domain coordination and hazard/constraint propagation, including system-level and lifecycle effects.
 5. Add graded authority declarations and execution-boundary policy checks in inactive design/test mode; do not enable new privileges.
-6. Establish molecular/genetic and biohybrid discipline contracts, evidence metadata and computational-only initial adapters.
-7. Expand molecular models, phenotype/stability predictions and biohybrid material/actuator research only after data provenance, safety review and validation gates exist.
-8. Connect robotics and other application packs to the approved specialist capabilities; preserve non-biological alternatives and compare on whole-system criteria.
+6. Establish the independent Biological Engineering Module and Molecular & Genetic Engineering Module contracts, evidence metadata and computational-only initial adapters.
+7. Implement cross-module review orchestration so every candidate solution is routed to all relevant disciplines, including safety, human/environmental impact, manufacturing, operation, maintenance and end-of-life.
+8. Expand each independent module only after provenance, biosafety/policy review and validation gates exist; integrate outputs through versioned shared contracts and compare non-biological alternatives.
 
 The supervisory/monitor module remains an independent integration dependency. This plan defines only its interface boundary.
 
