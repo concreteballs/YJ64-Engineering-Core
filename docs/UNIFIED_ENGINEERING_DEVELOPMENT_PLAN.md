@@ -10,6 +10,7 @@
 - UNIVERSAL_ENGINEERING_ROADMAP.md — concise architecture and domain roadmap.
 - EXTERNAL_ENGINEERING_ECOSYSTEM.md — candidate inventory, evaluation policy, adapter requirements and integration gates.
 - IMPLEMENTATION_STATUS.md — factual implementation ledger; code and tests, not plans, determine status.
+- UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md — universal task lifecycle, context/goal model, cross-domain coordination, authority boundaries and biohybrid research scope.
 
 ## 1. Mission
 
@@ -38,6 +39,22 @@ No external tool owns or silently changes canonical YJ64 project state. Native t
 ## 2A. Cross-cutting capability — multilingual engineering workspace
 
 Internationalization, technical-document translation and localized unit presentation are platform-wide capabilities, not yacht-specific features. Their requirements and staged design are defined in MULTILINGUAL_ENGINEERING_WORKSPACE.md. The project model must preserve language-independent engineering data and source documents while allowing user-selected interface/document languages and display-unit profiles. Translation must never silently alter numeric values, symbols, equations, identifiers, standard references or engineering meaning. Unit conversion is dimension-checked and independent from language translation.
+
+## 2B. Cross-cutting capability — universal task assembly and interdisciplinary coordination
+
+YJ64 must support arbitrary engineering and research tasks, not only CAD/physics requests. A universal task lifecycle coordinates typed task handlers and discipline packs through the existing worker, task context, checkpoint, extension-registry and dispatcher foundations. It must not create a parallel worker loop or duplicate an existing registry. The EngineeringDispatcher remains a specialist capability for concrete engineering operations; universal orchestration selects and composes capabilities across domains.
+
+Task handlers share versioned lifecycle contracts, declared inputs/outputs, capabilities, dependencies, resource needs, risk metadata, resumability and evidence requirements. Specialist handlers retain domain-specific semantics while remaining interoperable through common contracts. Task graphs support parent/child, dependency, prerequisite, follow-up and blocking relationships, idempotent delivery and restart-safe resumption of the original parent task with its objective, context, decisions, artifacts and history intact.
+
+Context is selected by task purpose, not indiscriminately maximized. Provide three traceable levels: (1) concise foundational postulates, (2) thesis/claim summary, and (3) full context with source links and provenance. Fundamental philosophical/metaphysical postulates are stored separately from project goals and empirical claims. Goals are independent, versioned entities with long-, medium- and short-term horizons and explicit graph relationships. Context selection records what was included, omitted and why; it must not silently replace source material or confuse a postulate with verified evidence.
+
+The interdisciplinary coordinator checks consequences across related disciplines, propagates hazards and constraints through the task graph, and detects local improvements that create unacceptable system-level effects. Example: an actuator material can be mechanically effective yet toxic, contamination-prone or able to transport biological hazards. Every affected subsystem and lifecycle stage must be considered.
+
+The application already has a supervisory/monitor module. Engineering Core exposes a stable, least-privilege integration boundary and auditable events for it, but this plan does not prescribe or duplicate the monitor's internal implementation.
+
+Autonomy and risk are separate dimensions. Model future authority as explicit, graded capability levels within categories, but keep elevated capabilities inactive by default. The Council may recommend an action or request authority; it cannot grant itself permissions. Enforce policy outside the model at the execution boundary with default-deny, scoped capabilities, resource limits, approval gates, audit records, pause/cancel and emergency stop. No permission expansion is enabled by this architectural plan.
+
+Detailed requirements: [UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md](UNIVERSAL_TASK_ASSEMBLY_AND_BIOHYBRID_ENGINEERING.md).
 
 ## 3. Delivery principles
 
@@ -172,6 +189,8 @@ Build together:
 - **Heat treatment and surface engineering:** annealing, normalizing where applicable, quenching, tempering, solution treatment, ageing/precipitation hardening, stress relief, carburizing, nitriding, induction/flame treatment and other alloy-specific processes; time-temperature cycles, atmosphere, phase transformations, precipitation, hardness, distortion, residual stress, oxidation and case depth;
 - polymer/composite and metal additive manufacturing, CNC machining, joining/welding and hybrid manufacturing, with process-aware models and validated machine/process boundaries;
 - responsive actuator materials and artificial-muscle discovery, including electrically/magnetically active polymers and composites, microstructure design, multi-scale simulation and experiment feedback (research target; no material generator or actuator solver is claimed implemented);
+- **Biohybrid engineering research:** biologically derived materials, biocomposites, biohybrid actuators, microbial/fungal surface interactions, controlled surface protection/cleaning, contamination monitoring, validated decontamination and environmental persistence/end-of-life. Compare against non-biological alternatives on force, controllability, response, durability, energy, stability, maintenance, waste and lifecycle cost. Biological mechanisms remain hypotheses until independently evidenced;
+- **Molecular & Genetic Engineering discipline:** computational molecular design and analysis (proteins, enzymes, receptors, complexes and interactions); computational genetic-system design and analysis; phenotype and whole-organism effect prediction; evolutionary/genetic stability and unintended-effect assessment; biosafety and containment assessment; and experiment-to-model evidence feedback. It is a separate discipline pack interoperating with Chemistry & Molecular Design, Biohybrid Engineering, Materials, Robotics and the cross-domain coordinator. Predictions, designed sequences and in-silico results are not evidence of a safe or functional organism. This plan authorizes research architecture and computational modelling, not unsupervised wet-lab execution or operational protocols for engineering pathogens, increasing transmissibility/virulence, evading detection or spreading organisms.
 - tolerances, fits, GD&T, inspection, non-destructive testing, dimensional metrology and process quality records;
 - CAD/CAM exchange and machine-specific postprocessor boundaries;
 - reverse engineering from measurements, scans, images and samples with uncertainty;
@@ -219,6 +238,8 @@ The modular biomechanical target is defined in [MODULAR_BIOMECHANICAL_ROBOTICS.m
 Build a common framework for humanoid/non-humanoid robots, deckhands, inspection robots, ROV/AUV, UAV, rescue/cargo systems and industrial automation.
 
 Include chassis/link/joint models, DOF, multibody dynamics, electric/geared, cable/tendon, hydraulic, pneumatic and compliant actuators, transmissions, grippers, winches, cranes, propellers/rotors, balance/contact, mass/CG/inertia, power/thermal budgets and fault states. Marine variants account for moving decks, six-DOF vessel motion, salt, ingress, cold, shock, vibration, corrosion, tethering, stowage and recovery. UAVs need local return/divert/land logic; underwater vehicles need physically appropriate acoustic, optical or tether communications.
+
+Biohybrid actuator candidates may be evaluated as optional actuator technologies, never as assumed safe or inherently superior. A robot is also a potential fomite even when it is not itself ill: assess external surfaces, cavities, seams, air paths, tools, connectors, service procedures, transport between zones and end-of-life. Biological surface maintenance or bacteriophage concepts are narrow research options, not universal disinfectants; phages are host/bacterium-specific and do not replace validated disinfection or decontamination. Do not assume a microbial/fungal layer can safely self-propagate on robots operating near people. Prefer well-characterized non-pathogenic systems, closed containment and validated controls; evaluate persistence, shedding, waste streams and environmental release. Any real-world biological work requires institutional biosafety review, appropriate containment and separately authorized procedures.
 
 ### Package 8 — Cross-domain application packs and open ecosystem
 
@@ -353,3 +374,76 @@ The agent-facing contract and API are now implemented. The engineering agent, no
 ## China sourcing connector checkpoint
 
 A read-only 1688 product-search adapter has been added through the third-party Nexscope API. It maps supplier/listing data, CNY pricing, MOQ and price tiers, but does not claim live stock or shipping. Each search costs a documented 10–19 Nexscope credits; calls are gated by an explicit per-call credit budget and API key. No paid API calls have been made. Next: add supplier identity/technical match review, landed-import cost adapters and approved official marketplace/distributor APIs. Alibaba official Open Platform access is permissioned and must not be treated as unrestricted public search.
+
+
+## 14. Universal task assembly, context and goal architecture
+
+This is a platform-wide capability, not an engineering-only queue wrapper.
+
+- One universal task lifecycle must coordinate arbitrary task types through compatible, versioned handler contracts. Handler contracts expose validation, preparation, execution, result validation, checkpoint/resume and cancellation semantics as appropriate to the existing runtime; do not create a second worker loop or duplicate ExtensionRegistry, TaskContext, checkpoint, task store or dispatcher functionality.
+- Keep universal orchestration distinct from specialist execution. The current EngineeringDispatcher remains the specialist route for concrete CAD/physics operations; it is invoked by universal task orchestration when relevant, not replaced by it.
+- Preserve parent-task identity and full resumable state across Council results, retries and worker restarts. Resume is an idempotent state transition through the existing task lifecycle, not merely a status-field change. Validate parent references and task state; reject missing, completed or mismatched parents safely.
+- Support typed task/project graphs with explicit dependencies, prerequisites, child tasks, follow-ups, blockers, artifacts and evidence links.
+- Maintain the three selectable context levels: foundational postulates; concise thesis/claim summary; full context. Keep postulates distinct from goals, empirical claims and assumptions. Every derived summary retains provenance and source references.
+- Represent goals separately from postulates, with long-, medium- and short-term horizons, status, ownership, constraints and graph relationships. Select context depth based on task intent and preserve initial conditions and objective.
+- Add cross-domain coordination that evaluates coupled effects and propagates hazards/constraints across disciplines, lifecycle phases and affected subsystems.
+- Expose a stable integration boundary for the existing supervisory/monitor module without specifying its internal design.
+- Model future authority as category-specific graded capabilities, with risk and autonomy kept independent. Default-deny, external enforcement, non-self-granting Council, auditability and emergency stop are mandatory. This is a design/test model only until separately approved; no additional live permissions are enabled.
+
+Implementation sequence: verify and complete parent-task resume using current TaskContext/task store/checkpoint APIs; establish a generic handler contract using existing ExtensionRegistry and WorkerRunner; add typed task/goal/context records and graph validation; add cross-domain hazard propagation; add permission-policy declarations in inactive mode; then integrate specialist packs. Each increment requires unit tests for idempotency, restart recovery, context fidelity, permission bypass and stale/missing dependencies.
+
+## 15. Molecular, genetic and biohybrid engineering
+
+Molecular & Genetic Engineering is a first-class discipline pack, coordinated with but not merged into Chemistry & Molecular Design or Biohybrid Engineering.
+
+### Molecular design
+- Evidence-indexed catalogue of known molecular components and their provenance: proteins, enzymes, receptors, complexes, binding/interaction data and experimentally characterized properties.
+- Computational structure/function analysis, molecular interaction modelling and uncertainty-aware candidate comparison.
+- Clear distinction between measured structures/properties, inferred annotations, simulation outputs and speculative designs.
+
+### Genetic-system design
+- Computational representation and analysis of genetic systems and their relationships to molecular components and organism-level traits.
+- Versioned design records, assumptions, dependency maps, compatibility checks and predicted outcomes.
+- No automatic transition from computational design to synthesis, transformation, release or other wet-lab action. Any experimental implementation is a separately governed activity requiring qualified human oversight and biosafety approval.
+
+### Whole-organism prediction and stability
+- Phenotype prediction must expose uncertainty, model scope and possible interactions beyond the intended trait.
+- Assess genetic/evolutionary stability, loss or drift of intended properties, unintended effects, ecological persistence and horizontal gene-transfer concerns at an appropriate non-operational risk-assessment level.
+- Distinguish organism-level predictions from experimentally demonstrated outcomes.
+
+### Biosafety and experimental evidence
+- Include containment, host range, toxicity/pathogenicity screening, environmental persistence, shedding, waste handling and exposure pathways in safety review.
+- Prefer well-characterized non-pathogenic research systems where biological investigation is justified; no open self-spreading biological systems in robots operating around people.
+- Preserve experiment protocols as controlled external records only where authorized; this engineering plan does not provide operational protocols for pathogens or hazardous genetic modifications.
+- Compare predictions against independently reviewed experimental observations. Experimental verification is not inferred from a successful model run.
+
+### Biohybrid engineering
+Research areas: (a) biological materials and biocomposites; (b) biohybrid actuators; (c) microbial/fungal surface interactions; (d) controlled surface protection and cleaning; (e) contamination monitoring and validated decontamination; (f) environmental persistence and end-of-life.
+Evaluate mechanical/electrical performance, controllability, durability, energy and resource needs, stability, metabolites/by-products, waste, maintenance, containment and lifecycle. Compare every candidate with non-biological solutions.
+
+Bacteriophages are host-specific biological agents, not universal disinfectants; they do not act as general antiviral agents and do not replace validated cleaning/disinfection. Biological cleaning remains supplementary unless independently validated for the exact use.
+
+### Evidence and maturity labels
+Every capability is labelled as one of: concept/hypothesis, computational prototype, independently benchmarked model, controlled experimental evidence, replicated evidence, or qualified application. No design output is described as a proven technology without supporting evidence.
+
+## 16. Interdisciplinary safety and whole-system effects
+
+The cross-domain coordinator evaluates more than the target discipline's local performance. It must identify secondary and tertiary effects across human exposure, environmental impact, contamination, reliability, energy, maintenance, service operations, transport and end-of-life.
+
+For biohybrid robots, assess the robot as a possible fomite regardless of whether the robot itself is biologically affected. Include touch surfaces, seams, cavities, ventilation paths, tools, connectors, charging/service interfaces, transport and storage. Account for contamination transfer between clean/dirty zones and between sites. Biological surface treatments, microbes, fungi and phages are not substitutes for validated decontamination. Any deployment near people requires validated containment and hygiene controls.
+
+A proposed solution is not accepted merely because it improves one metric. The coordinator must record trade-offs, affected domains, unresolved hazards, evidence level and the reason a candidate is accepted, constrained, deferred or rejected.
+
+## 17. Updated implementation priority
+
+1. Verify and complete safe, idempotent parent-task resumption in the existing task lifecycle.
+2. Define the universal handler contract by extending existing ExtensionRegistry/WorkerRunner/TaskContext interfaces; do not add a parallel queue or worker loop.
+3. Add typed context levels, postulate/claim separation, goal horizons and goal/task graph persistence.
+4. Implement cross-domain coordination and hazard/constraint propagation, including system-level and lifecycle effects.
+5. Add graded authority declarations and execution-boundary policy checks in inactive design/test mode; do not enable new privileges.
+6. Establish molecular/genetic and biohybrid discipline contracts, evidence metadata and computational-only initial adapters.
+7. Expand molecular models, phenotype/stability predictions and biohybrid material/actuator research only after data provenance, safety review and validation gates exist.
+8. Connect robotics and other application packs to the approved specialist capabilities; preserve non-biological alternatives and compare on whole-system criteria.
+
+The supervisory/monitor module remains an independent integration dependency. This plan defines only its interface boundary.
+
