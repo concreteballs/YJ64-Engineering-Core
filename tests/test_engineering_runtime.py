@@ -1,10 +1,12 @@
 import json
 import unittest
+from tempfile import TemporaryDirectory
 
 from yj64_engineering_core.automation.engineering_runtime import (
     ENGINEERING_TASK_TYPE,
     create_engineering_task_registry,
     create_engineering_worker_runner,
+    create_reference_engineering_dispatcher,
 )
 from yj64_engineering_core.automation.task_requests import PARENT_TASK_QUEUE_TYPE
 from yj64_engineering_core.contracts import EngineeringRequest, LoadCase
@@ -82,6 +84,23 @@ def queued_engineering_task():
 
 
 class EngineeringRuntimeTests(unittest.TestCase):
+    def test_reference_dispatcher_registers_real_axial_and_optional_cad_backends(self):
+        with TemporaryDirectory() as workspace:
+            dispatcher = create_reference_engineering_dispatcher(cad_workspace=workspace)
+            request = EngineeringRequest(
+                request_id="runtime-cad-1",
+                title="Cylinder source",
+                objective="Create editable CAD source",
+                geometry={
+                    "geometry_type": "cylinder",
+                    "parameters": {"diameter_m": 0.1, "height_m": 0.2},
+                },
+                operating_conditions={"cad_backend": "openscad_source"},
+            )
+            result = dispatcher.dispatch(request, "cad.generate")
+            self.assertEqual(result.response.status, "completed")
+            self.assertEqual(result.response.artifacts[0].media_type, "application/x-openscad")
+
     def test_registry_contains_only_concrete_configured_engineering_adapter(self):
         registry = create_engineering_task_registry(configured_dispatcher())
         registration = registry.get(ENGINEERING_TASK_TYPE)
