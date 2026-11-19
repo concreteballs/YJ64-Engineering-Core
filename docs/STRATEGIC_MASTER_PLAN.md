@@ -3,7 +3,7 @@ Last reconciled: 2026-11-17
 Repository: `concreteballs/YJ64-Engineering-Core`
 Authorized branch: `main`
 
-> This is the strategic graph for the whole programme. The numbered stages express the intended order. Each expandable section is the implementation checklist for that stage. Detailed engineering status remains in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); autonomous-cycle technical tasks remain in [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md).
+> This is the strategic graph for the whole programme. The numbered stages express the intended order. Each expandable section is the implementation checklist for that stage. Detailed engineering status remains in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md); autonomous-cycle technical tasks are owned by [Motocicl](https://github.com/concreteballs/Motocicl).
 
 ## Strategic graph
 
@@ -60,44 +60,17 @@ No new or existing engineering module is considered **fully integrated** until i
 
 ---
 
-## 1. Finish the shared Autonomous Engineering Cycle
-**Goal:** one cloud-based operating cycle that can continue work when the user's phone is offline.
+## 1. Autonomous Engineering Cycle — external dependency
 
-<details>
-<summary>Open implementation steps and acceptance criteria</summary>
+**Owner:** [Motocicl](https://github.com/concreteballs/Motocicl). The autonomous cycle is a separate repository and runtime. Engineering Core does not implement, schedule or operate a parallel cycle.
 
-### Implementation
-1. Finish reliable GitHub Actions completion-event delivery to the authenticated receiver.
-2. Verify actual PostgreSQL persistence in Supabase: event record, durable task, deduplication and queue state.
-3. Verify atomic task claims, leases, bounded retries, completion/blocked states and recovery after worker restart.
-4. Deploy a separate cloud worker that can claim tasks without relying on the phone, browser, or an open ChatGPT conversation. The worker must comply with the [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md): durable task state is authoritative; model calls are replaceable, bounded sessions; context rollover is automatic and recoverable.
-5. Connect a server-side model provider using a separately configured API key; do not assume a ChatGPT subscription is an API credential.
-6. Implement [MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md): detect provider RPM/TPM/context/concurrency/quota limits and structured errors; schedule Retry-After/reset-aware retries; adaptively chunk oversized inputs; verify ordered chunk hashes and explicit FINALIZE before model work. Stateless calls must be assembled by the orchestrator, not assumed to accumulate.
-7. Make the worker read this strategic plan, the detailed roadmap and implementation ledger; select only the next unblocked task.
-8. Require exact-commit CI validation before a task is marked complete or the next dependent task is started.
-9. Add bounded repair attempts, task/time/token/cost budgets, pause/resume/cancel, kill switch and safe blocked states.
-10. Add external notifications and a status view for active task, queue, last commit, CI result, next task, budget and stop reason.
-6. Make the worker read this strategic plan, the detailed roadmap and implementation ledger; select only the next unblocked task.
-7. Require exact-commit CI validation before a task is marked complete or the next dependent task is started.
-8. Add bounded repair attempts, task/time/token/cost budgets, pause/resume/cancel, kill switch and safe blocked states.
-9. Add external notifications and a status view for active task, queue, last commit, CI result, next task, budget and stop reason.
+Engineering Core exposes well-defined engineering task handlers, typed inputs/outputs, evidence and domain validation, and integrates through the narrow Council/task adapter. The cycle owns durable orchestration, provider execution, CI-driven continuation, recovery, budgets and cross-disciplinary review.
 
-### Acceptance
-- A task is durably queued.
-- The cloud worker claims it while the phone is offline.
-- It makes a small authorized change in this repository and on `main`.
-- CI runs for the exact resulting commit.
-- Completion event is authenticated, persisted and deduplicated.
-- The worker records the evidence and advances, or stops with a clear reason.
-- Restart does not lose or duplicate work.
-- Context-window exhaustion triggers a persisted checkpoint and a fresh model request automatically, without a user pressing “New chat”.
-- A new worker process can resume from durable state without access to the previous model conversation.
-- Replayed or uncertain in-flight operations are handled idempotently and do not duplicate external side effects.
-- Pause/kill switch and budget limits are demonstrated.
+The cycle's implementation sequence, acceptance criteria and current status are maintained in [Motocicl's strategic cycle plan](https://github.com/concreteballs/Motocicl/blob/main/docs/STRATEGIC_AUTONOMOUS_CYCLE_PLAN.md), [cycle roadmap](https://github.com/concreteballs/Motocicl/blob/main/docs/AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) and [cycle implementation status](https://github.com/concreteballs/Motocicl/blob/main/docs/CYCLE_IMPLEMENTATION_STATUS.md).
 
-**Exit gate:** do not call the cycle autonomous until the full acceptance sequence passes. Do not start broad automated module development before this gate.
+**Engineering Core exit gate:** do not mark an engineering task complete solely because its local discipline check passed. Return reproducible evidence, assumptions, limitations, artifact identity and unresolved questions so Motocicl can perform independent cross-disciplinary review. This does not transfer engineering-domain acceptance authority to the cycle.
 
-</details>
+---
 
 ## 2. Complete Chemistry & Molecular Design with its specialist agent
 **Goal:** make the chemistry discipline a usable, tested engineering module before using it for sustained autonomous discovery.
