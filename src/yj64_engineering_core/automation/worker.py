@@ -5,7 +5,7 @@ A deployment must explicitly construct a WorkerRunner and call run_once().
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from typing import Callable, Mapping, Protocol, Sequence
 
@@ -87,7 +87,7 @@ class CycleStore(Protocol):
     def save_checkpoint(self, queue_task_id: int, worker_id: str, checkpoint: dict, lease_seconds: int = 300) -> bool: ...
     def load_latest_checkpoint(self, queue_task_id: int) -> dict | None: ...
     def suspend_task_for_council(self, queue_task_id: int, worker_id: str, checkpoint: dict, council_request_id: str, lease_seconds: int = 300) -> bool: ...
-    def record_council_resume_event(self, parent_task_id: int, result_task_id: int, worker_id: str, council_request_id: str, result_artifact_ref: str, result_sha256: str) -> dict: ...
+    def record_council_resume_event(self, parent_task_id: int, result_task_id: int, worker_id: str, council_request_id: str, result_artifact_ref: str, result_sha256: str, resume_payload: dict) -> dict: ...
     def complete_task(self, task_id: int, worker_id: str) -> bool: ...
     def fail_task(self, task_id: int, worker_id: str, error: str, retry_delay_seconds: int = 60) -> str | None: ...
     def block_task(self, task_id: int, worker_id: str, reason: str) -> bool: ...
@@ -121,9 +121,93 @@ class TaskContext:
             self.task_id, self.worker_id, checkpoint, council_request_id, self.lease_seconds
         )
 
-    def record_council_resume_event(self, parent_task_id: int, council_request_id: str, result_artifact_ref: str, result_sha256: str) -> dict:
-        """Atomically record a Council result and wake its waiting parent."""
-        return self.store.record_council_resume_event(parent_task_id, self.task_id, self.worker_id, council_request_id, result_artifact_ref, result_sha256)
+    _council_resume_required: bool = field(default=False, init=False, compare=False, repr=False)
+    _council_resume_loaded: bool = field(default=False, init=False, compare=False, repr=False)
+    _council_resume_expected_request_id: str | None = field(default=None, init=False, compare=False, repr=False)
+
+    def record_council_resume_event(
+        self, parent_task_id: int, council_request_id: str,
+        result_artifact_ref: str, result_sha256: str, resume_payload: dict,
+    ) -> dict:
+        """Atomically persist the validated result and wake its waiting parent."""
+        return self.store.record_council_resume_event(
+            parent_task_id, self.task_id, self.worker_id, council_request_id,
+            result_artifact_ref, result_sha256, resume_payload,
+        )
+
+    def _require_council_resume(self, checkpoint: dict) -> None:
+        from .checkpoints import verify_checkpoint
+        verify_checkpoint(checkpoint)
+        if checkpoint.get("task_id") != str(self.task_id):
+            raise ValueError("council resume checkpoint belongs to another task")
+        state = checkpoint.get("task_state")
+        resume = state.get("council_resume") if isinstance(state, dict) else None
+        request_id = resume.get("request_id") if isinstance(resume, dict) else None
+        if (
+            not isinstance(state, dict)
+            or state.get("stage") != "council_resume_ready"
+            or not isinstance(request_id, str) or not request_id
+        ):
+            raise ValueError("checkpoint does not contain a pending council resume")
+        object.__setattr__(self, "_council_resume_required", True)
+        object.__setattr__(self, "_council_resume_expected_request_id", request_id)
+
+    def load_council_resume(self) -> dict | None:
+        """Load the untrusted Council handoff from this task's latest checkpoint."""
+        from .checkpoints import verify_checkpoint
+        checkpoint = self.load_latest_checkpoint()
+        if checkpoint is None:
+            return None
+        verify_checkpoint(checkpoint)
+        if checkpoint.get("task_id") != str(self.task_id):
+            raise ValueError("council resume checkpoint belongs to another task")
+        state = checkpoint.get("task_state")
+        if not isinstance(state, dict):
+            raise ValueError("task checkpoint state is invalid")
+        if state.get("stage") != "council_resume_ready":
+            return None
+        self._require_council_resume(checkpoint)
+        resume = state.get("council_resume")
+        if not isinstance(resume, dict):
+            raise ValueError("council resume payload is missing")
+        if (
+            not isinstance(resume.get("result_task_id"), int)
+            or isinstance(resume.get("result_task_id"), bool)
+            or resume["result_task_id"] < 1
+            or not isinstance(resume.get("result_artifact_ref"), str)
+            or not resume["result_artifact_ref"]
+            or not isinstance(resume.get("result_sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", resume["result_sha256"])
+            or resume.get("model_output_is_untrusted_data") is not True
+        ):
+            raise ValueError("council resume identity or trust marker is invalid")
+        status = resume.get("execution_status")
+        if status == "completed":
+            result = resume.get("result")
+            if (
+                not isinstance(result, dict)
+                or not isinstance(result.get("summary"), str)
+                or not result.get("summary")
+                or result.get("outcome") not in {
+                    "consensus", "qualified_consensus",
+                    "unresolved_disagreement", "insufficient_evidence",
+                }
+            ):
+                raise ValueError("completed council resume result is invalid")
+        elif status in {"blocked", "failed", "cancelled"}:
+            terminal = resume.get("terminal")
+            if not isinstance(terminal, dict) or terminal.get("status") != status:
+                raise ValueError("terminal council resume result is invalid")
+        else:
+            raise ValueError("council resume execution status is invalid")
+        object.__setattr__(self, "_council_resume_loaded", True)
+        return {
+            **resume,
+            "parent_task_id": self.task_id,
+            "parent_task_state": {
+                key: value for key, value in state.items() if key != "council_resume"
+            },
+        }
 
     def list_recovered_provider_results(self) -> list[dict]:
         """Return durable result references; task handlers must consume these before issuing new calls."""
@@ -240,6 +324,22 @@ class WorkerRunner:
             worker_id=self.worker_id,
             lease_seconds=self.lease_seconds,
         )
+        claimed_checkpoint = task.get("checkpoint")
+        if isinstance(claimed_checkpoint, dict):
+            claimed_state = claimed_checkpoint.get("task_state")
+            if isinstance(claimed_state, dict) and claimed_state.get("stage") == "council_resume_ready":
+                try:
+                    context._require_council_resume(claimed_checkpoint)
+                except ValueError:
+                    blocked = self.store.block_task(
+                        task_id, self.worker_id, "invalid_council_resume_checkpoint"
+                    )
+                    return {
+                        "status": "blocked" if blocked else "lease_lost",
+                        "task_id": task_id,
+                        "reason": "invalid_council_resume_checkpoint",
+                        "recovery": recovery,
+                    }
         try:
             decision = handler(task, context)
             if not isinstance(decision, TaskExecutionResult):
@@ -263,6 +363,39 @@ class WorkerRunner:
             return {"status": "waiting_council", "task_id": task_id, "recovery": recovery}
 
         if decision.outcome == "completed":
+            if context._council_resume_required:
+                try:
+                    latest = context.load_latest_checkpoint()
+                except Exception:
+                    state = self.store.fail_task(
+                        task_id, self.worker_id,
+                        "council_resume_checkpoint_unavailable",
+                        retry_delay_seconds=90,
+                    )
+                    return {
+                        "status": state or "lease_lost",
+                        "task_id": task_id,
+                        "reason": "council_resume_checkpoint_unavailable",
+                        "recovery": recovery,
+                    }
+                latest_state = latest.get("task_state") if isinstance(latest, dict) else None
+                latest_resume = latest_state.get("council_resume") if isinstance(latest_state, dict) else None
+                if (
+                    not context._council_resume_loaded
+                    or not isinstance(latest_state, dict)
+                    or latest_state.get("stage") == "council_resume_ready"
+                    or not isinstance(latest_resume, dict)
+                    or latest_resume.get("request_id") != context._council_resume_expected_request_id
+                ):
+                    blocked = self.store.block_task(
+                        task_id, self.worker_id, "council_resume_not_checkpointed"
+                    )
+                    return {
+                        "status": "blocked" if blocked else "lease_lost",
+                        "task_id": task_id,
+                        "reason": "council_resume_not_checkpointed",
+                        "recovery": recovery,
+                    }
             completed = self.store.complete_task(task_id, self.worker_id)
             return {
                 "status": "completed" if completed else "lease_lost",

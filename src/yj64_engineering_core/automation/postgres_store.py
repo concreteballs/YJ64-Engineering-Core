@@ -607,7 +607,15 @@ class PostgresCycleStore:
                     """,
                     (task_id, worker_id),
                 )
-                return cursor.rowcount == 1
+                completed = cursor.rowcount == 1
+                if completed:
+                    cursor.execute(
+                        """UPDATE yj64_task_resume_events
+                           SET consumed_at = COALESCE(consumed_at, now())
+                           WHERE parent_task_id = %s AND consumed_at IS NULL""",
+                        (task_id,),
+                    )
+                return completed
 
     def fail_task(
         self, task_id: int, worker_id: str, error: str, retry_delay_seconds: int = 60
@@ -633,6 +641,13 @@ class PostgresCycleStore:
                     (retry_delay_seconds, safe_error, task_id, worker_id),
                 )
                 row = cursor.fetchone()
+                if row and row[0] == "failed":
+                    cursor.execute(
+                        """UPDATE yj64_task_resume_events
+                           SET consumed_at = COALESCE(consumed_at, now())
+                           WHERE parent_task_id = %s AND consumed_at IS NULL""",
+                        (task_id,),
+                    )
                 return row[0] if row else None
 
     def block_task(self, task_id: int, worker_id: str, reason: str) -> bool:
@@ -647,7 +662,15 @@ class PostgresCycleStore:
                     """,
                     (str(reason)[:2000], task_id, worker_id),
                 )
-                return cursor.rowcount == 1
+                blocked = cursor.rowcount == 1
+                if blocked:
+                    cursor.execute(
+                        """UPDATE yj64_task_resume_events
+                           SET consumed_at = COALESCE(consumed_at, now())
+                           WHERE parent_task_id = %s AND consumed_at IS NULL""",
+                        (task_id,),
+                    )
+                return blocked
 
 
     def suspend_task_for_council(
@@ -713,8 +736,11 @@ class PostgresCycleStore:
     def record_council_resume_event(
         self, parent_task_id: int, result_task_id: int, worker_id: str,
         council_request_id: str, result_artifact_ref: str, result_sha256: str,
+        resume_payload: dict,
     ) -> dict:
-        """Validate a council result and atomically wake its matching waiting parent."""
+        """Persist a validated Council handoff into the parent checkpoint and requeue it."""
+        from .checkpoints import create_checkpoint, verify_checkpoint
+
         if any(not isinstance(value, int) or isinstance(value, bool) or value < 1 for value in (parent_task_id, result_task_id)):
             raise ValueError("parent_task_id and result_task_id must be positive integers")
         if not isinstance(worker_id, str) or not worker_id.strip():
@@ -725,63 +751,211 @@ class PostgresCycleStore:
             raise ValueError("result_artifact_ref must be a non-empty string of at most 1024 characters")
         if not isinstance(result_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", result_sha256):
             raise ValueError("result_sha256 must be a lowercase SHA-256 hash")
+        if not isinstance(resume_payload, dict) or resume_payload.get("model_output_is_untrusted_data") is not True:
+            raise ValueError("resume_payload must explicitly mark Council output as untrusted")
+        execution_status = resume_payload.get("execution_status")
+        if execution_status == "completed":
+            result = resume_payload.get("result")
+            if (
+                not isinstance(result, dict)
+                or result.get("outcome") not in {
+                    "consensus", "qualified_consensus",
+                    "unresolved_disagreement", "insufficient_evidence",
+                }
+                or not isinstance(result.get("summary"), str)
+                or not result["summary"].strip()
+            ):
+                raise ValueError("completed resume_payload must contain a validated Council result")
+        elif execution_status in {"blocked", "failed", "cancelled"}:
+            terminal = resume_payload.get("terminal")
+            if not isinstance(terminal, dict) or terminal.get("status") != execution_status:
+                raise ValueError("terminal resume_payload does not match its execution status")
+        else:
+            raise ValueError("resume_payload has an invalid execution status")
+        try:
+            serialized_resume = json.dumps(
+                resume_payload, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("resume_payload must contain finite JSON data") from exc
+        if len(serialized_resume.encode("utf-8")) > 256 * 1024:
+            raise ValueError("resume_payload exceeds the 256 KiB checkpoint limit")
+
         with self._connect() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("""SELECT task_id FROM yj64_task_queue
-                    WHERE task_id = %s AND state = 'running' AND lock_owner = %s FOR UPDATE""",
-                    (result_task_id, worker_id))
-                if cursor.fetchone() is None:
+                cursor.execute(
+                    """SELECT task_id, payload FROM yj64_task_queue
+                       WHERE task_id = %s AND state = 'running' AND lock_owner = %s
+                       FOR UPDATE""",
+                    (result_task_id, worker_id),
+                )
+                result_task = cursor.fetchone()
+                if result_task is None:
                     raise RuntimeError("council result task lease is not owned by this worker")
-                cursor.execute("SELECT state FROM yj64_task_queue WHERE task_id = %s FOR UPDATE", (parent_task_id,))
+                result_task_payload = result_task[1]
+                if isinstance(result_task_payload, str):
+                    try:
+                        result_task_payload = json.loads(result_task_payload)
+                    except (TypeError, ValueError):
+                        raise ValueError("council result task payload is invalid") from None
+                if (
+                    not isinstance(result_task_payload, dict)
+                    or result_task_payload.get("parent_task_id") != parent_task_id
+                    or result_task_payload.get("parent_task_ref") is not None
+                    or result_task_payload.get("request_id") != council_request_id
+                    or result_task_payload.get("result_artifact_ref") != result_artifact_ref
+                    or result_task_payload.get("execution_status") != execution_status
+                ):
+                    raise ValueError("council result task does not match the requested parent resume")
+
+                cursor.execute(
+                    "SELECT state FROM yj64_task_queue WHERE task_id = %s FOR UPDATE",
+                    (parent_task_id,),
+                )
                 parent = cursor.fetchone()
                 if parent is None:
                     return {"accepted": False, "duplicate": False, "reason": "parent_not_found"}
-                cursor.execute("""SELECT result_task_id, result_artifact_ref, result_sha256
-                    FROM yj64_task_resume_events
-                    WHERE parent_task_id = %s AND council_request_id = %s""",
-                    (parent_task_id, council_request_id))
+                cursor.execute(
+                    """SELECT result_task_id, result_artifact_ref, result_sha256
+                       FROM yj64_task_resume_events
+                       WHERE parent_task_id = %s AND council_request_id = %s""",
+                    (parent_task_id, council_request_id),
+                )
                 existing_event = cursor.fetchone()
                 if existing_event is not None:
-                    if existing_event != (result_task_id, result_artifact_ref, result_sha256):
+                    existing = (
+                        existing_event[0], existing_event[1],
+                        existing_event[2].strip() if isinstance(existing_event[2], str) else existing_event[2],
+                    )
+                    if existing != (result_task_id, result_artifact_ref, result_sha256):
                         raise ValueError("council resume identity conflicts with an existing event")
-                    return {"accepted": True, "duplicate": True, "parent_task_id": parent_task_id, "state": parent[0]}
+                    return {
+                        "accepted": True, "duplicate": True,
+                        "parent_task_id": parent_task_id, "state": parent[0],
+                    }
                 if parent[0] != "waiting":
                     return {"accepted": False, "duplicate": False, "reason": "parent_not_waiting"}
-                cursor.execute("""SELECT checkpoint FROM yj64_task_checkpoints
-                    WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1""", (parent_task_id,))
+
+                cursor.execute(
+                    """SELECT checkpoint FROM yj64_task_checkpoints
+                       WHERE queue_task_id = %s ORDER BY sequence DESC LIMIT 1 FOR UPDATE""",
+                    (parent_task_id,),
+                )
                 latest = cursor.fetchone()
                 if latest is None:
                     return {"accepted": False, "duplicate": False, "reason": "parent_checkpoint_missing"}
-                checkpoint = latest[0]
-                if isinstance(checkpoint, str):
-                    checkpoint = json.loads(checkpoint)
-                expected = checkpoint.get("task_state", {}).get("expected_council_request_id")
-                if expected != council_request_id:
+                parent_checkpoint = latest[0]
+                if isinstance(parent_checkpoint, str):
+                    try:
+                        parent_checkpoint = json.loads(parent_checkpoint)
+                    except (TypeError, ValueError):
+                        raise ValueError("parent checkpoint is invalid") from None
+                verify_checkpoint(parent_checkpoint)
+                if parent_checkpoint.get("task_id") != str(parent_task_id):
+                    raise ValueError("parent checkpoint task identity mismatch")
+                parent_state = parent_checkpoint.get("task_state")
+                if (
+                    not isinstance(parent_state, dict)
+                    or parent_state.get("stage") != "waiting_council"
+                    or parent_state.get("expected_council_request_id") != council_request_id
+                ):
                     return {"accepted": False, "duplicate": False, "reason": "council_request_mismatch"}
-                cursor.execute("""INSERT INTO yj64_task_resume_events
-                    (parent_task_id, result_task_id, council_request_id, result_artifact_ref, result_sha256, event_payload)
-                    VALUES (%s, %s, %s, %s, %s, %s::jsonb)
-                    ON CONFLICT (parent_task_id, council_request_id) DO NOTHING
-                    RETURNING resume_event_id""",
-                    (parent_task_id, result_task_id, council_request_id, result_artifact_ref, result_sha256,
-                     json.dumps({"source": "council_result_ready"}, separators=(",", ":"))))
+
+                event_payload = {
+                    "source": "council_result_ready",
+                    "execution_status": execution_status,
+                    "result_artifact_ref": result_artifact_ref,
+                    "result_sha256": result_sha256,
+                }
+                cursor.execute(
+                    """INSERT INTO yj64_task_resume_events
+                       (parent_task_id, result_task_id, council_request_id,
+                        result_artifact_ref, result_sha256, event_payload)
+                       VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                       ON CONFLICT (parent_task_id, council_request_id) DO NOTHING
+                       RETURNING resume_event_id""",
+                    (
+                        parent_task_id, result_task_id, council_request_id,
+                        result_artifact_ref, result_sha256,
+                        json.dumps(event_payload, sort_keys=True, separators=(",", ":")),
+                    ),
+                )
                 inserted = cursor.fetchone()
                 if inserted is None:
-                    cursor.execute("""SELECT result_task_id, result_artifact_ref, result_sha256
-                        FROM yj64_task_resume_events WHERE parent_task_id = %s AND council_request_id = %s""",
-                        (parent_task_id, council_request_id))
+                    cursor.execute(
+                        """SELECT result_task_id, result_artifact_ref, result_sha256
+                           FROM yj64_task_resume_events
+                           WHERE parent_task_id = %s AND council_request_id = %s""",
+                        (parent_task_id, council_request_id),
+                    )
                     existing = cursor.fetchone()
-                    if existing is None or existing != (result_task_id, result_artifact_ref, result_sha256):
+                    if existing is None or (
+                        existing[0], existing[1],
+                        existing[2].strip() if isinstance(existing[2], str) else existing[2],
+                    ) != (result_task_id, result_artifact_ref, result_sha256):
                         raise ValueError("council resume identity conflicts with an existing event")
-                cursor.execute("""UPDATE yj64_task_queue
-                    SET state = 'pending', available_at = now(), blocked_reason = NULL,
-                        locked_at = NULL, lock_owner = NULL, updated_at = now()
-                    WHERE task_id = %s AND state = 'waiting'""", (parent_task_id,))
+                    return {
+                        "accepted": True, "duplicate": True,
+                        "parent_task_id": parent_task_id, "state": parent[0],
+                    }
+
+                resumed_state = dict(parent_state)
+                resumed_state["stage"] = "council_resume_ready"
+                resumed_state["council_resume"] = {
+                    "resume_event_id": inserted[0],
+                    "request_id": council_request_id,
+                    "result_task_id": result_task_id,
+                    "result_artifact_ref": result_artifact_ref,
+                    "result_sha256": result_sha256,
+                    "execution_status": execution_status,
+                    "result": resume_payload.get("result") if execution_status == "completed" else None,
+                    "terminal": resume_payload.get("terminal") if execution_status != "completed" else None,
+                    "model_output_is_untrusted_data": True,
+                }
+                previous_artifacts = parent_checkpoint.get("artifact_refs", [])
+                if not isinstance(previous_artifacts, list):
+                    raise ValueError("parent checkpoint artifact_refs is invalid")
+                resumed_artifacts = list(previous_artifacts)
+                if execution_status == "completed" and result_artifact_ref not in resumed_artifacts:
+                    resumed_artifacts.append(result_artifact_ref)
+                resumed_checkpoint = create_checkpoint(
+                    task_id=str(parent_task_id),
+                    sequence=parent_checkpoint["sequence"] + 1,
+                    state="checkpointed",
+                    task_spec_version=parent_checkpoint["task_spec_version"],
+                    task_state=resumed_state,
+                    budgets=parent_checkpoint.get("budgets", {}),
+                    approvals=parent_checkpoint.get("approvals", {}),
+                    artifact_refs=resumed_artifacts,
+                    previous_checkpoint_hash=parent_checkpoint["checkpoint_hash"],
+                )
+                cursor.execute(
+                    """INSERT INTO yj64_task_checkpoints
+                       (queue_task_id, sequence, schema_version, checkpoint_hash,
+                        previous_checkpoint_hash, checkpoint)
+                       VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+                    (
+                        parent_task_id, resumed_checkpoint["sequence"],
+                        resumed_checkpoint["schema_version"], resumed_checkpoint["checkpoint_hash"],
+                        resumed_checkpoint["previous_checkpoint_hash"],
+                        json.dumps(resumed_checkpoint, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+                    ),
+                )
+                cursor.execute(
+                    """UPDATE yj64_task_queue
+                       SET state = 'pending', available_at = now(), blocked_reason = NULL,
+                           locked_at = NULL, lock_owner = NULL, updated_at = now()
+                       WHERE task_id = %s AND state = 'waiting'""",
+                    (parent_task_id,),
+                )
                 if cursor.rowcount != 1:
                     raise RuntimeError("waiting parent could not be atomically requeued")
-                return {"accepted": True, "duplicate": inserted is None,
-                        "resume_event_id": inserted[0] if inserted is not None else None,
-                        "parent_task_id": parent_task_id, "state": "pending"}
+                return {
+                    "accepted": True, "duplicate": False,
+                    "resume_event_id": inserted[0],
+                    "parent_task_id": parent_task_id, "state": "pending",
+                }
 
     def save_checkpoint(
         self, queue_task_id: int, worker_id: str, checkpoint: dict,

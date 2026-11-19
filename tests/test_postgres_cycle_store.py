@@ -353,5 +353,151 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(len(cursor.statements), 4)
 
 
+    def test_council_resume_appends_parent_checkpoint_and_preserves_permissions(self):
+        import json
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
+
+        parent_checkpoint = create_checkpoint(
+            task_id="9", sequence=4, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={
+                "stage": "waiting_council",
+                "expected_council_request_id": "req-9",
+                "objective": "original objective",
+                "decision_log": ["decision-1"],
+            },
+            budgets={"tokens": 5000},
+            approvals={"repository_write": False, "deploy": False},
+            artifact_refs=["private://source/input-1"],
+        )
+        result_payload = {
+            "parent_task_id": 9, "parent_task_ref": None,
+            "request_id": "req-9", "session_id": "session-9",
+            "execution_status": "completed",
+            "result_artifact_ref": "private://council/result-9",
+        }
+
+        class ResumeCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.step = 0
+                self.inserted_checkpoint = None
+                self.rowcount = 1
+
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id, payload FROM yj64_task_queue" in query:
+                    self._fetch = (71, result_payload)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("waiting",)
+                elif "SELECT result_task_id, result_artifact_ref, result_sha256" in query:
+                    self._fetch = None
+                elif "SELECT checkpoint FROM yj64_task_checkpoints" in query:
+                    self._fetch = (parent_checkpoint,)
+                elif "INSERT INTO yj64_task_resume_events" in query:
+                    self._fetch = (101,)
+                elif "INSERT INTO yj64_task_checkpoints" in query:
+                    self.inserted_checkpoint = json.loads(params[-1])
+                    self._fetch = None
+                elif "UPDATE yj64_task_queue" in query:
+                    self.rowcount = 1
+                    self._fetch = None
+                else:
+                    self._fetch = None
+
+        cursor = ResumeCursor()
+        resume_payload = {
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Run a bounded test."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        result = self.store(cursor).record_council_resume_event(
+            9, 71, "worker-a", "req-9", "private://council/result-9",
+            "c" * 64, resume_payload,
+        )
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["state"], "pending")
+        resumed = cursor.inserted_checkpoint
+        self.assertIsNotNone(resumed)
+        self.assertTrue(verify_checkpoint(resumed))
+        self.assertEqual(resumed["sequence"], 5)
+        self.assertEqual(resumed["task_state"]["stage"], "council_resume_ready")
+        self.assertEqual(resumed["task_state"]["objective"], "original objective")
+        self.assertEqual(resumed["task_state"]["decision_log"], ["decision-1"])
+        self.assertEqual(resumed["task_state"]["council_resume"]["result"]["outcome"], "qualified_consensus")
+        self.assertEqual(resumed["budgets"], {"tokens": 5000})
+        self.assertEqual(resumed["approvals"], {
+            "repository_write": False, "deploy": False,
+        })
+        self.assertEqual(resumed["artifact_refs"], [
+            "private://source/input-1", "private://council/result-9",
+        ])
+
+    def test_council_resume_rejects_result_task_bound_to_another_parent(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        class WrongParentCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                self._fetch = (71, {
+                    "parent_task_id": 10, "parent_task_ref": None,
+                    "request_id": "req-9", "execution_status": "completed",
+                    "result_artifact_ref": "private://council/result-9",
+                })
+
+        resume_payload = {
+            "execution_status": "completed",
+            "result": {"outcome": "consensus", "summary": "Review."},
+            "model_output_is_untrusted_data": True,
+        }
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.store(WrongParentCursor()).record_council_resume_event(
+                9, 71, "worker-a", "req-9", "private://council/result-9",
+                "c" * 64, resume_payload,
+            )
+
+    def test_council_resume_does_not_requeue_missing_or_finished_parent(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        result_payload = {
+            "parent_task_id": 9, "parent_task_ref": None,
+            "request_id": "req-9", "execution_status": "completed",
+            "result_artifact_ref": "private://council/result-9",
+        }
+
+        class ParentStateCursor(FakeCursor):
+            def __init__(self, parent_state):
+                super().__init__()
+                self.parent_state = parent_state
+                self.calls = 0
+
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id, payload FROM yj64_task_queue" in query:
+                    self._fetch = (71, result_payload)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = (self.parent_state,) if self.parent_state is not None else None
+                else:
+                    self._fetch = None
+
+        resume_payload = {
+            "execution_status": "completed",
+            "result": {"outcome": "consensus", "summary": "Review."},
+            "model_output_is_untrusted_data": True,
+        }
+        missing = ParentStateCursor(None)
+        missing_result = self.store(missing).record_council_resume_event(
+            9, 71, "worker-a", "req-9", "private://council/result-9",
+            "c" * 64, resume_payload,
+        )
+        self.assertEqual(missing_result["reason"], "parent_not_found")
+
+        finished = ParentStateCursor("completed")
+        finished_result = self.store(finished).record_council_resume_event(
+            9, 71, "worker-a", "req-9", "private://council/result-9",
+            "c" * 64, resume_payload,
+        )
+        self.assertEqual(finished_result["reason"], "parent_not_waiting")
+
 if __name__ == "__main__":
     unittest.main()

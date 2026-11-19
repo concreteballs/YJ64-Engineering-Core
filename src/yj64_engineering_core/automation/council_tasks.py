@@ -232,7 +232,11 @@ def handle_council_request_in_parent_task(
     *,
     client_factory: Callable[[], CouncilGatewayClient] | None = None,
 ) -> TaskExecutionResult:
-    """Submit Council under the parent lease, then suspend the parent durably."""
+    """Submit Council and suspend the parent without discarding its checkpoint.
+
+    A re-entered parent handler must call context.load_council_resume() first;
+    this helper is only the submit-and-suspend half of that task's lifecycle.
+    """
     try:
         payload = _payload(task)
         raw = payload.get("request")
@@ -271,27 +275,61 @@ def handle_council_request_in_parent_task(
     if not queued.get("enqueued") and not queued.get("duplicate"):
         return TaskExecutionResult("retry", "council_poll_enqueue_failed", 90)
 
+    from .checkpoints import verify_checkpoint
     previous = context.load_latest_checkpoint()
-    checkpoint = create_checkpoint(
-        task_id=str(context.task_id),
-        sequence=int(previous.get("sequence", 0)) + 1 if isinstance(previous, dict) else 1,
-        state="checkpointed",
-        task_spec_version=PROTOCOL_VERSION,
-        task_state={
-            "stage": "waiting_council",
-            "status": "waiting",
-            "expected_council_request_id": accepted["request_id"],
+    if previous is not None:
+        try:
+            verify_checkpoint(previous)
+        except ValueError:
+            return TaskExecutionResult("blocked", "invalid_parent_checkpoint")
+        if previous.get("task_id") != str(context.task_id):
+            return TaskExecutionResult("blocked", "parent_checkpoint_identity_mismatch")
+        task_state = dict(previous.get("task_state", {}))
+        if not isinstance(previous.get("task_state"), dict):
+            return TaskExecutionResult("blocked", "invalid_parent_checkpoint")
+        previous_stage = task_state.get("stage")
+        if previous_stage is not None:
+            task_state["stage_before_council"] = previous_stage
+        sequence = previous["sequence"] + 1
+        previous_hash = previous["checkpoint_hash"]
+        task_spec_version = previous["task_spec_version"]
+        budgets = previous.get("budgets", {})
+        approvals = previous.get("approvals", {})
+        artifact_refs = previous.get("artifact_refs", [])
+    else:
+        task_state = {}
+        sequence = 1
+        previous_hash = None
+        task_spec_version = PROTOCOL_VERSION
+        budgets = {}
+        approvals = {}
+        artifact_refs = []
+    task_state.update({
+        "stage": "waiting_council",
+        "status": "waiting",
+        "expected_council_request_id": accepted["request_id"],
+        "request_id": accepted["request_id"],
+        "session_id": accepted["session_id"],
+        "correlation_id": accepted["correlation_id"],
+        "idempotency_key": accepted["idempotency_key"],
+        "submitted_at": parent_payload["submitted_at"],
+        "council_wait": {
             "request_id": accepted["request_id"],
             "session_id": accepted["session_id"],
-            "correlation_id": accepted["correlation_id"],
-            "idempotency_key": accepted["idempotency_key"],
+            "mode": request.mode,
             "submitted_at": parent_payload["submitted_at"],
-            "chat_id": raw.get("context", {}).get("chat_id") if isinstance(raw.get("context"), dict) else None,
         },
-        budgets={},
-        approvals={"external_council_request": "authorized_by_calling_workflow"},
-        artifact_refs=[],
-        previous_checkpoint_hash=previous.get("checkpoint_hash") if isinstance(previous, dict) else None,
+    })
+    checkpoint = create_checkpoint(
+        task_id=str(context.task_id),
+        sequence=sequence,
+        state="checkpointed",
+        task_spec_version=task_spec_version,
+        task_state=task_state,
+        budgets=budgets,
+        approvals=approvals,
+        artifact_refs=artifact_refs,
+        previous_checkpoint_hash=previous_hash,
     )
     try:
         if not context.suspend_for_council(checkpoint, accepted["request_id"]):

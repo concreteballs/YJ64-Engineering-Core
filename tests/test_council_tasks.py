@@ -38,12 +38,13 @@ class FakeContext:
     worker_id = "test-worker"
     lease_seconds = 300
 
-    def __init__(self):
+    def __init__(self, latest_checkpoint=None):
         self.store = FakeStore()
         self.checkpoints = []
+        self.latest_checkpoint = latest_checkpoint
 
     def load_latest_checkpoint(self):
-        return None
+        return self.latest_checkpoint
 
     def save_checkpoint(self, checkpoint):
         self.checkpoints.append(checkpoint)
@@ -51,6 +52,7 @@ class FakeContext:
 
     def suspend_for_council(self, checkpoint, request_id):
         self.suspended = (checkpoint, request_id)
+        self.latest_checkpoint = checkpoint
         return True
 
     def record_council_resume_event(self, parent_task_id, request_id, artifact_ref, digest):
@@ -185,6 +187,33 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(context.suspended[1], "request-123")
         self.assertEqual(context.suspended[0]["task_state"]["stage"], "waiting_council")
         self.assertEqual(context.store.enqueued[0]["task_type"], POLL_TASK)
+
+    def test_parent_suspension_preserves_existing_task_context_and_permissions(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.council_tasks import handle_council_request_in_parent_task
+
+        previous = create_checkpoint(
+            task_id="42", sequence=1, state="running", task_spec_version="engineering.v1",
+            task_state={"stage": "analysis", "objective": "retain this objective", "decision_log": ["d1"]},
+            budgets={"tokens": 9000},
+            approvals={"repository_write": False, "hardware_action": False},
+            artifact_refs=["private://source/evidence-1"],
+        )
+        context = FakeContext(previous)
+        result = handle_council_request_in_parent_task(
+            self.submit_task(), context, client_factory=lambda: FakeClient(),
+        )
+        self.assertEqual(result, TaskExecutionResult("suspended"))
+        checkpoint = context.suspended[0]
+        self.assertEqual(checkpoint["task_state"]["stage"], "waiting_council")
+        self.assertEqual(checkpoint["task_state"]["stage_before_council"], "analysis")
+        self.assertEqual(checkpoint["task_state"]["objective"], "retain this objective")
+        self.assertEqual(checkpoint["task_state"]["decision_log"], ["d1"])
+        self.assertEqual(checkpoint["budgets"], {"tokens": 9000})
+        self.assertEqual(checkpoint["approvals"], {
+            "repository_write": False, "hardware_action": False,
+        })
+        self.assertEqual(checkpoint["artifact_refs"], ["private://source/evidence-1"])
 
     def test_submit_persists_remote_ids_and_queues_poll_without_waiting(self):
         context = FakeContext()

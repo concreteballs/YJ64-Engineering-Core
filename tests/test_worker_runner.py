@@ -9,6 +9,7 @@ from yj64_engineering_core.automation.worker import (
 class FakeStore:
     def __init__(self, task=None):
         self.task = task
+        self.checkpoint = None
         self.calls = []
         self.fail_state = "pending"
         self.lease_ok = True
@@ -27,11 +28,12 @@ class FakeStore:
 
     def save_checkpoint(self, queue_task_id, worker_id, checkpoint, lease_seconds=300):
         self.calls.append(("checkpoint", queue_task_id, worker_id, checkpoint, lease_seconds))
+        self.checkpoint = checkpoint
         return True
 
     def load_latest_checkpoint(self, queue_task_id):
         self.calls.append(("load_checkpoint", queue_task_id))
-        return {"sequence": 1}
+        return self.checkpoint if self.checkpoint is not None else {"sequence": 1}
 
     def complete_task(self, task_id, worker_id):
         self.calls.append(("complete", task_id, worker_id))
@@ -75,6 +77,82 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertTrue(observed["checkpoint"])
         self.assertEqual(observed["loaded"], {"sequence": 1})
         self.assertIn(("complete", 7, "worker-a"), store.calls)
+
+    def test_resumed_parent_handler_loads_result_after_worker_restart_and_checkpoints_continuation(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        resume = {
+            "request_id": "req-resume-1",
+            "result_task_id": 71,
+            "result_artifact_ref": "private://council/result-1",
+            "result_sha256": "a" * 64,
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Test the proposed change."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        initial = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={
+                "stage": "council_resume_ready",
+                "objective": "preserve original task",
+                "council_resume": resume,
+            },
+            budgets={"tokens": 1000}, approvals={"repository_write": False},
+            artifact_refs=["private://source/evidence-1", "private://council/result-1"],
+        )
+        store = FakeStore(self.task())
+        store.checkpoint = initial
+        store.task["checkpoint"] = initial
+        observed = {}
+
+        def resumed_handler(task, context):
+            observed["resume"] = context.load_council_resume()
+            next_state = dict(initial["task_state"])
+            next_state["stage"] = "engineering_continuation"
+            next_state["decision"] = "run_non_mutating_test"
+            continuation = create_checkpoint(
+                task_id="7", sequence=2, state="checkpointed", task_spec_version="engineering.v1",
+                task_state=next_state, budgets=initial["budgets"],
+                approvals=initial["approvals"], artifact_refs=initial["artifact_refs"],
+                previous_checkpoint_hash=initial["checkpoint_hash"],
+            )
+            context.save_checkpoint(continuation)
+            return TaskExecutionResult("completed")
+
+        result = WorkerRunner(
+            store, worker_id="worker-a", handlers={"demo": resumed_handler}
+        ).run_once()
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(observed["resume"]["request_id"], "req-resume-1")
+        self.assertTrue(observed["resume"]["model_output_is_untrusted_data"])
+        self.assertEqual(store.checkpoint["task_state"]["decision"], "run_non_mutating_test")
+
+    def test_resumed_parent_cannot_complete_by_only_returning_completed(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        resume = {
+            "request_id": "req-resume-2", "result_task_id": 71,
+            "result_artifact_ref": "private://council/result-2",
+            "result_sha256": "b" * 64, "execution_status": "completed",
+            "result": {"outcome": "consensus", "summary": "Proceed with tests."},
+            "terminal": None, "model_output_is_untrusted_data": True,
+        }
+        checkpoint = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={"stage": "council_resume_ready", "council_resume": resume},
+            budgets={}, approvals={}, artifact_refs=["private://council/result-2"],
+        )
+        store = FakeStore(self.task())
+        store.checkpoint = checkpoint
+        store.task["checkpoint"] = checkpoint
+        result = WorkerRunner(
+            store, worker_id="worker-a",
+            handlers={"demo": lambda task, context: TaskExecutionResult("completed")},
+        ).run_once()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn(("block", 7, "worker-a", "council_resume_not_checkpointed"), store.calls)
+        self.assertNotIn(("complete", 7, "worker-a"), store.calls)
 
     def test_unknown_task_type_is_blocked_not_discarded(self):
         store = FakeStore(self.task("unregistered"))
