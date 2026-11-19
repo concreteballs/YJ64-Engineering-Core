@@ -1,5 +1,10 @@
 # YJ64 Council Gateway Integration
 
+> **Ownership boundary:** this document covers only the Engineering Core Gateway client/result adapter and parent engineering-task integration. Motocicl owns the autonomous cycle, durable orchestration and cycle-side caller. The YJ-64 application owns its native Council engine.
+>
+> [Cycle-side integration contract](https://github.com/concreteballs/Motocicl/blob/main/docs/ENGINEERING_CORE_COUNCIL_GATEWAY_INTEGRATION_RU.md).
+
+
 ## Purpose and ownership
 
 The Council Gateway is the authenticated external-agent client and durable handoff layer in YJ64 Engineering Core. The YJ-64 application remains the sole owner of its model router, participants, Consensus/Critique protocols, rounds, votes, private ratings, and council session state.
