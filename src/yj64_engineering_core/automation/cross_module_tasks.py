@@ -233,8 +233,10 @@ def create_cross_module_task_handler(
             return TaskExecutionResult("blocked", "cross_module_required_field_missing")
         except TypeError:
             return TaskExecutionResult("blocked", "cross_module_invalid_type")
-        except ValueError:
-            return TaskExecutionResult("blocked", "cross_module_invalid_value")
+        except ValueError as exc:
+            import re
+            detail = re.sub(r"[^a-z0-9]+", "_", str(exc).lower()).strip("_")[:72]
+            return TaskExecutionResult("blocked", "cross_module_invalid_value_" + (detail or "unspecified"))
         except Exception:
             return TaskExecutionResult("retry", "cross_module_adapter_error", 90)
 
