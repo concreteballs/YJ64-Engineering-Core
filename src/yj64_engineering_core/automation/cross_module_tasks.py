@@ -161,14 +161,6 @@ def enqueue_cross_module_assessment_from_parent(
             "correlation_key": correlation_key,
             "parent_resume_protocol_version": PARENT_RESUME_PROTOCOL,
         }
-        queued = context.store.enqueue_task(
-            TASK_TYPE, payload,
-            dedupe_key=f"cross-module-parent:{context.task_id}:{candidate_digest}",
-            max_attempts=max_attempts,
-        )
-        if not isinstance(queued, dict) or not (queued.get("enqueued") or queued.get("duplicate")):
-            return TaskExecutionResult("retry", "cross_module_child_enqueue_failed", 90)
-
         previous = context.load_latest_checkpoint()
         if previous is not None:
             verify_checkpoint(previous)
@@ -209,6 +201,13 @@ def enqueue_cross_module_assessment_from_parent(
             budgets=budgets, approvals=approvals, artifact_refs=artifacts,
             previous_checkpoint_hash=previous_hash,
         )
+        queued = context.store.enqueue_task(
+            TASK_TYPE, payload,
+            dedupe_key=f"cross-module-parent:{context.task_id}:{candidate_digest}",
+            max_attempts=max_attempts,
+        )
+        if not isinstance(queued, dict) or not (queued.get("enqueued") or queued.get("duplicate")):
+            return TaskExecutionResult("retry", "cross_module_child_enqueue_failed", 90)
         if not context.suspend_for_child(checkpoint, correlation_key, PARENT_RESUME_PROTOCOL):
             return TaskExecutionResult("retry", "cross_module_parent_suspend_failed", 90)
         return TaskExecutionResult("suspended")
