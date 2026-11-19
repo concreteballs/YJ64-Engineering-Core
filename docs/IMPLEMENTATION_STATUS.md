@@ -2,7 +2,7 @@
 
 This is the factual implementation ledger for UNIFIED_ENGINEERING_DEVELOPMENT_PLAN.md. A plan, candidate evaluation or catalogue entry is not an implemented solver.
 
-**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md) defines the cross-cutting monitoring/diagnostics foundation. [YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md](YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md) assesses the existing Android monitor prototype and its migration path. [AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md](AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle. [SESSION_INDEPENDENCE_PROTOCOL.md](SESSION_INDEPENDENCE_PROTOCOL.md) defines the mandatory durable-state and automatic context-rollover requirements.
+**Programme navigation:** [STRATEGIC_MASTER_PLAN.md](STRATEGIC_MASTER_PLAN.md) contains the expandable strategic graph and stage-by-stage implementation checklists. [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md) defines the cross-cutting monitoring/diagnostics foundation. [YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md](YJ64_MONITOR_REUSE_AND_INTEGRATION_PLAN.md) assesses the existing Android monitor prototype and its migration path. [Motocicl autonomous-cycle roadmap](https://github.com/concreteballs/Motocicl/blob/main/docs/AUTONOMOUS_ENGINEERING_CYCLE_AND_MASTER_ROADMAP.md) contains the detailed execution plan for the shared autonomous cycle. [Motocicl Session Independence Protocol](https://github.com/concreteballs/Motocicl/blob/main/docs/SESSION_INDEPENDENCE_PROTOCOL.md) defines the mandatory durable-state and automatic context-rollover requirements.
 
 ## Status definitions
 
@@ -39,34 +39,11 @@ Implementation specification: [OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md](OB
 
 ---
 
-## Session Independence Protocol
+## Autonomous cycle ownership
 
-**Status: Architecture requirement approved and documented; runtime implementation not yet present.**
+The autonomous cycle runtime, provider orchestration, durable cycle checkpoints, CI diagnosis/repair pipeline and roadmap auditor are owned by [Motocicl](https://github.com/concreteballs/Motocicl). Engineering Core retains specialist engineering task handlers and its narrow Council Gateway adapter. The detailed cycle implementation ledger and historical extraction evidence are maintained in [Motocicl CYCLE_IMPLEMENTATION_STATUS](https://github.com/concreteballs/Motocicl/blob/main/docs/CYCLE_IMPLEMENTATION_STATUS.md).
 
-The [Session Independence Protocol](SESSION_INDEPENDENCE_PROTOCOL.md) is now a mandatory acceptance requirement for the Autonomous Engineering Cycle. The authoritative state must live in durable task records and versioned checkpoints, not in a ChatGPT conversation or a model context window. Context rollover must automatically start a fresh model request from persisted state. Worker restart, expired leases and uncertain model-call outcomes must recover safely with idempotency and evidence reconciliation.
-
-Not yet implemented or demonstrated: checkpoint persistence/runtime, context-budget monitor and automatic rollover, worker recovery, model-call idempotency/reconciliation, and the forced-rollover acceptance test. The protocol does not mean this ChatGPT conversation can automatically continue itself or that the current cloud worker already exists.
-
-## Model provider limits and chunked input protocol
-
-**Status: Partially implemented — provider failure classification, durable attempt/recovery metadata, and integrity-checked chunk storage are present; provider adapters, live scheduler invocation and provider transport remain unimplemented.**
-
-[MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md](MODEL_PROVIDER_LIMITS_AND_CHUNKED_INGESTION.md) remains the governing protocol. New code in `automation/provider_limits.py` classifies rate limits, quota exhaustion, payload/context overflow, transient failures, concurrency limits, permanent configuration failures and unknown errors. It produces bounded retry hints and honors Retry-After/reset headers. `tests/test_provider_limits.py` covers these decisions. The `automation/provider_budget.py` planner evaluates rolling RPM/TPM windows, input/output token ceilings and active concurrency reservations. `PostgresCycleStore.reserve_provider_capacity()` now coordinates the planner with durable provider profiles, shared account-level quota scopes, atomic idempotency-key locks, exact request-payload SHA-256 binding, request-body byte ceilings and database-clock timestamps. Profiles derived from provider APIs/observations must have a valid-until time; stale profiles fail closed. `tests/test_provider_budget.py` and `tests/test_provider_reservations.py` cover planner and reservation behavior. This is a callable persistence primitive, not yet invoked by a running scheduler.
-
-The PostgreSQL `yj64_model_request_attempts` table is deployed with RLS enabled, no grants to anon/authenticated, and only SELECT/INSERT for service_role. It stores append-only request metadata, safe allowlisted headers, classification, retry hints and sanitized summaries; it excludes prompts, response bodies and credentials. `PostgresCycleStore.record_model_request_attempt` writes an attempt under a live task lease and atomically releases the lease into pending for a scheduled retry, failed for permanent configuration errors, or blocked for quota waits, payload splitting, context rebuilding and unknown errors. `tests/test_provider_attempt_store.py` covers persistence decisions and lease handling. Provider requests now have durable reservations with a stable idempotency key bound to the exact request SHA-256, body byte count, estimated/actual input and output tokens, estimated/actual cost plus a separate cost-confidence flag, sent/finished timestamps and a conservative `unknown` state. The task queue also stores reserved and consumed token/cost counters plus optional task budgets. Capacity deferrals have a separate bounded counter and do not consume the model retry-attempt budget. `set_cycle_usage_budget()` configures global daily/monthly token and cost ceilings; `set_task_usage_budget()` configures per-task ceilings. `defer_task_for_capacity()` releases the lease and schedules a database-time recheck; `run_recovery_maintenance()` provides bounded quota recovery, unsent-reservation expiry and deadline-expiry handling. Admission locks the task row, provider profile and shared quota scope, and global budget row when configured. Unsent expired reservations can be released; sent/ambiguous reservations are not automatically released. A successful provider call cannot be marked completed until its response has been persisted as a durable artifact and its opaque reference is stored in the reservation. A task cannot complete while any reservation remains unresolved. Ambiguous requests have a separate reconciliation lease: an operator/adapter can look up the original idempotency key or provider request ID, attach an evidence reference, and either persist a retrievable result-artifact reference or prove the request was not found. Reconciliation does not consume another model retry attempt. Recovered result references are available to the resumed task.
-
-Quota-blocked tasks persist an explicit `blocked_reason` and optional `quota_reset_at`. `PostgresCycleStore.recover_due_quota_tasks()` requeues only tasks marked `quota_exhausted` whose known reset time has arrived, uses `FOR UPDATE SKIP LOCKED` for concurrent scheduler safety, and marks due tasks with exhausted retry budgets as failed. Tasks without a reset timestamp and all non-quota blocked tasks remain blocked. Migration `0005_quota_task_recovery.sql` is applied to Supabase. The method is not yet invoked by a running scheduler.
-
-The chunk foundation is implemented in `automation/payload_chunks.py`: deterministic line-aware splitting with a caller-supplied token counter, stable chunk IDs, per-chunk and total SHA-256 hashes, acknowledgement validation, exact reassembly and an explicit FINALIZE envelope. `PostgresCycleStore.save_payload_manifest`, `acknowledge_payload_chunk` and `assemble_payload_for_model` persist manifests/chunks/acknowledgements and mark a payload `ready_for_model` only after integrity verification. For stateless endpoints, the orchestrator can assemble the full payload locally from durable storage before making one complete model request. The three payload tables are deployed with RLS enabled, no anon/authenticated access, and service_role-only privileges. Migrations `0005_quota_task_recovery.sql` and `0006_durable_payload_chunks.sql` are applied. Provider capacity/budget/reconciliation migrations `0007`–`0017` are also applied; they add durable profiles, shared quota scopes, profile expiry, request-payload identity, body-size ceilings and bounded capacity deferrals.
-
-CI run [44123775757](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44123775757) passed for the chunking, durable-storage and quota-recovery code, including unit/FEM/CAD integration tests and yacht-hull artifact generation.
-
-A provider adapter contract now exists in `automation/provider_adapters.py`: it requires exact serialized-body hashing, provider-specific token counting, explicit capabilities for idempotency/lookup, durable response-artifact persistence, and authoritative lookup outcomes. It is an interface contract only; no live HTTP adapter or credentials are wired.
-
-The admission path now fails closed if no global daily/monthly usage ceiling has been explicitly configured. The current Supabase project has zero provider profiles, zero global budget rows and zero reservations; therefore no model request can yet be admitted through this path.
-
-**Not yet implemented or demonstrated:** provider-specific API adapters and live limit/pricing discovery; initial verified provider profiles and global/task budget configuration; automatic scheduler invocation of quota recovery, reservation expiry and capacity admission; provider-specific rate-window semantics and account-wide quota mapping; concrete provider adapters that implement the contract, persist successful response artifacts before settlement, verify idempotency/retrieval and produce trusted reconciliation evidence; actual provider chunk transport/remote acknowledgement; provider-specific tokenizers and provider-specific rate-window semantics; real service-role application round-trip tests; and end-to-end model execution gated on FINALIZE. No worker is running.
-
+---
 
 ## Consolidated work-package status
 
@@ -254,48 +231,6 @@ The training curriculum must not permanently constrain the robot to low speed/fo
 - Artificial Muscle Engineering: force/velocity/thermal/duty-cycle capability and actuator health.
 - Robot Geometry/shared Physics: morphology, mass/inertia, joints, contacts and collision geometry.
 - Control Systems and Safety & Environment Interaction: deterministic feedback execution, recovery, people/object protection and test-zone interlocks.
-- Shared Autonomous Engineering Cycle: common durable task/event orchestration for simulation and training jobs; no separate orchestration loop inside the learning discipline.
+- [Motocicl](https://github.com/concreteballs/Motocicl) owns common durable task/event orchestration for simulation and training jobs; no separate orchestration loop belongs inside the learning discipline.
 
 Acceptance evidence must distinguish observation, inferred skill, simulation, supervised physical trial and validated operating envelope. A skill learned from a human demonstration is only a candidate until the robot's own physical execution has been tested.
-
-## Durable task checkpoint persistence — initial implementation
-
-`automation/checkpoints.py` defines the canonical `yj64.task-checkpoint.v1` payload with deterministic JSON encoding, SHA-256 integrity verification, a monotonic sequence, previous-checkpoint linkage, task state, budgets, approvals and artifact references. `PostgresCycleStore.save_checkpoint` performs append-only, idempotent persistence and rejects conflicting content for a reused task sequence; `load_latest_checkpoint` retrieves and verifies the newest checkpoint. Unit tests cover stable hashes, mutation detection, invalid input, idempotent save, conflicting sequence reuse and recovery.
-
-The Supabase migration `durable_task_checkpoints` has been applied to project `YJ64-Autonomous-Core`. The `yj64_task_checkpoints` table exists with RLS enabled, no public policies, and access granted only to `service_role`. The table is currently empty. This is a persistence primitive, not a running worker or an end-to-end autonomous cycle. No worker has been started and no real task has yet been checkpointed through the application.
-
-The CI run for commit `c6ff86be7464a754c6fc3086ba9987e631b76237` passed, including unit, FEM and real 3D CAD integration tests. The separate CI completion webhook remains failing and is tracked independently.
-
-
-## CI diagnosis → repair proposal handoff
-
-**Status: Implemented prototype — real Gemini diagnoses are now handed to a durable, human-reviewable repair-plan queue. Automatic source edits are deliberately disabled.**
-
-Verified implementation:
-- `automation/ci_log_analysis.py` enqueues an idempotent `prepare_ci_fix` task after a validated analysis is persisted. Existing completed analyses also perform the handoff on retry, so a transient enqueue failure does not permanently orphan the diagnosis.
-- `automation/ci_fix_proposals.py` validates the stored diagnosis and creates a structured repair plan with source run/commit identity, root cause, confidence, log evidence, proposed actions, verification plan and risk notes.
-- The proposal records exact source identity and remains linked to the original analysis task. It is persisted in `yj64_ci_fix_proposals` and as an immutable private artifact in `yj64-private-artifacts`.
-- `migrations/0020_ci_fix_proposals.sql` is applied to the active Supabase project. RLS is enabled; public/anonymous/authenticated access is revoked; the database constraint requires `auto_apply=false`, `human_approval_required=true`, `patch_ready=false`, and matching proposal status.
-- `scripts/run_ci_fix_proposal_worker.py` and `.github/workflows/scheduled-ci-fix-proposal-worker.yml` process one proposal task per invocation, on a five-minute schedule and after the CI log analysis workflow.
-- The worker does not make another LLM request and therefore does not consume additional model quota. It does not inspect or modify repository files, create a diff, commit changes or merge a patch. Target files remain empty until a separate exact-commit inspection stage is implemented.
-- Confidence below 0.70, or an unknown failure classification, produces `needs_more_evidence`; otherwise the plan is marked `awaiting_review`. Neither status authorizes execution.
-- The first real proposal was persisted successfully for analysis task 36 and proposal task 158, with status `awaiting_review`. It identified a historical test-double signature mismatch and preserved the original failing run identity.
-- Python test run [44231036575](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44231036575) passed: 485 tests. The proposal worker run [44231111194](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44231111194) completed successfully.
-
-**Exact-commit inspection and review-only patch generation — implemented prototype**
-
-- A reviewable proposal now idempotently enqueues `generate_ci_patch` in the existing task queue.
-- `automation/ci_patch_generation.py` inspects the failed run's exact commit and current `main` tip for the two allowlisted YJ64 repositories. It selects only file paths explicitly present in the diagnosis/log evidence; it does not guess target files.
-- If an evidence-backed candidate file changed between the failed commit and current `main`, the worker records `source_files_changed_since_failure` and stops before Gemini. This prevents stale diagnoses from generating patches against already-changed code.
-- Gemini patch generation uses the existing provider adapter, token counting, durable reservation/lease lifecycle, immutable response artifacts, and the existing explicit $0 daily/monthly budget guard. The worker sends at most one generation request for a patch task; an ambiguous provider outcome is quarantined rather than blindly resent.
-- Generated diffs are restricted to inspected regular text files, bounded in size, and rejected if they contain traversal, binary, add/delete, rename, or uninspected-file operations. The current `main` tip is rechecked immediately before validation.
-- Every candidate is persisted in `yj64_ci_patch_candidates` and private Storage. An `awaiting_review` candidate requires a successful `git apply --check` against the exact current HEAD. No patch is applied, no branch is created, and no commit is made.
-- If the diagnosis names no source file, the worker records `needs_target_file_evidence` without spending a Gemini generation request. If the relevant file changed since the failure, it records that stale state and also skips generation.
-- `migrations/0021_ci_patch_candidates.sql` is applied. RLS is enabled and public/anonymous/authenticated access is revoked.
-- Added `scripts/run_ci_patch_generation_worker.py` and a five-minute scheduled workflow. The workflow is read-only against GitHub and requires the existing Gemini and private Supabase secrets.
-- Unit tests cover evidence-based path extraction, refusal to guess paths, diff allowlisting, traversal rejection and unsafe file-operation rejection.
-- Full Python/FEM/CAD test run [44232559493](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44232559493) passed: **490 tests**.
-- The first real patch-inspection task (task 183, proposal 167) completed and persisted `source_files_changed_since_failure`: its candidate file `src/yj64_engineering_core/automation/worker.py` had changed between the failed commit and current `main`. The worker correctly stopped before Gemini generation. The database confirms no provider reservation was created for this task, so this stale diagnosis consumed no additional Gemini request.
-- Patch worker run [44232456732](https://github.com/concreteballs/YJ64-Engineering-Core/actions/runs/44232456732) completed successfully.
-
-This remains a **patch-candidate generator**, not autonomous self-repair. A human must review and separately approve any later execution stage.
