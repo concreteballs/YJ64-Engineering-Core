@@ -39,6 +39,8 @@ def _digest(value: Mapping[str, Any]) -> str:
 
 
 def _checkpoint(context: Any, state: dict[str, Any]) -> bool:
+    # Detach nested mutable objects before hashing; adapters may still hold references.
+    state_snapshot = json.loads(json.dumps(state, sort_keys=True, ensure_ascii=False, allow_nan=False))
     previous = context.load_latest_checkpoint()
     if previous is not None:
         verify_checkpoint(previous)
@@ -62,7 +64,7 @@ def _checkpoint(context: Any, state: dict[str, Any]) -> bool:
         sequence=sequence,
         state="checkpointed",
         task_spec_version=task_spec_version,
-        task_state=state,
+        task_state=state_snapshot,
         budgets=budgets,
         approvals=approvals,
         artifact_refs=artifact_refs,
@@ -141,6 +143,12 @@ def create_cross_module_task_handler(
             if previous is not None:
                 verify_checkpoint(previous)
                 state = previous.get("task_state", {})
+                if isinstance(state, dict) and state.get("stage") == "cross_module_assessment_ready":
+                    if state.get("candidate_digest") != candidate_digest:
+                        return TaskExecutionResult("blocked", "cross_module_checkpoint_candidate_mismatch")
+                    if state.get("relevant_modules") != sorted(modules):
+                        return TaskExecutionResult("blocked", "cross_module_checkpoint_scope_mismatch")
+                    return TaskExecutionResult("completed")
                 if isinstance(state, dict) and state.get("stage") == "cross_module_assessment":
                     if state.get("candidate_digest") != candidate_digest:
                         return TaskExecutionResult("blocked", "cross_module_checkpoint_candidate_mismatch")
@@ -149,6 +157,7 @@ def create_cross_module_task_handler(
                     saved = state.get("module_outputs", {})
                     if not isinstance(saved, dict):
                         return TaskExecutionResult("blocked", "cross_module_checkpoint_invalid")
+                    saved = json.loads(json.dumps(saved, sort_keys=True, ensure_ascii=False, allow_nan=False))
 
             reviews, contributions = [], []
             for module in sorted(modules):
