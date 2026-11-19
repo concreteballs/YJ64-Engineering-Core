@@ -198,7 +198,8 @@ class GitHubReadTaskAdapter:
                 if result.get("encoding") != "base64" or not isinstance(result.get("content"), str):
                     raise GitHubReadError("github_file_encoding_unsupported")
                 try:
-                    raw = base64.b64decode(result["content"], validate=False)
+                    compact_base64 = re.sub(r"\\s+", "", result["content"])
+                    raw = base64.b64decode(compact_base64, validate=True)
                 except (ValueError, TypeError):
                     raise GitHubReadError("github_file_content_invalid") from None
                 if len(raw) > _MAX_FILE_BYTES:
