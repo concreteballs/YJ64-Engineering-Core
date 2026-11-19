@@ -190,5 +190,79 @@ class GitHubReadAdapterTests(unittest.TestCase):
             client.get_json("https://example.com/anything")
 
 
+    def test_github_read_task_runs_through_parent_handler_and_worker(self):
+        endpoint = f"/repos/{self.repository}"
+        client = FakeClient({
+            endpoint: {
+                "full_name": self.repository,
+                "default_branch": "main",
+                "private": False,
+                "archived": False,
+                "html_url": f"https://github.com/{self.repository}",
+            }
+        })
+        registry = TaskAdapterRegistry()
+        register_github_read_adapter(
+            registry, client, allowed_repositories=[self.repository]
+        )
+        request = make_request({
+            "operation": "repository.get",
+            "repository": self.repository,
+        })
+
+        class Store:
+            def __init__(self):
+                self.task = {
+                    "task_id": 71,
+                    "task_type": "execute_task_request",
+                    "payload": {"task_request": request.to_dict()},
+                }
+                self.checkpoint = None
+                self.completed = []
+
+            def run_recovery_maintenance(self, limit=100):
+                return {"recovered": 0}
+
+            def claim_next_task(self, worker_id, lease_seconds=300, task_types=None):
+                task, self.task = self.task, None
+                return task
+
+            def load_latest_checkpoint(self, queue_task_id):
+                return self.checkpoint
+
+            def save_checkpoint(self, queue_task_id, worker_id, checkpoint, lease_seconds=300):
+                self.checkpoint = checkpoint
+                return True
+
+            def complete_task(self, task_id, worker_id):
+                self.completed.append(task_id)
+                return True
+
+            def renew_task_lease(self, task_id, worker_id, lease_seconds=300):
+                return True
+
+            def block_task(self, task_id, worker_id, reason):
+                raise AssertionError("task unexpectedly blocked: " + reason)
+
+            def fail_task(self, task_id, worker_id, error, retry_delay_seconds=60):
+                raise AssertionError("task unexpectedly failed: " + error)
+
+        store = Store()
+        runner = create_universal_task_worker_runner(
+            store, registry=registry, worker_id="github-read-integration"
+        )
+
+        outcome = runner.run_once()
+
+        self.assertEqual(outcome["status"], "completed")
+        self.assertEqual(store.completed, [71])
+        self.assertEqual(
+            store.checkpoint["task_state"]["github_evidence"]["full_name"],
+            self.repository,
+        )
+        self.assertTrue(store.checkpoint["task_state"]["evidence_is_untrusted"])
+        self.assertEqual(client.endpoints, [endpoint])
+
+
 if __name__ == "__main__":
     unittest.main()
