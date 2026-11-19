@@ -1,4 +1,5 @@
 import unittest
+import hashlib
 
 from yj64_engineering_core.automation.checkpoints import verify_checkpoint
 from yj64_engineering_core.cross_module import ConditionDisposition, ConditionStatus
@@ -27,6 +28,11 @@ class FakeContext:
     def __init__(self):
         self.checkpoint = None
         self.saved = []
+        self.parent_handoffs = []
+
+    def record_parent_resume_event(self, parent_task_id, child_result):
+        self.parent_handoffs.append((parent_task_id, child_result))
+        return {"accepted": True, "duplicate": len(self.parent_handoffs) > 1}
 
     def load_latest_checkpoint(self):
         return self.checkpoint
@@ -36,6 +42,16 @@ class FakeContext:
         self.checkpoint = checkpoint
         self.saved.append(checkpoint)
         return True
+
+
+class FakeArtifactStore:
+    def __init__(self):
+        self.saved = []
+
+    def put(self, *, namespace, content, content_type):
+        digest = hashlib.sha256(content).hexdigest()
+        self.saved.append((namespace, content, content_type))
+        return f"private-artifact://{digest}"
 
 
 class FakeAdapter:
@@ -144,6 +160,39 @@ class CrossModuleTaskHandlerTests(unittest.TestCase):
         self.assertEqual(counts, {
             key: (adapter.review_calls, adapter.contribution_calls)
             for key, adapter in self.adapters.items()
+        })
+
+    def test_assessment_is_durably_handed_to_parent_and_retry_is_idempotent(self):
+        artifact_store = FakeArtifactStore()
+        handler = create_cross_module_task_handler(
+            registry=self.registry, module_bindings=self.bindings,
+            adapters=self.adapters,
+            artifact_store_factory=lambda: artifact_store,
+        )
+        task = {
+            **self.task,
+            "payload": {
+                **self.task["payload"],
+                "parent_task_id": 7,
+                "correlation_key": "parent-task:7:candidate-42:v3",
+                "parent_resume_protocol_version": "yj64.parent-resume.v1",
+            },
+        }
+        first = handler(task, self.context)
+        calls = {key: (value.review_calls, value.contribution_calls) for key, value in self.adapters.items()}
+        second = handler(task, self.context)
+        self.assertEqual(first, TaskExecutionResult("completed"))
+        self.assertEqual(second, TaskExecutionResult("completed"))
+        self.assertEqual(len(self.context.parent_handoffs), 2)
+        parent_id, child_result = self.context.parent_handoffs[-1]
+        self.assertEqual(parent_id, 7)
+        self.assertEqual(child_result["child_task_id"], self.context.task_id)
+        self.assertEqual(child_result["result_status"], "completed")
+        self.assertTrue(child_result["result_is_untrusted_data"])
+        self.assertEqual(len(artifact_store.saved), 2)
+        self.assertEqual(artifact_store.saved[0][1], artifact_store.saved[1][1])
+        self.assertEqual(calls, {
+            key: (value.review_calls, value.contribution_calls) for key, value in self.adapters.items()
         })
 
     def test_wrong_reviewer_identity_is_blocked(self):
