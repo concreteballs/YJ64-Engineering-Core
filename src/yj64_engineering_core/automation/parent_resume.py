@@ -5,6 +5,8 @@ its checkpoint representation. Child output remains untrusted evidence.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any, Mapping
 
@@ -42,6 +44,41 @@ def validate_child_result(payload: Mapping[str, Any]) -> dict[str, Any]:
     if data.get("result_is_untrusted_data") is not True:
         raise ValueError("child_result_must_be_marked_untrusted")
     return data
+
+
+def fetch_child_result_artifact(
+    resume: Mapping[str, Any], artifact_store: Any,
+) -> dict[str, Any]:
+    """Fetch and integrity-check a completed child artifact; never trust its contents.
+
+    Domain-specific parent handlers must still validate the returned JSON against
+    their own schema and treat every field as untrusted input.
+    """
+    if not isinstance(resume, Mapping):
+        raise ValueError("parent_resume_must_be_object")
+    if resume.get("result_status") != "completed":
+        raise ValueError("child_result_is_not_completed")
+    reference = resume.get("result_artifact_ref")
+    digest = resume.get("result_sha256")
+    if not isinstance(reference, str) or not reference.strip() or "?" in reference or "#" in reference:
+        raise ValueError("invalid_result_artifact_ref")
+    if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+        raise ValueError("invalid_result_sha256")
+    getter = getattr(artifact_store, "get", None)
+    if not callable(getter):
+        raise TypeError("artifact_store_must_implement_get")
+    content = getter(reference)
+    if not isinstance(content, bytes) or not content:
+        raise ValueError("child_result_artifact_must_be_nonempty_bytes")
+    if hashlib.sha256(content).hexdigest() != digest:
+        raise ValueError("child_result_artifact_sha256_mismatch")
+    try:
+        payload = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("child_result_artifact_is_not_valid_json") from None
+    if not isinstance(payload, dict):
+        raise ValueError("child_result_artifact_must_be_json_object")
+    return payload
 
 
 def build_parent_resume_checkpoint(
