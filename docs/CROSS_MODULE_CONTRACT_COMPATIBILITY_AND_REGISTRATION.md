@@ -49,7 +49,7 @@ Required: evidence_id, evidence_type, source. Optional: version, limitations, co
 ### Independent review
 Required: candidate reference, reviewer_module, reviewer_version, status, rationale. Status is one of PASS, CONDITIONAL, REJECT, NOT_APPLICABLE, NOT_REVIEWED. Optional collections: evidence, assumptions, uncertainty, interface_checks, hazards, hard_constraints, conditions, unresolved_questions.
 
-CONDITIONAL is blocking until every condition has a recorded disposition by the parent coordinator. `schemas/cross_module/condition-disposition.v1.schema.json` defines a separate, auditable record tied to the exact candidate revision and review. Only `decided_by: parent_coordinator` is accepted. A `satisfied` disposition requires evidence; rejected, deferred and unresolved dispositions remain blocking. The original module review is immutable and is never rewritten to PASS. The Core library exposes `ConditionDisposition`, `ConditionStatus` and `evaluate_condition_dispositions()` in `yj64_engineering_core.cross_module`; this is a pure validation helper, not yet connected to task orchestration or final assessment acceptance.
+CONDITIONAL is blocking until every condition has a recorded disposition by the parent coordinator. `schemas/cross_module/condition-disposition.v1.schema.json` defines a separate, auditable record tied to the exact candidate revision and review. Only `decided_by: parent_coordinator` is accepted. A `satisfied` disposition requires evidence; rejected, deferred and unresolved dispositions remain blocking. The original module review is immutable and is never rewritten to PASS. The Core library exposes `ConditionDisposition`, `ConditionStatus` and `evaluate_condition_dispositions()` in `yj64_engineering_core.cross_module`. The durable `cross_module_assessment` TaskHandler calls the parent-side evaluator and includes condition dispositions in its checkpointed assessment. A trusted host-supplied disposition provider is optional; without complete satisfied dispositions, CONDITIONAL findings remain blocking. Production WorkerRunner assembly and trusted disposition-provider deployment remain outstanding.
 
 ### Enhancement contribution
 Each relevant module returns either one or more evidence-linked proposals or an explicit no_proposal with rationale. A proposal contains proposal_id, candidate reference, proposing_module, objective, improvement, mechanism, expected_benefit, measurable success_criteria, evidence and optional assumptions, tradeoffs, risks, dependencies and validation_plan.
@@ -93,7 +93,7 @@ Each module may retain its domain-specific internal types. The first adapter inc
 - Molecular `EvidenceRef` already contains the canonical evidence identity and provenance fields.
 - Molecular `interface_checks`, `objective` and `rationale` already use the canonical names.
 - Both adapters must include reviewer_version in the wire review; Biological receives it explicitly from the host and rejects an empty value.
-- Both specialist-native assessment implementations still fail closed on every CONDITIONAL review. The Core helper evaluates parent dispositions, but it is not yet wired into coordinator task orchestration or the production acceptance path.
+- Both specialist-native assessment implementations still fail closed on every CONDITIONAL review. The Core TaskHandler uses the parent-side evaluator: every condition requires a matching disposition for the exact candidate revision and reviewer; satisfied requires stable evidence, while unresolved, rejected, deferred or missing dispositions block the assessment. The provider is injected by the trusted host, never accepted from the queue payload. Production worker assembly remains outstanding.
 
 No adapter may convert missing evidence, missing review, unavailable modules or unresolved conditions into PASS.
 
@@ -161,7 +161,7 @@ modified.
 1. Freeze the canonical wire schema names and acceptance invariants in this document.
 2. Add JSON Schema definitions and round-trip/negative tests for the canonical envelopes.
 3. Implement native-to-wire adapters and tests; add reverse deserialization and round-trip tests before declaring bidirectional interoperability.
-4. Add parent-coordinator condition-disposition aggregation and reviewer-version enforcement; reject unresolved conditional findings.
+4. DONE: add parent-coordinator condition-disposition aggregation to the Core assessment evaluator and durable TaskHandler; unresolved conditional findings block. Reviewer-version enforcement is performed against the registered extension version.
 5. DONE: validate both manifests with the existing ExtensionManifest parser and register them in an isolated test registry.
 6. DONE: add a durable TaskHandler factory that routes through the existing WorkerRunner contract and ExtensionRegistry; deployment assembly and task enqueue remain outstanding.
 7. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
