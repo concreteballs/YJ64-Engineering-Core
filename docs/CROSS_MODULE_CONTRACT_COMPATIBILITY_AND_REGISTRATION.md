@@ -49,7 +49,7 @@ Required: evidence_id, evidence_type, source. Optional: version, limitations, co
 ### Independent review
 Required: candidate reference, reviewer_module, reviewer_version, status, rationale. Status is one of PASS, CONDITIONAL, REJECT, NOT_APPLICABLE, NOT_REVIEWED. Optional collections: evidence, assumptions, uncertainty, interface_checks, hazards, hard_constraints, conditions, unresolved_questions.
 
-CONDITIONAL is blocking until every condition has a recorded disposition by the parent coordinator. The disposition must be explicit and auditable; modules cannot mark their own conditions satisfied by changing the review status.
+CONDITIONAL is blocking until every condition has a recorded disposition by the parent coordinator. `schemas/cross_module/condition-disposition.v1.schema.json` defines a separate, auditable record tied to the exact candidate revision and review. Only `decided_by: parent_coordinator` is accepted. A `satisfied` disposition requires evidence; rejected, deferred and unresolved dispositions remain blocking. The original module review is immutable and is never rewritten to PASS.
 
 ### Enhancement contribution
 Each relevant module returns either one or more evidence-linked proposals or an explicit no_proposal with rationale. A proposal contains proposal_id, candidate reference, proposing_module, objective, improvement, mechanism, expected_benefit, measurable success_criteria, evidence and optional assumptions, tradeoffs, risks, dependencies and validation_plan.
@@ -85,14 +85,14 @@ They use JSON Schema Draft 2020-12. Relative `$ref` links resolve within that di
 
 ## 5. Native adapter mapping
 
-Each module may retain its domain-specific internal types. Its adapter must translate to/from the canonical wire schemas without loss:
+Each module may retain its domain-specific internal types. The first adapter increment implements explicit native-to-wire serialization; reverse deserialization and runtime dispatch remain future work and are not claimed as complete:
 - Biological `EvidenceRef(source, evidence_kind, confidence)` must receive a stable evidence_id and map evidence_kind to evidence_type. If no stable evidence identity can be supplied, the adapter must reject the payload rather than fabricate provenance.
 - Biological `interface_findings` maps to `interface_checks`.
 - Biological `parent_objective` maps to `objective`; `no_proposal_rationale` maps to `rationale`.
 - Molecular `EvidenceRef` already contains the canonical evidence identity and provenance fields.
 - Molecular `interface_checks`, `objective` and `rationale` already use the canonical names.
-- Both adapters must include reviewer_version in the wire review, even if the internal biological review model must first be extended.
-- Both assessment implementations must use the same acceptance invariants and explicit condition-disposition model before production routing.
+- Both adapters must include reviewer_version in the wire review; Biological receives it explicitly from the host and rejects an empty value.
+- Both native assessment implementations still fail closed on every CONDITIONAL review. Parent-side disposition aggregation is not yet implemented in either module or the Engineering Core runtime.
 
 No adapter may convert missing evidence, missing review, unavailable modules or unresolved conditions into PASS.
 
@@ -115,8 +115,8 @@ The manifests are metadata, not executable adapters. They must be parsed through
 
 1. Freeze the canonical wire schema names and acceptance invariants in this document.
 2. Add JSON Schema definitions and round-trip/negative tests for the canonical envelopes.
-3. Implement a lossless adapter in each module and test native-to-wire-to-native conversion.
-4. Add reviewer-version and condition-disposition handling to both modules; reject unresolved conditional findings.
+3. Implement native-to-wire adapters and tests; add reverse deserialization and round-trip tests before declaring bidirectional interoperability.
+4. Add parent-coordinator condition-disposition aggregation and reviewer-version enforcement; reject unresolved conditional findings.
 5. Validate both manifests with the existing ExtensionManifest parser and register them in an isolated test registry.
 6. Add coordinator-side routing through the existing universal task lifecycle and ExtensionRegistry.
 7. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
