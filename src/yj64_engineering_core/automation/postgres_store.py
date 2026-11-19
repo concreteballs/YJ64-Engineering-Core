@@ -785,7 +785,7 @@ class PostgresCycleStore:
                 expected_fields = (
                     ("parent_task_id", parent_task_id),
                     ("correlation_key", result["correlation_key"]),
-                    ("protocol_version", result["protocol_version"]),
+                    ("parent_resume_protocol_version", result["protocol_version"]),
                 )
                 if not isinstance(child_payload, dict) or any(
                     child_payload.get(key) != value for key, value in expected_fields
