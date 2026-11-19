@@ -41,7 +41,7 @@ The initial cross-module wire schema namespace is:
 All wire payloads are JSON objects with explicit `schema_id` and `schema_version`. Unknown major versions are rejected. Unknown fields may be preserved as extension metadata but must not change the interpretation of known fields.
 
 ### Candidate
-Required: candidate_id, version, schema_version, origin_module, intended_scope, input_refs, provenance_refs.
+Required: schema_id, schema_version (wire format version), candidate_id, version, candidate_schema_version (native candidate schema version), origin_module. Optional: intended_scope, input_refs, provenance_refs.
 
 ### Evidence
 Required: evidence_id, evidence_type, source. Optional: version, limitations, confidence, observed_at, method, applicability, provenance_digest. Confidence is descriptive metadata and is never a substitute for calibrated uncertainty or validation.
