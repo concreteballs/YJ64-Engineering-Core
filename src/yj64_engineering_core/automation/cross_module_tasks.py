@@ -229,8 +229,12 @@ def create_cross_module_task_handler(
             # Completing this queue item means assessment computation finished;
             # it does not mean the candidate was accepted.
             return TaskExecutionResult("completed")
-        except (KeyError, TypeError, ValueError):
-            return TaskExecutionResult("blocked", "cross_module_invalid_task")
+        except KeyError:
+            return TaskExecutionResult("blocked", "cross_module_required_field_missing")
+        except TypeError:
+            return TaskExecutionResult("blocked", "cross_module_invalid_type")
+        except ValueError:
+            return TaskExecutionResult("blocked", "cross_module_invalid_value")
         except Exception:
             return TaskExecutionResult("retry", "cross_module_adapter_error", 90)
 
