@@ -68,8 +68,9 @@ The canonical JSON Schema documents are stored in `schemas/cross_module/`:
 - `enhancement-proposal.v1.schema.json`
 - `contribution.v1.schema.json`
 - `assessment.v1.schema.json`
+- `condition-disposition.v1.schema.json`
 
-They use JSON Schema Draft 2020-12. Relative `$ref` links resolve within that directory. These schemas define the wire boundary; native Python dataclasses remain implementation details until adapters are implemented and tested.
+They use JSON Schema Draft 2020-12. Relative `$ref` links resolve within that directory. These schemas define the wire boundary. Native-to-wire serializers are implemented in both specialist modules; reverse deserialization and production routing remain outstanding.
 
 ## 4. Acceptance invariants
 
