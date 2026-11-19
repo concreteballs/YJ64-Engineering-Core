@@ -159,7 +159,9 @@ parent-resume protocol is now implemented alongside the Council-specific path:
   checkpoint_parent_resume_consumed(...), and record_parent_resume_event(...);
 - WorkerRunner recognizes parent_resume_ready checkpoints and will not complete
   the parent until the handler loads the child result and checkpoints its
-  consumption;
+  consumption; terminal blocked/failed child outcomes are also handed to the
+  waiting parent as explicitly untrusted status records, so the parent is not
+  left waiting indefinitely when a child cannot produce an assessment artifact;
 - when a cross_module_assessment payload includes parent_task_id,
   correlation_key and parent_resume_protocol_version, the handler stores the
   assessment as an immutable content-addressed artifact and atomically records
