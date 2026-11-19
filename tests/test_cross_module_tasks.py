@@ -1,10 +1,11 @@
 import unittest
 import hashlib
 
-from yj64_engineering_core.automation.checkpoints import verify_checkpoint
+from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
 from yj64_engineering_core.cross_module import ConditionDisposition, ConditionStatus
 from yj64_engineering_core.automation.cross_module_tasks import (
     PROTOCOL_VERSION, TASK_TYPE, create_cross_module_task_handler,
+    enqueue_cross_module_assessment_from_parent,
 )
 from yj64_engineering_core.automation.worker import TaskExecutionResult
 from yj64_engineering_core.extensions import (
@@ -52,6 +53,42 @@ class FakeArtifactStore:
         digest = hashlib.sha256(content).hexdigest()
         self.saved.append((namespace, content, content_type))
         return f"private-artifact://{digest}"
+
+
+class FakeQueueStore:
+    def __init__(self):
+        self.enqueued = []
+
+    def enqueue_task(self, task_type, payload, dedupe_key, *, max_attempts=3):
+        self.enqueued.append({
+            "task_type": task_type, "payload": payload,
+            "dedupe_key": dedupe_key, "max_attempts": max_attempts,
+        })
+        return {"enqueued": True, "duplicate": False, "task_id": 101}
+
+
+class FakeParentContext:
+    task_id = 77
+
+    def __init__(self):
+        self.store = FakeQueueStore()
+        self.checkpoint = create_checkpoint(
+            task_id="77", sequence=1, state="running",
+            task_spec_version="engineering.parent.v1",
+            task_state={"stage": "analysis", "objective": "keep parent objective"},
+            budgets={"tokens": 2000}, approvals={"external_write": False},
+            artifact_refs=["private://parent/evidence"],
+        )
+        self.suspended = None
+
+    def load_latest_checkpoint(self):
+        return self.checkpoint
+
+    def suspend_for_child(self, checkpoint, correlation_key, protocol_version):
+        verify_checkpoint(checkpoint)
+        self.suspended = (checkpoint, correlation_key, protocol_version)
+        self.checkpoint = checkpoint
+        return True
 
 
 class FakeAdapter:
@@ -140,6 +177,25 @@ class CrossModuleTaskHandlerTests(unittest.TestCase):
             },
         }
         self.context = FakeContext()
+
+    def test_parent_helper_enqueues_child_and_suspends_with_preserved_context(self):
+        context = FakeParentContext()
+        result = enqueue_cross_module_assessment_from_parent(
+            context, CANDIDATE, ["biology", "materials"],
+        )
+        self.assertEqual(result, TaskExecutionResult("suspended"))
+        queued = context.store.enqueued[0]
+        self.assertEqual(queued["task_type"], TASK_TYPE)
+        self.assertEqual(queued["payload"]["parent_task_id"], 77)
+        self.assertEqual(queued["payload"]["parent_resume_protocol_version"], "yj64.parent-resume.v1")
+        checkpoint, correlation_key, protocol_version = context.suspended
+        self.assertEqual(checkpoint["task_state"]["stage"], "waiting_child")
+        self.assertEqual(checkpoint["task_state"]["objective"], "keep parent objective")
+        self.assertEqual(checkpoint["budgets"], {"tokens": 2000})
+        self.assertEqual(checkpoint["approvals"], {"external_write": False})
+        self.assertEqual(checkpoint["artifact_refs"], ["private://parent/evidence"])
+        self.assertEqual(checkpoint["task_state"]["expected_child_correlation_key"], correlation_key)
+        self.assertEqual(protocol_version, "yj64.parent-resume.v1")
 
     def test_runs_inside_worker_handler_contract_and_persists_assessment(self):
         result = self.handler(self.task, self.context)
