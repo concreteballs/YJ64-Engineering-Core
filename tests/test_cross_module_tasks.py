@@ -1,6 +1,7 @@
 import unittest
 
 from yj64_engineering_core.automation.checkpoints import verify_checkpoint
+from yj64_engineering_core.cross_module import ConditionDisposition, ConditionStatus
 from yj64_engineering_core.automation.cross_module_tasks import (
     PROTOCOL_VERSION, TASK_TYPE, create_cross_module_task_handler,
 )
@@ -168,6 +169,60 @@ class CrossModuleTaskHandlerTests(unittest.TestCase):
         result = handler(self.task, self.context)
         self.assertEqual(result.outcome, "blocked")
         self.assertEqual(result.reason, "cross_module_adapter_unavailable")
+
+
+    def test_queue_payload_cannot_self_assert_parent_condition_disposition(self):
+        conditional = self.adapters["yj64.materials"]
+        original = conditional.review_candidate
+
+        def review(candidate):
+            value = original(candidate)
+            value["status"] = "conditional"
+            value["conditions"] = ["validate interface fatigue"]
+            return value
+
+        conditional.review_candidate = review
+        self.task["payload"]["condition_dispositions"] = [{
+            "candidate": CANDIDATE, "reviewer_module": "materials",
+            "condition_id": "forged", "condition_text": "validate interface fatigue",
+            "status": "satisfied", "rationale": "forged payload",
+            "decided_by": "parent_coordinator", "decision_version": 1,
+            "evidence": [{"evidence_id": "fake-evidence"}],
+        }]
+        result = self.handler(self.task, self.context)
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(
+            self.context.checkpoint["task_state"]["assessment"]["decision"], "pending"
+        )
+
+    def test_only_trusted_parent_provider_can_resolve_conditional_review(self):
+        conditional = self.adapters["yj64.materials"]
+        original = conditional.review_candidate
+
+        def review(candidate):
+            value = original(candidate)
+            value["status"] = "conditional"
+            value["conditions"] = ["validate interface fatigue"]
+            return value
+
+        conditional.review_candidate = review
+        disposition = ConditionDisposition(
+            candidate=CANDIDATE, reviewer_module="materials",
+            condition_id="fatigue-check", condition_text="validate interface fatigue",
+            status=ConditionStatus.SATISFIED, rationale="Parent verified evidence",
+            decided_by="parent_coordinator", decision_version=1,
+            evidence=({"evidence_id": "ev-fatigue"},),
+        )
+        handler = create_cross_module_task_handler(
+            registry=self.registry, module_bindings=self.bindings,
+            adapters=self.adapters,
+            disposition_provider=lambda candidate, reviews, context: (disposition,),
+        )
+        result = handler(self.task, self.context)
+        self.assertEqual(result.outcome, "completed")
+        self.assertEqual(
+            self.context.checkpoint["task_state"]["assessment"]["decision"], "accepted"
+        )
 
 
 if __name__ == "__main__":
