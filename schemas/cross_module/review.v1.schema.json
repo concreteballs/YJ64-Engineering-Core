@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.yj64.dev/cross-module/review.v1.schema.json",
+  "title": "YJ64 Cross-Module Independent Review v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "candidate",
+    "reviewer_module",
+    "reviewer_version",
+    "status",
+    "rationale"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "yj64.cross_module.review.v1"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "candidate": {
+      "$ref": "candidate.v1.schema.json"
+    },
+    "reviewer_module": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "pass",
+        "conditional",
+        "reject",
+        "not_applicable",
+        "not_reviewed"
+      ]
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "evidence.v1.schema.json"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "uncertainty": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "interface_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hazards": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hard_constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unresolved_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "conditional"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "conditions": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "conditions"
+        ]
+      }
+    }
+  ]
+}
