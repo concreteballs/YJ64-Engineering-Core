@@ -1,6 +1,6 @@
 import pytest
 from yj64_engineering_core.cross_module import (
-    ConditionDisposition, ConditionStatus, evaluate_condition_dispositions,
+    ConditionDisposition, ConditionStatus, evaluate_condition_dispositions, to_wire_condition_disposition,
 )
 
 CANDIDATE = {
@@ -77,3 +77,13 @@ def test_duplicate_disposition_is_rejected():
             CANDIDATE, [REVIEW],
             [disposition("validate fatigue life"), disposition("validate fatigue life")],
         )
+
+
+
+def test_parent_disposition_serializes_to_canonical_schema():
+    item = disposition("validate fatigue life")
+    wire = to_wire_condition_disposition(item)
+    assert wire["schema_id"] == "yj64.cross_module.condition_disposition.v1"
+    assert wire["decided_by"] == "parent_coordinator"
+    assert wire["status"] == "satisfied"
+    assert wire["evidence"][0]["evidence_id"] == "ev-1"
