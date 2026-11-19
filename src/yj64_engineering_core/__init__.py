@@ -7,6 +7,7 @@ from .economics import (
 from .typed_solver import (TypedSolverDispatcher, TypedSolverRequest, TypedSolverResponse, TypedSolverResult)
 from .persistence import ProjectSnapshot, ProjectStore, StoredArtifact, StoredCalculation
 from .extensions import CapabilityRequirement, ExtensionCapability, ExtensionDependency, ExtensionManifest, ExtensionRegistry
+from .cross_module import ConditionDisposition, ConditionStatus, evaluate_condition_dispositions
 from .contracts import CONTRACT_VERSION, ArtifactReference, EngineeringRequest, EngineeringResponse, GeometrySpec, LoadCase, SolverProvenance
 from .component_model import ComponentCalculationRecord, ComponentDependency, ComponentInterface, ComponentMassProperties, EngineeringComponent, EngineeringProjectGraph, EvidenceRecord, ManufacturingConstraint, stale_calculations, stale_component_dependencies
 from .dispatcher import AxialMemberSolver, DispatchResult, EngineeringDispatcher
@@ -51,6 +52,7 @@ __all__ = [
     "TypedSolverDispatcher", "TypedSolverRequest", "TypedSolverResponse", "TypedSolverResult",
     "ProjectSnapshot", "ProjectStore", "StoredArtifact", "StoredCalculation",
     "CapabilityRequirement", "ExtensionCapability", "ExtensionDependency", "ExtensionManifest", "ExtensionRegistry",
+    "ConditionDisposition", "ConditionStatus", "evaluate_condition_dispositions",
     "BUILTIN_UNIT_PROFILES", "EUROPEAN_METRIC_PROFILE", "MARINE_HYBRID_PROFILE",
     "METRIC_ENGINEERING_PROFILE", "SI_PROFILE", "UK_IMPERIAL_PROFILE", "US_CUSTOMARY_PROFILE",
     "DocumentUnitPolicy", "NominalSizeDesignation", "UnitDisplayPreferences", "UnitSystemProfile",
