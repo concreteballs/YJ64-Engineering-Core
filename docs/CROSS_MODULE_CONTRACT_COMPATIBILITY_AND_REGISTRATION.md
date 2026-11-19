@@ -59,7 +59,19 @@ Parent decisions are ACCEPTED, REJECTED, DEFERRED or NEEDS_EVIDENCE with decisio
 ### Assessment
 The coordinator records the exact candidate revision, relevant module set, review references, contribution references, missing outputs, blocking findings and final decision. Missing, timed-out, incompatible or unavailable modules are NOT_REVIEWED and cannot be interpreted as approval.
 
-## 3. Acceptance invariants
+## 3. Published JSON Schemas
+
+The canonical JSON Schema documents are stored in `schemas/cross_module/`:
+- `candidate.v1.schema.json`
+- `evidence.v1.schema.json`
+- `review.v1.schema.json`
+- `enhancement-proposal.v1.schema.json`
+- `contribution.v1.schema.json`
+- `assessment.v1.schema.json`
+
+They use JSON Schema Draft 2020-12. Relative `$ref` links resolve within that directory. These schemas define the wire boundary; native Python dataclasses remain implementation details until adapters are implemented and tested.
+
+## 4. Acceptance invariants
 
 1. The origin module must be included in the relevant module set but cannot be the only reviewer.
 2. Every relevant module must return both an independent review and an enhancement contribution.
@@ -71,7 +83,7 @@ The coordinator records the exact candidate revision, relevant module set, revie
 8. Parent acceptance of an enhancement creates a new candidate revision or child task and triggers the affected review cycle again.
 9. Module manifests declare capabilities only. Registration does not load code, grant permissions or authorize wet-lab execution.
 
-## 4. Native adapter mapping
+## 5. Native adapter mapping
 
 Each module may retain its domain-specific internal types. Its adapter must translate to/from the canonical wire schemas without loss:
 - Biological `EvidenceRef(source, evidence_kind, confidence)` must receive a stable evidence_id and map evidence_kind to evidence_type. If no stable evidence identity can be supplied, the adapter must reject the payload rather than fabricate provenance.
@@ -84,7 +96,7 @@ Each module may retain its domain-specific internal types. Its adapter must tran
 
 No adapter may convert missing evidence, missing review, unavailable modules or unresolved conditions into PASS.
 
-## 5. ExtensionRegistry manifests
+## 6. ExtensionRegistry manifests
 
 The two module repositories publish declarative manifests compatible with the existing `ExtensionManifest` and `ExtensionRegistry` structures:
 - extension API version: `1.0`;
@@ -99,7 +111,7 @@ The two module repositories publish declarative manifests compatible with the ex
 
 The manifests are metadata, not executable adapters. They must be parsed through `ExtensionManifest.from_json` and registered through the existing registry only after schema and adapter compatibility tests are added. Do not create a second registry.
 
-## 6. Integration sequence
+## 7. Integration sequence
 
 1. Freeze the canonical wire schema names and acceptance invariants in this document.
 2. Add JSON Schema definitions and round-trip/negative tests for the canonical envelopes.
@@ -110,6 +122,6 @@ The manifests are metadata, not executable adapters. They must be parsed through
 7. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
 8. Only then enable production discovery/routing. No runtime permissions are added by registration.
 
-## 7. Explicit non-goals
+## 8. Explicit non-goals
 
 This integration does not implement wet-lab execution, synthesis, transformation, culturing, release or deployment. It does not grant new autonomy, modify the application's supervisory module, change live queues/databases or create a second worker lifecycle.
