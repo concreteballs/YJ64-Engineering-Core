@@ -615,6 +615,12 @@ class PostgresCycleStore:
                            WHERE parent_task_id = %s AND consumed_at IS NULL""",
                         (task_id,),
                     )
+                    cursor.execute(
+                        """UPDATE yj64_parent_task_resume_events
+                           SET consumed_at = COALESCE(consumed_at, now())
+                           WHERE parent_task_id = %s AND consumed_at IS NULL""",
+                        (task_id,),
+                    )
                 return completed
 
     def fail_task(
@@ -648,6 +654,12 @@ class PostgresCycleStore:
                            WHERE parent_task_id = %s AND consumed_at IS NULL""",
                         (task_id,),
                     )
+                    cursor.execute(
+                        """UPDATE yj64_parent_task_resume_events
+                           SET consumed_at = COALESCE(consumed_at, now())
+                           WHERE parent_task_id = %s AND consumed_at IS NULL""",
+                        (task_id,),
+                    )
                 return row[0] if row else None
 
     def block_task(self, task_id: int, worker_id: str, reason: str) -> bool:
@@ -666,6 +678,12 @@ class PostgresCycleStore:
                 if blocked:
                     cursor.execute(
                         """UPDATE yj64_task_resume_events
+                           SET consumed_at = COALESCE(consumed_at, now())
+                           WHERE parent_task_id = %s AND consumed_at IS NULL""",
+                        (task_id,),
+                    )
+                    cursor.execute(
+                        """UPDATE yj64_parent_task_resume_events
                            SET consumed_at = COALESCE(consumed_at, now())
                            WHERE parent_task_id = %s AND consumed_at IS NULL""",
                         (task_id,),
