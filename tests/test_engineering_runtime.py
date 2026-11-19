@@ -9,7 +9,7 @@ from yj64_engineering_core.automation.engineering_runtime import (
     create_reference_engineering_dispatcher,
 )
 from yj64_engineering_core.automation.task_requests import PARENT_TASK_QUEUE_TYPE
-from yj64_engineering_core.contracts import EngineeringRequest, LoadCase
+from yj64_engineering_core.contracts import EngineeringRequest, GeometrySpec, LoadCase
 from yj64_engineering_core.dispatcher import AxialMemberSolver, EngineeringDispatcher
 from yj64_engineering_core.task_contracts import TaskRequest
 
@@ -91,10 +91,10 @@ class EngineeringRuntimeTests(unittest.TestCase):
                 request_id="runtime-cad-1",
                 title="Cylinder source",
                 objective="Create editable CAD source",
-                geometry={
-                    "geometry_type": "cylinder",
-                    "parameters": {"diameter_m": 0.1, "height_m": 0.2},
-                },
+                geometry=GeometrySpec(
+                    geometry_type="cylinder",
+                    parameters={"diameter_m": 0.1, "height_m": 0.2},
+                ),
                 operating_conditions={"cad_backend": "openscad_source"},
             )
             result = dispatcher.dispatch(request, "cad.generate")
