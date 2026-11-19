@@ -60,6 +60,32 @@ def create_engineering_task_registry(
     return registry
 
 
+def create_universal_task_worker_runner(
+    store: Any,
+    *,
+    registry: TaskAdapterRegistry,
+    worker_id: str,
+    additional_handlers: Mapping[str, TaskHandler] | None = None,
+    lease_seconds: int = 300,
+    recovery_limit: int = 100,
+) -> WorkerRunner:
+    """Wire any explicitly assembled adapter registry into the existing worker."""
+    if not isinstance(registry, TaskAdapterRegistry):
+        raise TypeError("registry must be an explicitly configured TaskAdapterRegistry")
+    handlers = dict(additional_handlers or {})
+    if PARENT_TASK_QUEUE_TYPE in handlers:
+        raise ValueError(f"{PARENT_TASK_QUEUE_TYPE} is reserved by the universal task runtime")
+    handlers[PARENT_TASK_QUEUE_TYPE] = create_parent_task_handler(registry)
+    return WorkerRunner(
+        store,
+        worker_id=worker_id,
+        handlers=handlers,
+        lease_seconds=lease_seconds,
+        recovery_limit=recovery_limit,
+        allowed_task_types=list(handlers),
+    )
+
+
 def create_engineering_worker_runner(
     store: Any,
     *,
@@ -75,15 +101,11 @@ def create_engineering_worker_runner(
     handlers). A caller cannot override the universal ingress handler.
     """
     registry = create_engineering_task_registry(dispatcher)
-    handlers = dict(additional_handlers or {})
-    if PARENT_TASK_QUEUE_TYPE in handlers:
-        raise ValueError(f"{PARENT_TASK_QUEUE_TYPE} is reserved by the universal task runtime")
-    handlers[PARENT_TASK_QUEUE_TYPE] = create_parent_task_handler(registry)
-    return WorkerRunner(
+    return create_universal_task_worker_runner(
         store,
+        registry=registry,
         worker_id=worker_id,
-        handlers=handlers,
+        additional_handlers=additional_handlers,
         lease_seconds=lease_seconds,
         recovery_limit=recovery_limit,
-        allowed_task_types=list(handlers),
     )
