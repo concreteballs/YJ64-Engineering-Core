@@ -112,6 +112,50 @@ The two module repositories publish declarative manifests compatible with the ex
 
 The manifests are metadata, not executable adapters. Core tests now parse checked-in snapshots through `ExtensionManifest.from_json` and register both in an isolated instance of the existing `ExtensionRegistry`; capability discovery, empty permissions and offline declarations are verified. This is test-only registration: production discovery/routing is not enabled. Do not create a second registry.
 
+## 6A. Durable coordinator task handler
+
+A durable TaskHandler adapter now exists at
+src/yj64_engineering_core/automation/cross_module_tasks.py.
+It is designed for the existing WorkerRunner handler map under the task type
+cross_module_assessment; it does not create a worker loop or a queue.
+
+The host deployment supplies:
+- the existing ExtensionRegistry populated from the two reviewed manifests;
+- an explicit mapping from canonical reviewer module IDs to extension IDs;
+- host-created adapter objects implementing review_candidate(candidate) and
+  contribute_enhancements(candidate);
+- optionally, a trusted parent-side disposition_provider(candidate, reviews, context).
+  The provider must return validated ConditionDisposition objects. Dispositions
+  are not accepted from the untrusted queue payload.
+
+The factory create_cross_module_task_handler(...) returns a normal TaskHandler.
+The deployment adds it to the same dictionary passed to WorkerRunner:
+
+    handlers["cross_module_assessment"] = create_cross_module_task_handler(
+        registry=existing_extension_registry,
+        module_bindings=module_bindings,
+        adapters=host_adapters,
+        disposition_provider=trusted_parent_disposition_provider,
+    )
+    runner = WorkerRunner(store, worker_id=worker_id, handlers=handlers)
+
+The task payload uses protocol yj64.cross_module.task.v1 and contains the
+canonical candidate plus the explicit relevant module list. The handler checks
+manifest capabilities and module bindings before calling adapters. It checkpoints
+each review and contribution separately, verifies checkpoint integrity and
+candidate revision on resume, and writes the final assessment into the existing
+task checkpoint. Queue-task completion means only that assessment computation
+finished; the assessment's own decision remains authoritative and may be
+pending or rejected.
+
+This is an injectable runtime handler and focused-test target. The repository
+does not yet expose a single production deployment assembly point that builds
+all WorkerRunner handler maps, so this commit does not claim that live workers
+have begun claiming cross_module_assessment tasks. Production deployment
+registration, task enqueue integration, and parent-consumption of the resulting
+checkpoint remain explicit integration steps. No live queue or database was
+modified.
+
 ## 7. Integration sequence
 
 1. Freeze the canonical wire schema names and acceptance invariants in this document.
@@ -119,7 +163,7 @@ The manifests are metadata, not executable adapters. Core tests now parse checke
 3. Implement native-to-wire adapters and tests; add reverse deserialization and round-trip tests before declaring bidirectional interoperability.
 4. Add parent-coordinator condition-disposition aggregation and reviewer-version enforcement; reject unresolved conditional findings.
 5. DONE: validate both manifests with the existing ExtensionManifest parser and register them in an isolated test registry.
-6. Add coordinator-side routing through the existing universal task lifecycle and ExtensionRegistry.
+6. DONE: add a durable TaskHandler factory that routes through the existing WorkerRunner contract and ExtensionRegistry; deployment assembly and task enqueue remain outstanding.
 7. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
 8. Only then enable production discovery/routing. No runtime permissions are added by registration.
 
