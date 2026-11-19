@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.yj64.dev/cross-module/assessment.v1.schema.json",
+  "title": "YJ64 Cross-Module Assessment v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "candidate",
+    "relevant_modules",
+    "reviews",
+    "contributions",
+    "missing_reviews",
+    "missing_contributions",
+    "blocking_findings",
+    "decision"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "yj64.cross_module.assessment.v1"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "candidate": {
+      "$ref": "candidate.v1.schema.json"
+    },
+    "relevant_modules": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "$ref": "review.v1.schema.json"
+      }
+    },
+    "contributions": {
+      "type": "array",
+      "items": {
+        "$ref": "contribution.v1.schema.json"
+      }
+    },
+    "missing_reviews": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_contributions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blocking_findings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "decision": {
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected",
+        "deferred"
+      ]
+    },
+    "decision_rationale": {
+      "type": "string"
+    }
+  }
+}
