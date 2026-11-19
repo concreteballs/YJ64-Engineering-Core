@@ -499,5 +499,117 @@ class PostgresCycleStoreTests(unittest.TestCase):
         )
         self.assertEqual(finished_result["reason"], "parent_not_waiting")
 
+
+
+    def test_suspend_task_for_child_persists_checkpoint_and_releases_lease(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
+
+        checkpoint = create_checkpoint(
+            task_id="42", sequence=5, state="checkpointed",
+            task_spec_version="engineering.v1",
+            task_state={
+                "stage": "waiting_child",
+                "expected_child_correlation_key": "cross-module:42:candidate-1:1",
+                "expected_child_protocol_version": "yj64.parent-resume.v1",
+            },
+            budgets={"tokens": 1000}, approvals={"deploy": False},
+            previous_checkpoint_hash="a" * 64,
+        )
+
+        class SuspendCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id FROM yj64_task_queue" in query:
+                    self._fetch = (42,)
+                elif "SELECT sequence, checkpoint_hash" in query:
+                    self._fetch = (4, "a" * 64)
+                else:
+                    self._fetch = None
+
+        cursor = SuspendCursor()
+        self.assertTrue(self.store(cursor).suspend_task_for_child(
+            42, "worker-a", checkpoint,
+            "cross-module:42:candidate-1:1", "yj64.parent-resume.v1",
+        ))
+        self.assertEqual(len(cursor.statements), 4)
+        self.assertIn("INSERT INTO yj64_task_checkpoints", cursor.statements[2][0])
+        self.assertIn("SET state = 'waiting'", cursor.statements[3][0])
+        self.assertTrue(verify_checkpoint(checkpoint))
+
+    def test_record_parent_resume_event_checkpoints_untrusted_result_and_requeues_parent(self):
+        import json
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint, verify_checkpoint
+
+        parent_checkpoint = create_checkpoint(
+            task_id="9", sequence=4, state="checkpointed",
+            task_spec_version="engineering.v1",
+            task_state={
+                "stage": "waiting_child",
+                "expected_child_correlation_key": "cross-module:9:candidate-7:2",
+                "expected_child_protocol_version": "yj64.parent-resume.v1",
+                "objective": "preserve parent objective",
+            },
+            budgets={"tokens": 5000}, approvals={"repository_write": False},
+            artifact_refs=["private://source/input"],
+        )
+        child_payload = {
+            "parent_task_id": 9,
+            "correlation_key": "cross-module:9:candidate-7:2",
+            "parent_resume_protocol_version": "yj64.parent-resume.v1",
+        }
+        child_result = {
+            "protocol_version": "yj64.parent-resume.v1",
+            "parent_task_id": 9,
+            "child_task_id": 71,
+            "correlation_key": "cross-module:9:candidate-7:2",
+            "result_artifact_ref": "private://cross-module/result",
+            "result_sha256": "b" * 64,
+            "result_status": "completed",
+            "result_is_untrusted_data": True,
+        }
+
+        class ParentResumeCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.inserted_checkpoint = None
+
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT payload FROM yj64_task_queue" in query:
+                    self._fetch = (child_payload,)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("waiting",)
+                elif "SELECT resume_event_id, child_task_id" in query:
+                    self._fetch = None
+                elif "SELECT checkpoint FROM yj64_task_checkpoints" in query:
+                    self._fetch = (parent_checkpoint,)
+                elif "INSERT INTO yj64_parent_task_resume_events" in query:
+                    self._fetch = (101,)
+                elif "INSERT INTO yj64_task_checkpoints" in query:
+                    self.inserted_checkpoint = json.loads(params[-1])
+                    self._fetch = None
+                elif "UPDATE yj64_task_queue" in query:
+                    self.rowcount = 1
+                    self._fetch = None
+                else:
+                    self._fetch = None
+
+        cursor = ParentResumeCursor()
+        result = self.store(cursor).record_parent_resume_event(
+            9, 71, "worker-child", child_result,
+        )
+        self.assertEqual(result, {
+            "accepted": True, "duplicate": False,
+            "resume_event_id": 101, "parent_task_id": 9, "state": "pending",
+        })
+        resumed = cursor.inserted_checkpoint
+        self.assertTrue(verify_checkpoint(resumed))
+        self.assertEqual(resumed["sequence"], 5)
+        self.assertEqual(resumed["task_state"]["stage"], "parent_resume_ready")
+        self.assertEqual(resumed["task_state"]["objective"], "preserve parent objective")
+        self.assertTrue(resumed["task_state"]["child_resume"]["result_is_untrusted_data"])
+        self.assertEqual(resumed["task_state"]["child_resume"]["resume_event_id"], 101)
+        self.assertIn("SET state = 'pending'", cursor.statements[-1][0])
+
 if __name__ == "__main__":
     unittest.main()
