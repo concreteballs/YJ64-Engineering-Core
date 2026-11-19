@@ -129,6 +129,7 @@ class TaskContext:
     _parent_resume_required: bool = field(default=False, init=False, compare=False, repr=False)
     _parent_resume_loaded: bool = field(default=False, init=False, compare=False, repr=False)
     _parent_resume_expected_correlation_key: str | None = field(default=None, init=False, compare=False, repr=False)
+    _suspended_for_child: bool = field(default=False, init=False, compare=False, repr=False)
 
     def record_council_resume_event(
         self, parent_task_id: int, council_request_id: str,
@@ -216,10 +217,13 @@ class TaskContext:
 
     def suspend_for_child(self, checkpoint: dict, correlation_key: str, protocol_version: str) -> bool:
         """Persist the parent checkpoint and release its lease while awaiting a child task."""
-        return self.store.suspend_task_for_child(
+        suspended = self.store.suspend_task_for_child(
             self.task_id, self.worker_id, checkpoint, correlation_key,
             protocol_version, self.lease_seconds,
         )
+        if suspended:
+            object.__setattr__(self, "_suspended_for_child", True)
+        return suspended
 
     def record_parent_resume_event(self, parent_task_id: int, child_result: dict) -> dict:
         """Atomically attach a child's durable result to its waiting parent."""
@@ -244,6 +248,37 @@ class TaskContext:
         object.__setattr__(self, "_parent_resume_expected_correlation_key", resume["correlation_key"])
         object.__setattr__(self, "_parent_resume_loaded", True)
         return resume
+
+    def checkpoint_parent_resume_consumed(self, task_state: dict) -> bool:
+        """Persist the parent's next state while retaining the consumed child-result identity."""
+        from .checkpoints import create_checkpoint, verify_checkpoint
+        if not self._parent_resume_loaded or not isinstance(task_state, dict):
+            raise ValueError("parent resume must be loaded before it can be consumed")
+        previous = self.load_latest_checkpoint()
+        if not isinstance(previous, dict):
+            raise ValueError("parent resume checkpoint is unavailable")
+        verify_checkpoint(previous)
+        previous_state = previous.get("task_state")
+        resume = previous_state.get("child_resume") if isinstance(previous_state, dict) else None
+        if (
+            not isinstance(previous_state, dict)
+            or previous_state.get("stage") != "parent_resume_ready"
+            or not isinstance(resume, dict)
+            or resume.get("correlation_key") != self._parent_resume_expected_correlation_key
+        ):
+            raise ValueError("parent resume checkpoint identity changed before consumption")
+        next_state = dict(task_state)
+        next_state["stage"] = "parent_resume_consumed"
+        next_state["child_resume"] = dict(resume)
+        checkpoint = create_checkpoint(
+            task_id=str(self.task_id), sequence=previous["sequence"] + 1,
+            state="checkpointed", task_spec_version=previous["task_spec_version"],
+            task_state=next_state, budgets=previous.get("budgets", {}),
+            approvals=previous.get("approvals", {}),
+            artifact_refs=previous.get("artifact_refs", []),
+            previous_checkpoint_hash=previous["checkpoint_hash"],
+        )
+        return bool(self.save_checkpoint(checkpoint))
 
     def list_recovered_provider_results(self) -> list[dict]:
         """Return durable result references; task handlers must consume these before issuing new calls."""
@@ -408,8 +443,7 @@ class WorkerRunner:
             }
 
         if decision.outcome == "suspended":
-            claimed_state = claimed_checkpoint.get("task_state") if isinstance(claimed_checkpoint, dict) else None
-            waiting_status = "waiting_child" if isinstance(claimed_state, dict) and claimed_state.get("stage") == "waiting_child" else "waiting_council"
+            waiting_status = "waiting_child" if context._suspended_for_child else "waiting_council"
             return {"status": waiting_status, "task_id": task_id, "recovery": recovery}
 
         if decision.outcome == "completed":
@@ -449,12 +483,16 @@ class WorkerRunner:
             if context._parent_resume_required:
                 try:
                     latest = context.load_latest_checkpoint()
-                    from .parent_resume import validate_parent_resume_checkpoint
-                    latest_resume = validate_parent_resume_checkpoint(latest, parent_task_id=task_id) if isinstance(latest, dict) else None
+                    from .checkpoints import verify_checkpoint
+                    verify_checkpoint(latest)
+                    latest_state = latest.get("task_state") if isinstance(latest, dict) else None
+                    latest_resume = latest_state.get("child_resume") if isinstance(latest_state, dict) else None
                 except Exception:
-                    latest_resume = None
+                    latest_state, latest_resume = None, None
                 if (
                     not context._parent_resume_loaded
+                    or not isinstance(latest_state, dict)
+                    or latest_state.get("stage") == "parent_resume_ready"
                     or not isinstance(latest_resume, dict)
                     or latest_resume.get("correlation_key") != context._parent_resume_expected_correlation_key
                 ):
