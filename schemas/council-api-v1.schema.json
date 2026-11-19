@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/concreteballs/YJ64-Engineering-Core/blob/main/schemas/council-api-v1.schema.json",
+  "$comment": "Compatibility snapshot only. Canonical schema ownership is Motocicl: https://github.com/concreteballs/Motocicl/blob/main/schemas/council-api-v1.schema.json. Update the canonical contract first and synchronize this snapshot in the same compatibility change.",
   "title": "YJ64 External Council API v1",
   "description": "Proposed machine-to-machine contract. The YJ-64 application must implement and publish these operations before live integration.",
   "$defs": {
