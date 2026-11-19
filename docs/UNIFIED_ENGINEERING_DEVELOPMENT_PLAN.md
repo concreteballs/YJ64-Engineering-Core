@@ -2,6 +2,8 @@
 
 **Authoritative programme:** this document governs development of concreteballs/YJ64-Engineering-Core on main. Other repositories and branches are outside this plan unless separately authorized.
 
+**Autonomous-cycle boundary:** the global task lifecycle, Council orchestration, provider runtime, CI-driven continuation, durable cycle checkpoints and cross-disciplinary task arbitration belong to [Motocicl](https://github.com/concreteballs/Motocicl). This plan governs the engineering product and its internal discipline/task contracts only. Engineering Core's dispatcher and pipeline are domain execution components, not a second global autonomous cycle. Engineering Core must expose evidence, provenance, assumptions, limitations and specialist validation through the agreed versioned adapter.
+
 **Companion documents**
 - MODULAR_BIOMECHANICAL_ROBOTICS.md — actuator-neutral modular robot-body architecture.
 - ARTIFICIAL_MUSCLE_MATERIAL_DISCOVERY.md — multi-scale responsive-material research brief.
