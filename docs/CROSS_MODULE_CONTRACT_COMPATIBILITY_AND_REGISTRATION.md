@@ -148,13 +148,40 @@ task checkpoint. Queue-task completion means only that assessment computation
 finished; the assessment's own decision remains authoritative and may be
 pending or rejected.
 
-This is an injectable runtime handler and focused-test target. The repository
-does not yet expose a single production deployment assembly point that builds
-all WorkerRunner handler maps, so this commit does not claim that live workers
-have begun claiming cross_module_assessment tasks. Production deployment
-registration, task enqueue integration, and parent-consumption of the resulting
-checkpoint remain explicit integration steps. No live queue or database was
-modified.
+This is an injectable runtime handler and focused-test target. A generic
+parent-resume protocol is now implemented alongside the Council-specific path:
+- migration 0022_generic_parent_task_resume.sql declares a dedicated durable
+  parent/child resume-event table; it has NOT been applied to any live database;
+- PostgresCycleStore exposes suspend_task_for_child(...) and
+  record_parent_resume_event(...), using the existing task queue and checkpoint
+  tables plus the new event table (no second queue or worker);
+- TaskContext exposes suspend_for_child(...), load_parent_resume(),
+  checkpoint_parent_resume_consumed(...), and record_parent_resume_event(...);
+- WorkerRunner recognizes parent_resume_ready checkpoints and will not complete
+  the parent until the handler loads the child result and checkpoints its
+  consumption;
+- when a cross_module_assessment payload includes parent_task_id,
+  correlation_key and parent_resume_protocol_version, the handler stores the
+  assessment as an immutable content-addressed artifact and atomically records
+  the child result in the waiting parent's checkpoint before requeueing it.
+  Publication is retry-safe: the artifact is content-addressed and the event is
+  idempotent.
+
+The parent must create a waiting_child checkpoint containing
+expected_child_correlation_key and expected_child_protocol_version, then call
+context.suspend_for_child(...). On re-entry it calls context.load_parent_resume(),
+retrieves the artifact through the private artifact store, checks the candidate
+revision/digest, incorporates the result into its own state, and calls
+context.checkpoint_parent_resume_consumed(...) before returning completed.
+The child result is explicitly untrusted data. A completed assessment computation
+does not mean that the candidate was accepted; the parent must interpret pending,
+rejected and accepted assessment decisions separately.
+
+The repository still does not expose a single production deployment assembly
+point that builds all WorkerRunner handler maps. Production worker registration,
+host adapter implementations, task enqueue construction, private artifact-store
+configuration and applying migration 0022 remain deployment steps. No live queue
+or database was modified.
 
 ## 7. Integration sequence
 
@@ -164,8 +191,9 @@ modified.
 4. DONE: add parent-coordinator condition-disposition aggregation to the Core assessment evaluator and durable TaskHandler; unresolved conditional findings block. Reviewer-version enforcement is performed against the registered extension version.
 5. DONE: validate both manifests with the existing ExtensionManifest parser and register them in an isolated test registry.
 6. DONE: add a durable TaskHandler factory that routes through the existing WorkerRunner contract and ExtensionRegistry; deployment assembly and task enqueue remain outstanding.
-7. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
-8. Only then enable production discovery/routing. No runtime permissions are added by registration.
+7. DONE (code and focused CI): add generic durable child-to-parent result handoff, immutable assessment artifact publication, idempotent event recording, parent checkpoint requeue and explicit parent-consumption enforcement. Migration 0022 is not applied to live infrastructure.
+8. Test missing modules, incompatible schema versions, duplicate responses, stale candidate revisions, transitive invalidation, conflicting reviews and replay/restart.
+9. Only then enable production discovery/routing. No runtime permissions are added by registration.
 
 ## 8. Explicit non-goals
 
