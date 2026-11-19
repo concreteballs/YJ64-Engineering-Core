@@ -48,44 +48,36 @@ by the existing PostgreSQL queue.
 
 ## Explicit adapter wiring
 
-A deployment constructs its real backends, then registers the adapter and
-parent handler. The following is a minimal example using the existing reference
-axial solver; it does not auto-enable unconfigured CAD, FEM, browser, or remote
-services.
+A deployment constructs its real backends, then uses the runtime factory to
+wire the universal parent-task queue handler into the existing worker. The
+factory preserves other explicitly supplied handlers and does not create or
+guess external backends.
 
 ```python
-from yj64_engineering_core.automation import (
-    EngineeringDispatcherTaskAdapter,
-    PARENT_TASK_QUEUE_TYPE,
-    TaskAdapterRegistry,
-    create_parent_task_handler,
-)
-from yj64_engineering_core.automation.worker import WorkerRunner
+from yj64_engineering_core.automation import create_engineering_worker_runner
 from yj64_engineering_core.dispatcher import AxialMemberSolver, EngineeringDispatcher
 
 dispatcher = EngineeringDispatcher()
 dispatcher.register_physics_solver(AxialMemberSolver())
 
-registry = TaskAdapterRegistry()
-registry.register(
-    "engineering.analysis",
-    EngineeringDispatcherTaskAdapter(dispatcher),
-    capabilities=("engineering.dispatch",),
-)
+# Register real CAD/FEM backends here when their executables, workspaces and
+# operating requirements have been configured by the deployment.
 
-handlers = {
-    PARENT_TASK_QUEUE_TYPE: create_parent_task_handler(registry),
-    # Keep the deployment's other existing handlers here.
-}
-runner = WorkerRunner(
+runner = create_engineering_worker_runner(
     store,
+    dispatcher=dispatcher,
     worker_id="engineering-worker-1",
-    handlers=handlers,
-    allowed_task_types=[PARENT_TASK_QUEUE_TYPE],
+    additional_handlers={
+        # Preserve existing CI/Council worker handlers here.
+    },
 )
 runner.run_once()
 ```
 
+The factory registers the concrete `engineering.analysis` adapter with the
+`engineering.dispatch` capability and wires `execute_task_request` to the
+parent handler. Additional task types remain explicit; no browser, repository
+write, provider, FEM or CAD execution capability is implied by this registration.
 The engineering adapter requires an explicit operation and an
 `EngineeringRequest` object in `input_data`. It calls the existing
 `EngineeringDispatcher`, stores the structured response in the parent's
