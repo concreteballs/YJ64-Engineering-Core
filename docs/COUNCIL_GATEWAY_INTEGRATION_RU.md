@@ -37,7 +37,7 @@ Gateway не создаёт второй консилиум, не вызывае
 
 ## Контракт yj64.council-api.v1
 
-Схема: schemas/council-api-v1.schema.json.
+Каноническая схема: [Motocicl — schemas/council-api-v1.schema.json](https://github.com/concreteballs/Motocicl/blob/main/schemas/council-api-v1.schema.json). Локальный `schemas/council-api-v1.schema.json` в Engineering Core сохранён только как compatibility snapshot; при изменении протокола сначала обновляется каноническая схема Motocicl, затем синхронизируется этот файл.
 
 Предлагаемые маршруты, используемые клиентом:
 
