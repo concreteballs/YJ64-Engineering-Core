@@ -1,5 +1,10 @@
 # Интеграция Council Gateway с консилиумом YJ-64
 
+> **Граница ответственности:** здесь описан только клиент Gateway/result adapter и интеграция с parent engineering task в Engineering Core. Motocicl владеет автономным циклом, долговечной orchestration и cycle-side caller. Приложение YJ-64 владеет собственным движком консилиума.
+>
+> [Контракт интеграции со стороны цикла](https://github.com/concreteballs/Motocicl/blob/main/docs/ENGINEERING_CORE_COUNCIL_GATEWAY_INTEGRATION_RU.md).
+
+
 ## Назначение и граница ответственности
 
 Council Gateway — клиент защищённого внешнего API и слой долговечной передачи результатов в YJ64 Engineering Core.
