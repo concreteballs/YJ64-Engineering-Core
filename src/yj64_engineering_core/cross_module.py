@@ -169,6 +169,7 @@ def evaluate_cross_module_acceptance(
 
     review_list = tuple(reviews)
     contribution_list = tuple(contributions)
+    disposition_list = tuple(dispositions)
     blockers: list[str] = []
     missing_reviews: list[str] = []
     missing_contributions: list[str] = []
@@ -251,7 +252,7 @@ def evaluate_cross_module_acceptance(
         r for r in by_reviewer.values() if r.get("status") == "conditional"
     ]
     conditions_ok, condition_blockers = evaluate_condition_dispositions(
-        candidate, conditional_reviews, dispositions
+        candidate, conditional_reviews, disposition_list
     )
     if not conditions_ok:
         blockers.extend(condition_blockers)
@@ -281,6 +282,6 @@ def evaluate_cross_module_acceptance(
         "missing_reviews": missing_reviews,
         "missing_contributions": missing_contributions,
         "blocking_findings": sorted(set(blockers)),
-        "condition_dispositions": [to_wire_condition_disposition(x) for x in dispositions],
+        "condition_dispositions": [to_wire_condition_disposition(x) for x in disposition_list],
         "decision": decision,
     }
