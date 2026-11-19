@@ -52,9 +52,11 @@ class ConditionDisposition:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} is required")
+        if not isinstance(self.status, ConditionStatus):
+            raise ValueError("status must be a ConditionStatus value")
         if self.decided_by != "parent_coordinator":
             raise ValueError("only the parent coordinator may disposition a review condition")
-        if not isinstance(self.decision_version, int) or self.decision_version < 1:
+        if type(self.decision_version) is not int or self.decision_version < 1:
             raise ValueError("decision_version must be a positive integer")
         if self.status is ConditionStatus.SATISFIED:
             if not self.evidence or any(
@@ -99,6 +101,7 @@ def evaluate_condition_dispositions(
             expected[(reviewer, condition)] = condition
 
     seen: set[tuple[str, str]] = set()
+    seen_ids: set[tuple[str, str]] = set()
     for item in dispositions:
         if not isinstance(item, ConditionDisposition):
             raise TypeError("dispositions must contain ConditionDisposition objects")
@@ -109,7 +112,11 @@ def evaluate_condition_dispositions(
             raise ValueError("disposition does not match a condition on this candidate revision")
         if key in seen:
             raise ValueError("duplicate disposition for the same review condition")
+        id_key = (item.reviewer_module, item.condition_id)
+        if id_key in seen_ids:
+            raise ValueError("duplicate condition_id within a review")
         seen.add(key)
+        seen_ids.add(id_key)
         if item.status is not ConditionStatus.SATISFIED:
             blockers.append(f"{item.reviewer_module}:{item.condition_id}:{item.status.value}")
 
