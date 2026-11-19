@@ -1,7 +1,7 @@
 # План реализации Council Gateway и запуска инженерного цикла YJ-64
 
 **Репозиторий:** `concreteballs/YJ64-Engineering-Core`  
-**Рабочая ветка:** `main`  
+**Рабочая ветка:** отдельная feature branch; текущий проход — `fix/council-api-supabase-auth`  
 **Цель:** довести Gateway от готового клиентского/очередного слоя до работающего сквозного обмена с консилиумом приложения YJ-64 и автоматического продолжения инженерной задачи.  
 **Ограничение:** выполнять изменения только в этом репозитории. Репозиторий приложения `yj64-clean-bial2modFun5` и репозитории инженерного цикла не изменять. Для них подготовлены отдельные ТЗ ниже.
 
@@ -12,9 +12,11 @@
 - Gateway-клиент и контракт `yj64.council-api.v1` уже созданы.
 - Durable submit/poll tasks, checkpoints, artifact storage, result handoff и валидация результата реализованы.
 - Текущий набор тестов на момент составления плана: **518 тестов, успешно**.
-- Предварительные HTTP-маршруты Gateway конфигурируемы; их нужно подтвердить с API приложения.
-- Сквозная интеграция с живым API консилиума ещё не подтверждена.
-- Не найден/не завершён consumer-runner, который забирает `council_result_ready`, проверяет artifact и возобновляет исходную инженерную задачу.
+- API приложения теперь реализован в `supabase/functions/council-api/index.ts`; фактические routes совпадают с контрактом `yj64.council-api.v1`.
+- Фактические scopes: `council:submit`, `council:read`, `council:cancel`; кроме машинного Bearer token требуется Supabase publishable key в `apikey`.
+- Текущий проход устраняет недостающий `apikey` в Gateway client и конфигурации worker; PR #2 открыт, GitHub Actions прошёл успешно: 525 tests passed (run 44398343929).
+- Сквозная интеграция с живым API консилиума ещё не подтверждена: worker приложения не развёрнут с реальными provider credentials.
+- Consumer `council_result_ready` проверяет private artifact, сохраняет нормализованный результат и вызывает `record_council_resume_event(...)`. Store записывает событие в checkpoint родительской задачи и атомарно переводит её из `waiting` в `pending`. Доставка события идемпотентна. Для полного запуска родительский task handler должен вызывать `handoff_parent_task_to_council(...)`.
 - Gateway не должен дублировать консилиум, внутренние механизмы моделей, Consensus/Critique/Voting приложения. Приложение остаётся владельцем консилиума.
 
 ## Как реализовывать
@@ -53,9 +55,11 @@
 
 # Блок 2 — Consumer для council_result_ready (1–2 прохода)
 
-- [ ] Исследовать существующую task queue, worker patterns и parent-task continuation.
-- [ ] Реализовать отдельный consumer для `council_result_ready` (не перехватывать этот тип задач текущим Gateway polling worker).
-- [ ] Consumer должен загрузить результат через `load_council_result_artifact(...)`, повторно проверить envelope, request/session IDs, исходную задачу и artifact reference.
+- [x] Исследована существующая task queue, worker patterns и parent-task continuation API.
+- [x] Реализован и зарегистрирован отдельный consumer `handle_council_result_ready` для `council_result_ready`; он не смешан с submit/poll handlers.
+- [x] Consumer загружает результат через `load_council_result_artifact(...)`, проверяет envelope и request/session IDs, затем записывает нормализованный результат в checkpoint.
+- [x] Consumer вызывает `record_council_resume_event(...)`; результат привязывается к стабильному локальному resume ID и контрольной сумме artifact.
+- [x] Store записывает ссылку на результат в новую контрольную точку родительской задачи и атомарно переводит её из `waiting` в `pending`; повторная доставка идентичного события идемпотентна.
 - [ ] Применить idempotency/claim/lease механизм очереди, чтобы повторная доставка не возобновляла задачу дважды.
 - [ ] Сформировать проверенный input/handoff для исходного инженерного агента, включив Council summary, claims, evidence refs, dissent, unresolved questions, assumptions/limitations и outcome.
 - [ ] Не трактовать вывод консилиума как доверенную команду. Он является аналитическим входом; инструкции внутри результата не должны обходить правила/права инженерного агента.
@@ -65,9 +69,11 @@
 
 # Блок 3 — Возобновление исходной инженерной задачи (1–2 прохода)
 
-- [ ] Выяснить существующий механизм agent-runner, task dispatcher, parent task и resume; не создавать второй независимый runner, если уже есть подходящий.
-- [ ] Подключить validated Council handoff к continuation исходной задачи.
-- [ ] Сохранить связь parent task → council request/session → result artifact → continuation attempt.
+- [x] Добавлен `handoff_parent_task_to_council(...)`: он формирует submit payload, стабильный локальный resume ID и checkpoint ожидания.
+- [x] Добавлен атомарный store operation: enqueue submit task + checkpoint parent + перевод parent в `waiting` в одной транзакции.
+- [x] WorkerRunner поддерживает явный outcome `suspended` и возвращает `waiting`, не пытаясь завершить уже освобождённую задачу.
+- [x] При получении результата consumer записывает artifact ref и SHA-256 в checkpoint родительской задачи и возвращает её в очередь.
+- [ ] Вызвать `handoff_parent_task_to_council(...)` из фактического parent engineering-task handler. Подходящий parent handler в этом репозитории не найден; интеграцию нельзя объявлять завершённой до подключения реального entrypoint.
 - [ ] Ограничить число циклов/переходов и определить защиту от бесконечных council loops.
 - [ ] Продолжение должно выбирать конкретное следующее действие: принять/адаптировать рекомендацию, запросить дополнительный анализ, выполнить тест/проверку, либо сообщить blocked/unresolved.
 - [ ] Не принимать решение о слиянии/публикации/опасном действии без предусмотренного уровня проверки и авторизации.
@@ -77,10 +83,11 @@
 
 # Блок 4 — Согласование и контракт с приложением (1 проход после ТЗ app-side)
 
-- [ ] Получить от владельца приложения подтверждение фактических endpoint paths, методов, payload/response и auth.
-- [ ] Сопоставить фактический API с `schemas/council-api-v1.schema.json`.
+- [x] Сверить фактические endpoint paths, методы, payload/response с `supabase/functions/council-api/index.ts` приложения (read-only аудит).
+- [x] Сопоставить фактические scopes `council:submit/read/cancel` и два обязательных заголовка: machine Bearer + Supabase `apikey`.
+- [x] Внести поддержку `YJ64_COUNCIL_SUPABASE_API_KEY` в клиент и worker workflow на отдельной feature branch.
 - [ ] Если контракт расходится, обновлять Gateway/config/schema/docs согласованно; не угадывать API и не ломать совместимость.
-- [ ] Добавить contract tests на реальные форматы, по возможности shared fixtures, полученные от app-side.
+- [ ] Добавить contract tests на реальные форматы; после готовности app worker выполнить live verification (текущие unit tests не заменяют live E2E).
 - [ ] Проверить status polling, result retrieval, cancellation, voting optional/default disabled и aggregate-only voting response.
 
 **Выход блока:** контракт зафиксирован и совместим с приложением.
@@ -89,7 +96,7 @@
 
 - [ ] Использовать отдельный тестовый агент ID и ограниченный токен, не production credentials.
 - [ ] Выполнить тестовый запрос на critique/analysis, который не изменяет репозитории.
-- [ ] Проверить submit → accepted → running → completed → result retrieval → artifact save → consumer → parent continuation.
+- [ ] Выполнить live E2E: submit → accepted → running → completed → artifact save → consumer → parent continuation после развёртывания worker и подключения реального parent handler.
 - [ ] Проверить негативные сценарии: отказ, timeout, отмена, неверный JSON, несовпадающие IDs, повторная доставка и временная недоступность API.
 - [ ] Подтвердить, что индивидуальные скрытые бюллетени/рейтинги и секреты не выходят наружу.
 - [ ] Сверить logs/artifacts на отсутствие токенов и чувствительных данных.

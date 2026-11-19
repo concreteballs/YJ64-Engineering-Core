@@ -1,12 +1,13 @@
 import unittest
 
 from yj64_engineering_core.automation.browser_agent_bridge import create_envelope
-from yj64_engineering_core.automation.council_gateway import PROTOCOL_VERSION
+from yj64_engineering_core.automation.council_gateway import CouncilRequest, PROTOCOL_VERSION
 from yj64_engineering_core.automation.council_tasks import (
     POLL_TASK,
     RESULT_READY_TASK,
     SUBMIT_TASK,
     enqueue_council_request_from_envelope,
+    handoff_parent_task_to_council,
     handle_poll_council_request,
     load_council_result_artifact,
     handle_submit_council_request,
@@ -17,6 +18,15 @@ from yj64_engineering_core.automation.worker import TaskExecutionResult
 class FakeStore:
     def __init__(self):
         self.enqueued = []
+        self.parent_handoff = None
+
+    def enqueue_council_task_and_suspend_parent(self, **kwargs):
+        self.parent_handoff = kwargs
+        return {
+            "enqueued": True, "duplicate": False,
+            "task_id": 100, "parent_task_id": kwargs["queue_task_id"],
+            "state": "waiting",
+        }
 
     def enqueue_task(self, task_type, payload, dedupe_key, *, max_attempts=3):
         self.enqueued.append({
@@ -48,14 +58,6 @@ class FakeContext:
     def save_checkpoint(self, checkpoint):
         self.checkpoints.append(checkpoint)
         return True
-
-    def suspend_for_council(self, checkpoint, request_id):
-        self.suspended = (checkpoint, request_id)
-        return True
-
-    def record_council_resume_event(self, parent_task_id, request_id, artifact_ref, digest):
-        self.resume_event = (parent_task_id, request_id, artifact_ref, digest)
-        return {"accepted": True, "duplicate": False}
 
 
 class FakeClient:
@@ -146,6 +148,7 @@ class CouncilTaskTests(unittest.TestCase):
                 "request_id": "request-123",
                 "session_id": "session-123",
                 "parent_task_id": 9,
+                "resume_request_id": "council-resume:test-key",
                 "submitted_at": "2026-11-18T12:00:00Z",
                 "correlation_id": "task-12345678",
                 "idempotency_key": "idem-key-12345678",
@@ -154,6 +157,39 @@ class CouncilTaskTests(unittest.TestCase):
                 "max_poll_count": 20,
             },
         }
+
+    def test_parent_handoff_atomically_queues_council_and_suspends_current_task(self):
+        context = FakeContext()
+        request = CouncilRequest(
+            mode="consensus",
+            title="Review the engineering decision",
+            prompt="Assess the evidence and identify unresolved risks.",
+            correlation_id="parent-task-42",
+            idempotency_key="parent-council-idem-42",
+            context={"work_item": "design-review"},
+        )
+        decision = handoff_parent_task_to_council(
+            context,
+            request=request,
+            parent_state={"next_step": "continue_after_council"},
+            budgets={"tokens": 5000},
+            approvals={"council": True},
+        )
+        self.assertEqual(decision, TaskExecutionResult("suspended", "waiting_for_council"))
+        handoff = context.store.parent_handoff
+        self.assertIsNotNone(handoff)
+        self.assertEqual(handoff["queue_task_id"], context.task_id)
+        self.assertEqual(handoff["task_payload"]["parent_task_id"], context.task_id)
+        self.assertEqual(handoff["task_payload"]["resume_request_id"], handoff["council_request_id"])
+        self.assertEqual(handoff["checkpoint"]["task_state"]["stage"], "waiting_council")
+        self.assertEqual(
+            handoff["checkpoint"]["task_state"]["expected_council_request_id"],
+            handoff["council_request_id"],
+        )
+        self.assertEqual(
+            handoff["checkpoint"]["task_state"]["resume_state"]["next_step"],
+            "continue_after_council",
+        )
 
     def test_browser_agent_council_request_envelope_enters_existing_queue(self):
         store = FakeStore()
@@ -175,17 +211,6 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(store.enqueued[0]["payload"]["parent_task_ref"], "engineering-task-123")
         self.assertEqual(store.enqueued[0]["payload"]["request"]["mode"], "critique")
 
-    def test_parent_task_can_submit_and_suspend_for_council(self):
-        from yj64_engineering_core.automation.council_tasks import handle_council_request_in_parent_task
-        context = FakeContext()
-        result = handle_council_request_in_parent_task(
-            self.submit_task(), context, client_factory=lambda: FakeClient(),
-        )
-        self.assertEqual(result, TaskExecutionResult("suspended"))
-        self.assertEqual(context.suspended[1], "request-123")
-        self.assertEqual(context.suspended[0]["task_state"]["stage"], "waiting_council")
-        self.assertEqual(context.store.enqueued[0]["task_type"], POLL_TASK)
-
     def test_submit_persists_remote_ids_and_queues_poll_without_waiting(self):
         context = FakeContext()
         result = handle_submit_council_request(
@@ -206,6 +231,7 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(result, TaskExecutionResult("completed"))
         self.assertEqual(context.store.enqueued[0]["task_type"], POLL_TASK)
         self.assertEqual(context.store.enqueued[0]["payload"]["poll_generation"], 1)
+        self.assertEqual(context.store.enqueued[0]["payload"]["resume_request_id"], "council-resume:test-key")
 
     def test_completed_session_persists_artifact_and_hands_off_result(self):
         context = FakeContext()
@@ -219,6 +245,7 @@ class CouncilTaskTests(unittest.TestCase):
         handoff = context.store.enqueued[0]
         self.assertEqual(handoff["task_type"], RESULT_READY_TASK)
         self.assertEqual(handoff["payload"]["substantive_outcome"], "unresolved_disagreement")
+        self.assertEqual(handoff["payload"]["resume_request_id"], "council-resume:test-key")
         self.assertIn("supabase-storage://", handoff["payload"]["result_artifact_ref"])
         self.assertEqual(handoff["payload"]["browser_agent_envelope"]["message_type"], "council_result")
         loaded = load_council_result_artifact(

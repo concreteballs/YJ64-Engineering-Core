@@ -35,8 +35,8 @@ def main() -> int:
     if not os.environ.get("YJ64_COUNCIL_AGENT_TOKEN", "").strip():
         print("YJ64_COUNCIL_AGENT_TOKEN is not configured.", file=sys.stderr)
         return 2
-    if not (os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "").strip() or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()):
-        print("YJ64_COUNCIL_API_PUBLISHABLE_KEY is not configured.", file=sys.stderr)
+    if not (os.environ.get("YJ64_COUNCIL_SUPABASE_API_KEY", "").strip() or os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "").strip() or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()):
+        print("A Supabase publishable key (YJ64_COUNCIL_SUPABASE_API_KEY) is not configured.", file=sys.stderr)
         return 2
     if not os.environ.get("SUPABASE_URL", "").strip():
         print("SUPABASE_URL is not configured.", file=sys.stderr)
@@ -88,7 +88,7 @@ def main() -> int:
         return 1
 
     print(json.dumps({
-        "ok": result.get("status") in {"completed", "idle", "blocked"},
+        "ok": result.get("status") in {"completed", "idle", "blocked", "waiting"},
         "worker": "council_gateway",
         "result": result,
         "scope": "native_yj64_council_submit_poll_and_result_consumption",

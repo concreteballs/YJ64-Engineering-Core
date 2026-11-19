@@ -15,21 +15,27 @@ Application source audited for this integration:
 - Local chat persistence: `chat_workspace.py`
 - Application integration plan: `docs/YJ64-CLOUD-DEPLOYMENT-AND-INTEGRATION-PLAN.md`, section 8.2`
 
-## Verified application-side state and integration blocker
+## Verified application-side state (2026-11-18 audit)
 
-The current application source has a local `MessageDistributor` that dispatches to configured participants through `llm_api.generate_response`. `main.py` owns sequential multi-participant dialogue rounds, a separate group-dialogue loop, a prompt-based critique mode, stop controls, and the UI. `chat_workspace.py` stores chat messages in app-private JSON files.
+The current `main` branch of `concreteballs/yj64-clean-bial2modFun5` now contains the server-side Council API and execution components:
 
-The audit did not find a separate formal consensus decision engine, a structured critique/voting state machine, or a machine-readable consensus result lifecycle. The current `consensus_reached` flag and `[CONSENSUS: APPROVE/OBJECT]` prompt marker do not by themselves establish a verified consensus protocol. The planned Consensus/Critique/Voting/Decision Integrity work is described in the application integration plan, but documentation is not implementation evidence.
+- `supabase/functions/council-api/index.ts` — versioned external-agent API, machine-token authentication, per-agent scopes, idempotency, status/result/cancel routes, and readiness gate.
+- `supabase/config.toml` — `council-api` uses `verify_jwt = false`; the handler independently verifies the machine Bearer token.
+- `cloud_worker/engine.py` — server-side multi-model Council adapter using the application's existing `llm_api.generate_response` router.
+- `cloud_worker/worker.py` — persistent queue worker with claim leases, heartbeat, progress, cancellation checks, and retries.
+- `cloud_worker/Dockerfile` and `cloud_worker/README.md` — container build and deployment instructions.
 
-The audited source also does not expose a cloud HTTP API for an external agent, a server-side machine identity, durable remote council request/session records, or a remote polling/result endpoint. The configured diagnostic bridge is Android Content Provider IPC and is not a council API. The application README states that no cloud reporting endpoint is configured.
+The API implements the four versioned operations below under the Supabase function base URL. Machine scopes are exactly `council:submit`, `council:read`, and `council:cancel`. Each call also needs the Supabase project publishable key in the `apikey` header; this is separate from the machine Bearer token.
 
-Therefore the Gateway client and durable Engineering Core workflow can be implemented independently, but a real end-to-end council exchange cannot be claimed until the YJ-64 application implements the API contract below, connects it to its actual native multi-model workflow, and implements the agreed Consensus/Critique result semantics. The Gateway must not relabel an ordinary sequential chat as a completed consensus. A mock server is not proof of that integration.
+The app repository's CI has verified compilation, unit tests, and Docker image build. Those checks use deterministic test doubles; they do not prove that a persistent worker is deployed or that real provider calls have run. The application readiness gate intentionally rejects submit with `503` until a live worker heartbeat and server-side engine adapter readiness are present.
+
+**Current live-integration blockers:** deploy the app's persistent worker, configure at least two real provider routes in its secret manager, register a dedicated machine agent and token in the app database, and run a live request. This Gateway repository now provides an atomic parent-to-Council handoff helper and a result consumer that checkpoints the verified artifact reference on the parent task before re-queueing it. The actual parent engineering-task handler must call `handoff_parent_task_to_council(...)`; no suitable caller is currently present in this repository. Do not modify the app repository from this workstream.
 
 ## Proposed versioned API contract
 
 Protocol: `yj64.council-api.v1`
 
-The paths below are the concrete proposed defaults used by `CouncilGatewayClient`. They must be implemented by the YJ-64 application or explicitly mapped through the environment-configured API base path before production use.
+The paths below are implemented by the YJ-64 Supabase Edge Function and are the defaults used by `CouncilGatewayClient`. Set `YJ64_COUNCIL_API_URL` to the function base URL (for example, the Supabase project URL ending in `/functions/v1/council-api`); the versioned route is appended to that base path.
 
 | Operation | Method and path | Purpose |
 |---|---|---|
@@ -38,7 +44,7 @@ The paths below are the concrete proposed defaults used by `CouncilGatewayClient
 | Result | `GET /api/v1/external-agents/council/requests/{request_id}/result` | Return the structured result only when completed |
 | Cancel | `POST /api/v1/external-agents/council/requests/{request_id}/cancel` | Request cancellation subject to owner, scope, and state checks |
 
-All operations require a dedicated machine identity using a server-side Bearer token and the `yj64.council.submit`, `yj64.council.read`, and `yj64.council.cancel` scopes as applicable. The application must authorize every request against `agent_id` and request ownership. The token must never be exposed to Android UI, browser code, repository files, task payloads, or logs.
+All operations require a dedicated machine identity using a server-side Bearer token and the `council:submit`, `council:read`, and `council:cancel` scopes as applicable. The application must authorize every request against `agent_id` and request ownership. The machine token must never be exposed to Android UI, browser code, repository files, task payloads, or logs. Every request also sends the Supabase project publishable key in the `apikey` header; this key identifies the project at the Supabase gateway and is not the machine credential. The machine token remains in `Authorization: Bearer` and is independently checked by the Council API.
 
 ### Submit request
 
@@ -89,7 +95,7 @@ Lifecycle:
 6. On completion, the structured result is validated, stored in the existing private content-addressed Supabase artifact store, and referenced by a `council_result_ready` queue item. The handoff also contains a `council_result` browser-agent envelope bound to the original task reference.
 7. The engineering-agent workflow consumes that handoff through `load_council_result_artifact(...)`, which validates the result envelope and request/session identity before loading the private artifact. The agent independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
 
-The current Engineering Core repository contains CI-event workers, but the audit did not find a general autonomous-agent continuation runner that claims `council_result_ready`. The durable handoff and result loader are implemented; the agent runner must claim this task type, call `load_council_result_artifact(...)`, and resume the parent workflow. Until that consumer is wired in, the handoff is persisted but the original engineering task is not automatically resumed.
+The Engineering Core repository contains `council_result_consumer.py`, registered for `council_result_ready`. It validates the envelope and private artifact, stores normalized Council output in its own checkpoint, and calls `PostgresCycleStore.record_council_resume_event(...)`. The store writes the verified artifact reference and SHA-256 into a new parent checkpoint, then atomically re-queues the matching waiting parent. Matching duplicate events are accepted idempotently; conflicting duplicates are rejected. The parent-side entrypoint is `handoff_parent_task_to_council(...)`: it atomically inserts the submit task, persists the parent's waiting checkpoint and releases its lease. `WorkerRunner` now understands the explicit `suspended` outcome. The remaining code-integration gap is to call this helper from the actual parent engineering-task handler; no suitable caller is currently present in this repository. Thus the durable handoff primitives and consumer are implemented, but production parent-handler wiring and live E2E are still outstanding.
 
 The Gateway never treats the council's conclusion as proof that a patch is correct. The consumer must validate the result and preserve the distinction between consensus, qualified consensus, unresolved disagreement, and insufficient evidence.
 
@@ -99,6 +105,7 @@ Configure these GitHub Actions repository secrets:
 - `YJ64_DATABASE_URL`
 - `YJ64_COUNCIL_API_URL` — HTTPS origin of the YJ-64 external-agent API.
 - `YJ64_COUNCIL_AGENT_TOKEN` — dedicated machine token with minimum scopes.
+- `YJ64_COUNCIL_SUPABASE_API_KEY` — Supabase project publishable key, supplied as the `apikey` header (configure as a GitHub Actions repository variable; it is not a machine credential).
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` — server-side only, used to persist private result artifacts.
 

@@ -87,7 +87,7 @@ class CycleStore(Protocol):
     def save_checkpoint(self, queue_task_id: int, worker_id: str, checkpoint: dict, lease_seconds: int = 300) -> bool: ...
     def load_latest_checkpoint(self, queue_task_id: int) -> dict | None: ...
     def suspend_task_for_council(self, queue_task_id: int, worker_id: str, checkpoint: dict, council_request_id: str, lease_seconds: int = 300) -> bool: ...
-    def record_council_resume_event(self, parent_task_id: int, result_task_id: int, worker_id: str, council_request_id: str, result_artifact_ref: str, result_sha256: str) -> dict: ...
+    def enqueue_council_task_and_suspend_parent(self, queue_task_id: int, worker_id: str, task_payload: dict, dedupe_key: str, checkpoint: dict, council_request_id: str, lease_seconds: int = 300) -> dict: ...
     def complete_task(self, task_id: int, worker_id: str) -> bool: ...
     def fail_task(self, task_id: int, worker_id: str, error: str, retry_delay_seconds: int = 60) -> str | None: ...
     def block_task(self, task_id: int, worker_id: str, reason: str) -> bool: ...
@@ -120,10 +120,6 @@ class TaskContext:
         return self.store.suspend_task_for_council(
             self.task_id, self.worker_id, checkpoint, council_request_id, self.lease_seconds
         )
-
-    def record_council_resume_event(self, parent_task_id: int, council_request_id: str, result_artifact_ref: str, result_sha256: str) -> dict:
-        """Atomically record a Council result and wake its waiting parent."""
-        return self.store.record_council_resume_event(parent_task_id, self.task_id, self.worker_id, council_request_id, result_artifact_ref, result_sha256)
 
     def list_recovered_provider_results(self) -> list[dict]:
         """Return durable result references; task handlers must consume these before issuing new calls."""
@@ -260,8 +256,14 @@ class WorkerRunner:
             }
 
         if decision.outcome == "suspended":
-            return {"status": "waiting_council", "task_id": task_id, "recovery": recovery}
-
+            # The handler has already atomically persisted its waiting checkpoint,
+            # enqueued the Council submit task and released this parent lease.
+            return {
+                "status": "waiting",
+                "task_id": task_id,
+                "reason": decision.reason or "waiting_for_council",
+                "recovery": recovery,
+            }
         if decision.outcome == "completed":
             completed = self.store.complete_task(task_id, self.worker_id)
             return {

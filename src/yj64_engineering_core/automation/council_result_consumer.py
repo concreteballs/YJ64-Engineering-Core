@@ -52,22 +52,6 @@ def _validated_result(result: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _resume_parent_if_present(
-    context: Any, payload: dict[str, Any], artifact_ref: str, result_sha256: str,
-) -> None:
-    parent_task_id = payload.get("parent_task_id")
-    if parent_task_id is None:
-        return
-    if not isinstance(parent_task_id, int) or isinstance(parent_task_id, bool) or parent_task_id < 1:
-        raise ValueError("invalid_council_parent_task_id")
-    request_id = payload.get("request_id")
-    if not isinstance(request_id, str) or not request_id:
-        raise ValueError("invalid_council_request_id")
-    resumed = context.record_council_resume_event(parent_task_id, request_id, artifact_ref, result_sha256)
-    if not isinstance(resumed, dict) or not resumed.get("accepted"):
-        raise RuntimeError("council_parent_resume_not_accepted")
-
-
 def handle_council_result_ready(
     task: dict,
     context: Any,
@@ -81,30 +65,35 @@ def handle_council_result_ready(
             return TaskExecutionResult("blocked", "invalid_council_result_source")
         execution_status = payload.get("execution_status")
         if execution_status in {"blocked", "failed", "cancelled"}:
-            reason = payload.get("reason")
-            safe_reason = (
-                reason if isinstance(reason, str)
-                and reason.replace("_", "").replace("-", "").isalnum()
-                and len(reason) <= 120 else "council_result_not_completed"
-            )
             from .browser_agent_bridge import validate_envelope
+
             envelope = validate_envelope(payload.get("browser_agent_envelope", {}))
             envelope_payload = envelope.get("payload", {})
             terminal_ref = payload.get("result_artifact_ref")
+            request_id = payload.get("request_id")
+            session_id = payload.get("session_id")
             if (
                 envelope.get("message_type") != "council_result"
-                or envelope_payload.get("request_id") != payload.get("request_id")
-                or envelope_payload.get("session_id") != payload.get("session_id")
+                or envelope_payload.get("request_id") != request_id
+                or envelope_payload.get("session_id") != session_id
                 or envelope_payload.get("execution_status") != execution_status
                 or envelope_payload.get("source") != "yj64_native_council"
                 or not isinstance(terminal_ref, str)
-                or terminal_ref != f"council-terminal://{payload.get('request_id')}/{execution_status}"
+                or terminal_ref != f"council-terminal://{request_id}/{execution_status}"
             ):
                 return TaskExecutionResult("blocked", "invalid_council_terminal_handoff")
+
+            safe_reason = (
+                payload.get("reason")
+                if isinstance(payload.get("reason"), str)
+                and payload["reason"].replace("_", "").replace("-", "").isalnum()
+                and len(payload["reason"]) <= 120
+                else "council_result_not_completed"
+            )
             terminal = {
                 "protocol_version": PROTOCOL_VERSION,
-                "request_id": payload.get("request_id"),
-                "session_id": payload.get("session_id"),
+                "request_id": request_id,
+                "session_id": session_id,
                 "status": execution_status,
                 "reason": safe_reason,
             }
@@ -120,23 +109,39 @@ def handle_council_result_ready(
                     "reason": safe_reason,
                     "parent_task_id": payload.get("parent_task_id"),
                     "parent_task_ref": payload.get("parent_task_ref"),
-                    "request_id": payload.get("request_id"),
-                    "session_id": payload.get("session_id"),
+                    "request_id": request_id,
+                    "session_id": session_id,
                     "result_artifact_ref": terminal_ref,
                     "council_terminal_result": terminal,
                 },
-                budgets={}, approvals={}, artifact_refs=[terminal_ref],
+                budgets={},
+                approvals={},
+                artifact_refs=[terminal_ref],
                 previous_checkpoint_hash=previous.get("checkpoint_hash") if isinstance(previous, dict) else None,
             )
             if not context.save_checkpoint(checkpoint):
                 return TaskExecutionResult("retry", "council_result_checkpoint_failed", 90)
-            digest = hashlib.sha256(json.dumps(
-                terminal, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-            ).encode("utf-8")).hexdigest()
-            try:
-                _resume_parent_if_present(context, payload, terminal_ref, digest)
-            except (RuntimeError, ValueError):
-                return TaskExecutionResult("retry", "council_parent_resume_failed", 90)
+
+            parent_task_id = payload.get("parent_task_id")
+            if isinstance(parent_task_id, int) and not isinstance(parent_task_id, bool):
+                digest = hashlib.sha256(json.dumps(
+                    terminal, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                ).encode("utf-8")).hexdigest()
+                try:
+                    resumed = context.store.record_council_resume_event(
+                        parent_task_id=parent_task_id,
+                        result_task_id=context.task_id,
+                        worker_id=context.worker_id,
+                        council_request_id=payload.get("resume_request_id") or request_id,
+                        result_artifact_ref=terminal_ref,
+                        result_sha256=digest,
+                    )
+                except (OSError, RuntimeError):
+                    return TaskExecutionResult("retry", "council_parent_resume_unavailable", 90)
+                except (TypeError, ValueError, KeyError):
+                    return TaskExecutionResult("blocked", "council_parent_resume_rejected")
+                if not isinstance(resumed, dict) or not resumed.get("accepted"):
+                    return TaskExecutionResult("retry", "council_parent_resume_not_accepted", 90)
             return TaskExecutionResult("completed")
         if execution_status != "completed":
             return TaskExecutionResult("blocked", "invalid_council_execution_status")
@@ -146,6 +151,11 @@ def handle_council_result_ready(
             payload, artifact_store_factory=artifact_factory
         )
         normalized = _validated_result(result)
+        canonical_artifact = json.dumps(
+            result, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+        result_sha256 = hashlib.sha256(canonical_artifact).hexdigest()
     except (TypeError, ValueError, KeyError):
         return TaskExecutionResult("blocked", "invalid_council_result")
     except (OSError, RuntimeError):
@@ -169,6 +179,7 @@ def handle_council_result_ready(
             "parent_task_id": payload.get("parent_task_id"),
             "parent_task_ref": payload.get("parent_task_ref"),
             "result_artifact_ref": artifact_ref,
+            "result_sha256": result_sha256,
             "council_result": normalized,
             "model_output_is_untrusted_data": True,
         },
@@ -181,11 +192,24 @@ def handle_council_result_ready(
     )
     if not context.save_checkpoint(checkpoint):
         return TaskExecutionResult("retry", "council_result_checkpoint_failed", 90)
-    digest = hashlib.sha256(json.dumps(
-        result, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-    ).encode("utf-8")).hexdigest()
-    try:
-        _resume_parent_if_present(context, payload, artifact_ref, digest)
-    except (RuntimeError, ValueError):
-        return TaskExecutionResult("retry", "council_parent_resume_failed", 90)
+
+    parent_task_id = payload.get("parent_task_id")
+    if isinstance(parent_task_id, int) and not isinstance(parent_task_id, bool):
+        try:
+            resumed = context.store.record_council_resume_event(
+                parent_task_id=parent_task_id,
+                result_task_id=context.task_id,
+                worker_id=context.worker_id,
+                council_request_id=payload.get("resume_request_id") or payload["request_id"],
+                result_artifact_ref=artifact_ref,
+                result_sha256=result_sha256,
+            )
+        except (OSError, RuntimeError):
+            return TaskExecutionResult("retry", "council_parent_resume_unavailable", 90)
+        except (TypeError, ValueError, KeyError):
+            return TaskExecutionResult("blocked", "council_parent_resume_rejected")
+        if not resumed.get("accepted"):
+            reason = resumed.get("reason")
+            safe_reason = reason if isinstance(reason, str) and reason.replace("_", "").isalnum() else "parent_resume_rejected"
+            return TaskExecutionResult("blocked", safe_reason)
     return TaskExecutionResult("completed")

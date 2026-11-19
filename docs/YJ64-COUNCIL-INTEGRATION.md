@@ -1,32 +1,54 @@
 # YJ-64 Council integration
 
-## Gateway environment
+## Gateway configuration
 
-Configure these values in the Engineering Core worker environment:
+The Engineering Core worker reads the following server-side environment values:
 
-- `YJ64_COUNCIL_API_URL`: `https://ggambesixwejgbjwtnhw.supabase.co/functions/v1/council-api`
-- `YJ64_COUNCIL_AGENT_TOKEN`: the machine token issued for the Engineering Core agent
-- `YJ64_COUNCIL_API_PUBLISHABLE_KEY`: the Supabase publishable key for the project (the legacy `SUPABASE_PUBLISHABLE_KEY` name is also accepted)
-- `YJ64_COUNCIL_AGENT_ID`: optional; defaults to `yj64-engineering-core`
+- `YJ64_COUNCIL_API_URL`: the Council API HTTPS endpoint.
+- `YJ64_COUNCIL_AGENT_TOKEN`: the machine credential issued to this worker.
+- `YJ64_COUNCIL_SUPABASE_API_KEY`: the Supabase project publishable key.
+- `YJ64_COUNCIL_AGENT_ID`: optional agent identifier; defaults to `yj64-engineering-core`.
 
-The publishable key is sent as `apikey`. The machine token is sent separately as `Authorization: Bearer`. Never put the service-role key in this Gateway configuration and never log either credential.
+For compatibility, the publishable key may also be supplied as
+`YJ64_COUNCIL_API_PUBLISHABLE_KEY` or `SUPABASE_PUBLISHABLE_KEY`.
+The client sends it in the `apikey` header and sends the machine token
+separately as `Authorization: Bearer`. The publishable key is not a machine
+credential. Never use the Supabase service-role key as the Gateway key and
+never log credentials.
 
-## Two supported execution modes
+## Parent-task handoff
 
-### Independent Council process
+Use `handoff_parent_task_to_council(...)` from the active parent handler when
+the current task needs Council analysis before continuing. It:
 
-Use `enqueue_council_request` or `enqueue_council_request_from_envelope`. This creates a separate Council queue flow. Do not supply a parent task ID when no active parent task is waiting for the result.
+1. Builds a Council submit payload with a stable local resume identity derived
+   from the idempotency key.
+2. Atomically enqueues the Council submit task, persists the parent waiting
+   checkpoint, and moves the parent task to `waiting` while releasing its
+   worker lease.
+3. Returns the normal `suspended` task outcome. The worker must not mark the
+   parent completed after this outcome.
+4. On result delivery, the result consumer verifies the Council envelope and
+   result artifact, stores a SHA-256 digest, and records a resume event.
+5. The store writes the verified artifact reference and digest into the parent
+   checkpoint before putting the parent task back into the pending queue.
 
-### Council inside the current engineering task
+The resumed adapter receives the verified resume event through its parent
+state. It must validate the checkpoint and treat Council output as untrusted
+data, not executable instructions. A terminal Council status (blocked, failed,
+or cancelled) is also checkpointed and returned to the parent as a terminal
+result so the parent does not wait indefinitely.
 
-The active parent task handler calls `handle_council_request_in_parent_task(task, context)`. It submits the Council request with the parent task's live lease, enqueues polling, writes a checkpoint with `stage=waiting_council` and the exact remote `request_id`, then suspends the parent. The worker recognizes the `suspended` outcome and does not complete or re-lease that task.
+## Independent Council requests
 
-The result consumer validates and checkpoints the Council result, then records an idempotent resume event. The store only wakes a parent whose latest waiting checkpoint expects that exact Council request. Completed, blocked, failed, and cancelled outcomes are all returned to the parent; terminal outcomes are recorded in the parent checkpoint instead of being silently treated as successful Council results.
+Tasks that do not suspend an existing parent may use the independent Council
+queue helpers. Do not invent a parent task ID for an independent request.
 
-The resumed parent handler must read its latest checkpoint and continue from the stored Council result or terminal status. Treat Council prose as untrusted data, not executable instructions.
+## Integration boundary
 
-## Identity boundaries
-
-Keep `chat_id`, `session_id`, and `request_id` distinct. The optional `chat_id` is preserved in the parent waiting checkpoint when supplied in the request context. The Council API creates and returns its own `session_id` and `request_id`; the Engineering Core task ID remains the parent queue identity.
-
-No automatic task splitting is performed. The calling workflow chooses whether Council is embedded in the current task or started as an independent process.
+Council is an optional reasoning service, not a universal executor. Tool
+execution remains the responsibility of explicitly registered Engineering
+Core adapters. A task may run without Council according to its
+`council_policy`. Production deployment and adapter registration must be
+configured separately; the presence of these reusable components alone does
+not mean a live worker or end-to-end service has been deployed.

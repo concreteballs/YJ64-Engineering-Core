@@ -203,7 +203,7 @@ class CouncilGatewayClient:
         *,
         base_url: str,
         token: str,
-        publishable_key: str | None = None,
+        supabase_api_key: str,
         agent_id: str = "yj64-engineering-core",
         timeout_seconds: float = 20.0,
         max_response_bytes: int = 2 * 1024 * 1024,
@@ -224,8 +224,8 @@ class CouncilGatewayClient:
             raise ValueError("base_url must not contain credentials, query or fragment")
         if not isinstance(token, str) or not token.strip():
             raise ValueError("token is required")
-        if publishable_key is not None and (not isinstance(publishable_key, str) or not publishable_key.strip()):
-            raise ValueError("publishable_key must be a non-empty string when provided")
+        if not isinstance(supabase_api_key, str) or not supabase_api_key.strip():
+            raise ValueError("supabase_api_key is required for the Supabase apikey header")
         _safe_id(agent_id, "agent_id")
         if (
             not isinstance(timeout_seconds, (int, float))
@@ -241,7 +241,7 @@ class CouncilGatewayClient:
         self._origin = f"{parsed.scheme}://{parsed.netloc}"
         self._base_path = parsed.path.rstrip("/")
         self._token = token.strip()
-        self._publishable_key = publishable_key.strip() if publishable_key is not None else None
+        self._supabase_api_key = supabase_api_key.strip()
         self.agent_id = agent_id
         self.timeout_seconds = float(timeout_seconds)
         self.max_response_bytes = max_response_bytes
@@ -256,20 +256,21 @@ class CouncilGatewayClient:
         """Read machine credentials only from the worker's server environment."""
         base_url = os.environ.get("YJ64_COUNCIL_API_URL", "")
         token = os.environ.get("YJ64_COUNCIL_AGENT_TOKEN", "")
-        publishable_key = (
-            os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "")
+        agent_id = os.environ.get("YJ64_COUNCIL_AGENT_ID", "yj64-engineering-core")
+        supabase_api_key = (
+            os.environ.get("YJ64_COUNCIL_SUPABASE_API_KEY", "")
+            or os.environ.get("YJ64_COUNCIL_API_PUBLISHABLE_KEY", "")
             or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
         )
-        agent_id = os.environ.get("YJ64_COUNCIL_AGENT_ID", "yj64-engineering-core")
-        if not base_url or not token or not publishable_key:
+        if not base_url or not token or not supabase_api_key:
             raise RuntimeError(
                 "YJ64_COUNCIL_API_URL, YJ64_COUNCIL_AGENT_TOKEN and "
-                "YJ64_COUNCIL_API_PUBLISHABLE_KEY (or SUPABASE_PUBLISHABLE_KEY) are required"
+                "YJ64_COUNCIL_SUPABASE_API_KEY (or YJ64_COUNCIL_API_PUBLISHABLE_KEY / SUPABASE_PUBLISHABLE_KEY) is required"
             )
         return cls(
             base_url=base_url,
             token=token,
-            publishable_key=publishable_key,
+            supabase_api_key=supabase_api_key,
             agent_id=agent_id,
             submit_path=os.environ.get("YJ64_COUNCIL_SUBMIT_PATH", "/api/v1/external-agents/council/requests"),
             status_path_template=os.environ.get("YJ64_COUNCIL_STATUS_PATH", "/api/v1/external-agents/council/requests/{request_id}"),
@@ -491,10 +492,9 @@ class CouncilGatewayClient:
         headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {self._token}",
+            "apikey": self._supabase_api_key,
             "X-YJ64-Protocol-Version": PROTOCOL_VERSION,
         }
-        if self._publishable_key is not None:
-            headers["apikey"] = self._publishable_key
         if body is not None:
             headers["Content-Type"] = "application/json"
         if extra_headers:
