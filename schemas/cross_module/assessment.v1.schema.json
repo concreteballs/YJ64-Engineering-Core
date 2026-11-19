@@ -73,6 +73,10 @@
         "deferred"
       ]
     },
+    "condition_dispositions": {
+      "type": "array",
+      "items": { "$ref": "condition-disposition.v1.schema.json" }
+    },
     "decision_rationale": {
       "type": "string"
     }
