@@ -1,4 +1,9 @@
 # YJ64 — Observability, Log Monitoring & Diagnostics
+
+> **Shared contract:** observability is a cross-repository capability. Engineering Core owns instrumentation of engineering modules and its API producer boundary. Motocicl owns cycle-runtime telemetry, CI ingestion/diagnostics and orchestration-level correlation. Keep event schemas compatible; do not duplicate a second cycle collector in Engineering Core.
+>
+> [Motocicl cycle-side copy](https://github.com/concreteballs/Motocicl/blob/main/docs/OBSERVABILITY_AND_DIAGNOSTICS_ARCHITECTURE.md).
+
 Status: **Shared event-contract foundation implemented; collection and end-to-end observability remain planned**
 
 ## Purpose
