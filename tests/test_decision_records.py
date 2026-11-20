@@ -1,3 +1,5 @@
+import hashlib
+import json
 import unittest
 
 from yj64_engineering_core.automation.decision_records import (
@@ -101,6 +103,42 @@ class DecisionRecordTests(unittest.TestCase):
             claims=[self.claim], evidence=[self.evidence], decision=self.decision
         )
         self.assertEqual(bundle["claims"][0]["status"], "unverified")
+
+    def test_rehashed_record_with_invalid_semantics_is_rejected(self):
+        forged = dict(self.claim)
+        forged["status"] = "approved_by_consensus"
+        payload = {key: value for key, value in forged.items() if key != "record_hash"}
+        canonical = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        forged["record_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        with self.assertRaisesRegex(ValueError, "invalid values"):
+            verify_record(forged)
+
+    def test_rehashed_record_with_extra_field_is_rejected(self):
+        forged = dict(self.evidence)
+        forged["execution_permission"] = True
+        payload = {key: value for key, value in forged.items() if key != "record_hash"}
+        canonical = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        forged["record_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        with self.assertRaisesRegex(ValueError, "unsupported fields"):
+            verify_record(forged)
+
+    def test_rehashed_decision_cannot_change_advisory_authority(self):
+        forged = dict(self.decision)
+        forged["authority"] = "execution_authority"
+        payload = {key: value for key, value in forged.items() if key != "record_hash"}
+        canonical = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        forged["record_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        with self.assertRaisesRegex(ValueError, "advisory_only"):
+            verify_record(forged)
 
     def test_model_text_is_data_not_authority(self):
         claim = create_claim_record(
