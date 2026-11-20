@@ -112,6 +112,8 @@ class TaskContext:
         )
 
     def save_checkpoint(self, checkpoint: dict) -> bool:
+        if self._council_resume_required or self._parent_resume_required:
+            self._validate_resume_checkpoint_write(checkpoint)
         return self.store.save_checkpoint(
             self.task_id, self.worker_id, checkpoint, self.lease_seconds
         )
@@ -128,10 +130,167 @@ class TaskContext:
     _council_resume_required: bool = field(default=False, init=False, compare=False, repr=False)
     _council_resume_loaded: bool = field(default=False, init=False, compare=False, repr=False)
     _council_resume_expected_request_id: str | None = field(default=None, init=False, compare=False, repr=False)
+    _council_resume_base_checkpoint: dict | None = field(default=None, init=False, compare=False, repr=False)
+    _council_resume_parent_state: dict | None = field(default=None, init=False, compare=False, repr=False)
     _parent_resume_required: bool = field(default=False, init=False, compare=False, repr=False)
     _parent_resume_loaded: bool = field(default=False, init=False, compare=False, repr=False)
     _parent_resume_expected_correlation_key: str | None = field(default=None, init=False, compare=False, repr=False)
+    _parent_resume_base_checkpoint: dict | None = field(default=None, init=False, compare=False, repr=False)
+    _parent_resume_parent_state: dict | None = field(default=None, init=False, compare=False, repr=False)
     _suspended_for_child: bool = field(default=False, init=False, compare=False, repr=False)
+
+    @staticmethod
+    def _resume_json_snapshot(value: dict) -> dict:
+        try:
+            snapshot = json.dumps(
+                value, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            )
+            return json.loads(snapshot)
+        except (TypeError, ValueError):
+            raise ValueError("resume_state_must_be_finite_json") from None
+
+    def _resume_contract(self):
+        if self._council_resume_required and not self._parent_resume_required:
+            return ("council", "council_resume", self._council_resume_base_checkpoint,
+                    self._council_resume_parent_state, self._council_resume_loaded)
+        if self._parent_resume_required and not self._council_resume_required:
+            return ("child", "child_resume", self._parent_resume_base_checkpoint,
+                    self._parent_resume_parent_state, self._parent_resume_loaded)
+        raise ValueError("exactly one parent resume contract must be active")
+
+    def _validate_resume_checkpoint_payload(
+        self, checkpoint: dict, *, previous: dict | None = None,
+        require_advanced: bool = False,
+    ) -> bool:
+        from .checkpoints import verify_checkpoint
+        kind, resume_key, base, parent_state, loaded = self._resume_contract()
+        if not loaded or not isinstance(base, dict) or not isinstance(parent_state, dict):
+            raise ValueError("parent resume must be loaded before checkpointing")
+        verify_checkpoint(checkpoint)
+        if checkpoint.get("task_id") != str(self.task_id):
+            raise ValueError("resume checkpoint task identity mismatch")
+        if checkpoint.get("task_spec_version") != base.get("task_spec_version"):
+            raise ValueError("resume checkpoint task specification changed")
+        if require_advanced and checkpoint.get("sequence", 0) <= base.get("sequence", 0):
+            raise ValueError("parent resume continuation was not checkpointed")
+        if checkpoint.get("budgets") != base.get("budgets") or checkpoint.get("approvals") != base.get("approvals"):
+            raise ValueError("parent resume cannot change budgets or approvals")
+        original_artifacts = base.get("artifact_refs", [])
+        current_artifacts = checkpoint.get("artifact_refs", [])
+        if not isinstance(original_artifacts, list) or not isinstance(current_artifacts, list):
+            raise ValueError("parent resume artifact references are invalid")
+        if current_artifacts[:len(original_artifacts)] != original_artifacts:
+            raise ValueError("parent resume cannot discard or reorder original artifacts")
+        state = checkpoint.get("task_state")
+        base_state = base.get("task_state")
+        if not isinstance(state, dict) or not isinstance(base_state, dict):
+            raise ValueError("resume checkpoint task state is invalid")
+        if (
+            state.get("parent_task_state") != parent_state
+            or state.get("resume_kind") != kind
+            or state.get("resume_consumed") is not True
+            or state.get(resume_key) != base_state.get(resume_key)
+        ):
+            raise ValueError("resume checkpoint did not preserve parent context and result identity")
+        continuation = state.get("continuation")
+        if (
+            not isinstance(continuation, dict)
+            or not isinstance(continuation.get("next_stage"), str)
+            or not continuation["next_stage"].strip()
+            or len(continuation["next_stage"]) > 128
+        ):
+            raise ValueError("resume checkpoint requires an explicit next_stage")
+        for key, value in parent_state.items():
+            if key != "stage" and state.get(key) != value:
+                raise ValueError("resume checkpoint changed original parent state")
+        allowed_keys = set(parent_state) | {
+            "parent_task_state", "resume_kind", "resume_consumed", "continuation", resume_key,
+        }
+        if set(state) - allowed_keys:
+            raise ValueError("resume checkpoint contains unscoped top-level state")
+        if state.get("stage") in {"council_resume_ready", "parent_resume_ready"}:
+            raise ValueError("resume checkpoint is still in a ready state")
+        if previous is not None:
+            verify_checkpoint(previous)
+            if (
+                previous.get("task_id") != str(self.task_id)
+                or checkpoint.get("sequence") != previous.get("sequence", 0) + 1
+                or checkpoint.get("previous_checkpoint_hash") != previous.get("checkpoint_hash")
+            ):
+                raise ValueError("resume checkpoint must extend the latest checkpoint")
+            if previous.get("checkpoint_hash") == base.get("checkpoint_hash"):
+                if state.get("stage") != "parent_resume_consumed":
+                    raise ValueError("first resume checkpoint must mark the result consumed")
+            else:
+                previous_state = previous.get("task_state")
+                if (
+                    not isinstance(previous_state, dict)
+                    or previous_state.get("parent_task_state") != parent_state
+                    or previous_state.get("resume_kind") != kind
+                    or previous_state.get("resume_consumed") is not True
+                    or previous_state.get(resume_key) != base_state.get(resume_key)
+                ):
+                    raise ValueError("resume checkpoint chain lost its original parent context")
+        return True
+
+    def _validate_resume_checkpoint_write(self, checkpoint: dict) -> None:
+        previous = self.load_latest_checkpoint()
+        if not isinstance(previous, dict):
+            raise ValueError("parent resume base checkpoint is unavailable")
+        self._validate_resume_checkpoint_payload(checkpoint, previous=previous)
+
+    def _resume_checkpoint_is_consumed(self, checkpoint: dict, *, kind: str) -> bool:
+        try:
+            active_kind, _, base, _, loaded = self._resume_contract()
+            if kind != active_kind or not loaded or not isinstance(base, dict):
+                return False
+            self._validate_resume_checkpoint_payload(checkpoint, require_advanced=True)
+            return True
+        except Exception:
+            return False
+
+    def _checkpoint_resume_consumed(self, kind: str, continuation: dict) -> bool:
+        active_kind, resume_key, base, parent_state, loaded = self._resume_contract()
+        if kind != active_kind or not loaded:
+            raise ValueError("matching parent resume must be loaded before consumption")
+        if not isinstance(continuation, dict):
+            raise ValueError("resume continuation must be an object")
+        continuation_snapshot = self._resume_json_snapshot(continuation)
+        if (
+            not isinstance(continuation_snapshot.get("next_stage"), str)
+            or not continuation_snapshot["next_stage"].strip()
+            or len(continuation_snapshot["next_stage"]) > 128
+        ):
+            raise ValueError("resume continuation requires a non-empty next_stage")
+        previous = self.load_latest_checkpoint()
+        if not isinstance(previous, dict):
+            raise ValueError("parent resume checkpoint is unavailable")
+        from .checkpoints import create_checkpoint, verify_checkpoint
+        verify_checkpoint(previous)
+        if previous.get("checkpoint_hash") != base.get("checkpoint_hash"):
+            raise ValueError("parent resume has already advanced")
+        base_state = base.get("task_state")
+        if not isinstance(base_state, dict) or not isinstance(parent_state, dict):
+            raise ValueError("parent resume base state is invalid")
+        resume_value = base_state.get(resume_key)
+        if not isinstance(resume_value, dict):
+            raise ValueError("parent resume identity is missing")
+        next_state = dict(parent_state)
+        next_state["stage"] = "parent_resume_consumed"
+        next_state["parent_task_state"] = self._resume_json_snapshot(parent_state)
+        next_state["continuation"] = continuation_snapshot
+        next_state["resume_kind"] = kind
+        next_state["resume_consumed"] = True
+        next_state[resume_key] = self._resume_json_snapshot(resume_value)
+        checkpoint = create_checkpoint(
+            task_id=str(self.task_id), sequence=previous["sequence"] + 1,
+            state="checkpointed", task_spec_version=previous["task_spec_version"],
+            task_state=next_state, budgets=previous.get("budgets", {}),
+            approvals=previous.get("approvals", {}), artifact_refs=previous.get("artifact_refs", []),
+            previous_checkpoint_hash=previous["checkpoint_hash"],
+        )
+        return bool(self.save_checkpoint(checkpoint))
 
     def record_council_resume_event(
         self, parent_task_id: int, council_request_id: str,
@@ -159,6 +318,11 @@ class TaskContext:
             raise ValueError("checkpoint does not contain a pending council resume")
         object.__setattr__(self, "_council_resume_required", True)
         object.__setattr__(self, "_council_resume_expected_request_id", request_id)
+        object.__setattr__(self, "_council_resume_base_checkpoint", self._resume_json_snapshot(checkpoint))
+        object.__setattr__(
+            self, "_council_resume_parent_state",
+            self._resume_json_snapshot({key: value for key, value in state.items() if key != "council_resume"}),
+        )
 
     def load_council_resume(self) -> dict | None:
         """Load the untrusted Council handoff from this task's latest checkpoint."""
@@ -217,6 +381,10 @@ class TaskContext:
             },
         }
 
+    def checkpoint_council_resume_consumed(self, continuation: dict) -> bool:
+        """Persist the parent-authored next step without replacing its original context."""
+        return self._checkpoint_resume_consumed("council", continuation)
+
     def suspend_for_child(self, checkpoint: dict, correlation_key: str, protocol_version: str) -> bool:
         """Persist the parent checkpoint and release its lease while awaiting a child task."""
         suspended = self.store.suspend_task_for_child(
@@ -238,6 +406,8 @@ class TaskContext:
         resume = validate_parent_resume_checkpoint(checkpoint, parent_task_id=self.task_id)
         object.__setattr__(self, "_parent_resume_required", True)
         object.__setattr__(self, "_parent_resume_expected_correlation_key", resume["correlation_key"])
+        object.__setattr__(self, "_parent_resume_base_checkpoint", self._resume_json_snapshot(checkpoint))
+        object.__setattr__(self, "_parent_resume_parent_state", self._resume_json_snapshot(resume["parent_task_state"]))
 
     def load_parent_resume(self) -> dict | None:
         """Load and validate the generic child-result handoff from this task checkpoint."""
@@ -246,8 +416,7 @@ class TaskContext:
         if checkpoint is None:
             return None
         resume = validate_parent_resume_checkpoint(checkpoint, parent_task_id=self.task_id)
-        object.__setattr__(self, "_parent_resume_required", True)
-        object.__setattr__(self, "_parent_resume_expected_correlation_key", resume["correlation_key"])
+        self._require_parent_resume(checkpoint)
         object.__setattr__(self, "_parent_resume_loaded", True)
         return resume
 
@@ -264,36 +433,9 @@ class TaskContext:
         artifact = fetch_child_result_artifact(resume, artifact_store)
         return {"resume": resume, "artifact": artifact}
 
-    def checkpoint_parent_resume_consumed(self, task_state: dict) -> bool:
-        """Persist the parent's next state while retaining the consumed child-result identity."""
-        from .checkpoints import create_checkpoint, verify_checkpoint
-        if not self._parent_resume_loaded or not isinstance(task_state, dict):
-            raise ValueError("parent resume must be loaded before it can be consumed")
-        previous = self.load_latest_checkpoint()
-        if not isinstance(previous, dict):
-            raise ValueError("parent resume checkpoint is unavailable")
-        verify_checkpoint(previous)
-        previous_state = previous.get("task_state")
-        resume = previous_state.get("child_resume") if isinstance(previous_state, dict) else None
-        if (
-            not isinstance(previous_state, dict)
-            or previous_state.get("stage") != "parent_resume_ready"
-            or not isinstance(resume, dict)
-            or resume.get("correlation_key") != self._parent_resume_expected_correlation_key
-        ):
-            raise ValueError("parent resume checkpoint identity changed before consumption")
-        next_state = dict(task_state)
-        next_state["stage"] = "parent_resume_consumed"
-        next_state["child_resume"] = dict(resume)
-        checkpoint = create_checkpoint(
-            task_id=str(self.task_id), sequence=previous["sequence"] + 1,
-            state="checkpointed", task_spec_version=previous["task_spec_version"],
-            task_state=next_state, budgets=previous.get("budgets", {}),
-            approvals=previous.get("approvals", {}),
-            artifact_refs=previous.get("artifact_refs", []),
-            previous_checkpoint_hash=previous["checkpoint_hash"],
-        )
-        return bool(self.save_checkpoint(checkpoint))
+    def checkpoint_parent_resume_consumed(self, continuation: dict) -> bool:
+        """Persist the parent-authored next step while retaining its original state and permissions."""
+        return self._checkpoint_resume_consumed("child", continuation)
 
     def list_recovered_provider_results(self) -> list[dict]:
         """Return durable result references; task handlers must consume these before issuing new calls."""
@@ -520,27 +662,10 @@ class WorkerRunner:
             if context._council_resume_required:
                 try:
                     latest = context.load_latest_checkpoint()
+                    consumed = context._resume_checkpoint_is_consumed(latest, kind="council")
                 except Exception:
-                    state = self.store.fail_task(
-                        task_id, self.worker_id,
-                        "council_resume_checkpoint_unavailable",
-                        retry_delay_seconds=90,
-                    )
-                    return {
-                        "status": state or "lease_lost",
-                        "task_id": task_id,
-                        "reason": "council_resume_checkpoint_unavailable",
-                        "recovery": recovery,
-                    }
-                latest_state = latest.get("task_state") if isinstance(latest, dict) else None
-                latest_resume = latest_state.get("council_resume") if isinstance(latest_state, dict) else None
-                if (
-                    not context._council_resume_loaded
-                    or not isinstance(latest_state, dict)
-                    or latest_state.get("stage") == "council_resume_ready"
-                    or not isinstance(latest_resume, dict)
-                    or latest_resume.get("request_id") != context._council_resume_expected_request_id
-                ):
+                    consumed = False
+                if not consumed:
                     blocked = self.store.block_task(
                         task_id, self.worker_id, "council_resume_not_checkpointed"
                     )
@@ -553,23 +678,17 @@ class WorkerRunner:
             if context._parent_resume_required:
                 try:
                     latest = context.load_latest_checkpoint()
-                    from .checkpoints import verify_checkpoint
-                    verify_checkpoint(latest)
-                    latest_state = latest.get("task_state") if isinstance(latest, dict) else None
-                    latest_resume = latest_state.get("child_resume") if isinstance(latest_state, dict) else None
+                    consumed = context._resume_checkpoint_is_consumed(latest, kind="child")
                 except Exception:
-                    latest_state, latest_resume = None, None
-                if (
-                    not context._parent_resume_loaded
-                    or not isinstance(latest_state, dict)
-                    or latest_state.get("stage") == "parent_resume_ready"
-                    or not isinstance(latest_resume, dict)
-                    or latest_resume.get("correlation_key") != context._parent_resume_expected_correlation_key
-                ):
-                    blocked = self.store.block_task(task_id, self.worker_id, "parent_resume_not_consumed")
+                    consumed = False
+                if not consumed:
+                    blocked = self.store.block_task(
+                        task_id, self.worker_id, "parent_resume_not_consumed"
+                    )
                     return {
                         "status": "blocked" if blocked else "lease_lost",
-                        "task_id": task_id, "reason": "parent_resume_not_consumed",
+                        "task_id": task_id,
+                        "reason": "parent_resume_not_consumed",
                         "recovery": recovery,
                     }
             completed = self.store.complete_task(task_id, self.worker_id)

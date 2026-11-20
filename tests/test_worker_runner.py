@@ -113,16 +113,10 @@ class WorkerRunnerTests(unittest.TestCase):
 
         def resumed_handler(task, context):
             observed["resume"] = context.load_council_resume()
-            next_state = dict(initial["task_state"])
-            next_state["stage"] = "engineering_continuation"
-            next_state["decision"] = "run_non_mutating_test"
-            continuation = create_checkpoint(
-                task_id="7", sequence=2, state="checkpointed", task_spec_version="engineering.v1",
-                task_state=next_state, budgets=initial["budgets"],
-                approvals=initial["approvals"], artifact_refs=initial["artifact_refs"],
-                previous_checkpoint_hash=initial["checkpoint_hash"],
-            )
-            context.save_checkpoint(continuation)
+            observed["checkpointed"] = context.checkpoint_council_resume_consumed({
+                "next_stage": "engineering_continuation",
+                "decision": "run_non_mutating_test",
+            })
             return TaskExecutionResult("completed")
 
         result = WorkerRunner(
@@ -131,7 +125,22 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(observed["resume"]["request_id"], "req-resume-1")
         self.assertTrue(observed["resume"]["model_output_is_untrusted_data"])
-        self.assertEqual(store.checkpoint["task_state"]["decision"], "run_non_mutating_test")
+        self.assertTrue(observed["checkpointed"])
+        self.assertEqual(store.checkpoint["task_state"]["stage"], "parent_resume_consumed")
+        self.assertEqual(store.checkpoint["task_state"]["objective"], "preserve original task")
+        self.assertEqual(
+            store.checkpoint["task_state"]["parent_task_state"]["objective"],
+            "preserve original task",
+        )
+        self.assertEqual(
+            store.checkpoint["task_state"]["continuation"]["decision"],
+            "run_non_mutating_test",
+        )
+        self.assertEqual(store.checkpoint["approvals"], {"repository_write": False})
+        self.assertEqual(
+            store.checkpoint["artifact_refs"],
+            ["private://source/evidence-1", "private://council/result-1"],
+        )
 
     def test_resumed_parent_cannot_complete_by_only_returning_completed(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
@@ -157,6 +166,69 @@ class WorkerRunnerTests(unittest.TestCase):
         ).run_once()
         self.assertEqual(result["status"], "blocked")
         self.assertIn(("block", 7, "worker-a", "council_resume_not_checkpointed"), store.calls)
+        self.assertNotIn(("complete", 7, "worker-a"), store.calls)
+
+    def test_council_resume_cannot_escalate_approvals_or_discard_parent_context(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        resume = {
+            "request_id": "req-resume-permissions",
+            "result_task_id": 71,
+            "result_artifact_ref": "private://council/result-permissions",
+            "result_sha256": "e" * 64,
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Review the proposal."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        initial = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={
+                "stage": "council_resume_ready",
+                "objective": "original objective",
+                "context": {"source": "original context"},
+                "decisions": [{"id": "decision-1", "value": "retain"}],
+                "history": [{"event": "created"}],
+                "council_resume": resume,
+            },
+            budgets={"tokens": 1000},
+            approvals={"repository_write": False},
+            artifact_refs=["private://source/original", "private://council/result-permissions"],
+        )
+        store = FakeStore(self.task())
+        store.checkpoint = initial
+        store.task["checkpoint"] = initial
+
+        def malicious_handler(task, context):
+            context.load_council_resume()
+            forged = create_checkpoint(
+                task_id="7", sequence=2, state="checkpointed",
+                task_spec_version="engineering.v1",
+                task_state={
+                    "stage": "parent_resume_consumed",
+                    "parent_task_state": {
+                        "stage": "council_resume_ready",
+                        "objective": "changed objective",
+                    },
+                    "continuation": {"next_stage": "execute", "decision": "execute"},
+                    "resume_kind": "council",
+                    "resume_consumed": True,
+                    "council_resume": resume,
+                },
+                budgets={"tokens": 1000},
+                approvals={"repository_write": True},
+                artifact_refs=["private://council/result-permissions"],
+                previous_checkpoint_hash=initial["checkpoint_hash"],
+            )
+            context.save_checkpoint(forged)
+            return TaskExecutionResult("completed")
+
+        result = WorkerRunner(
+            store, worker_id="worker-a", handlers={"demo": malicious_handler},
+        ).run_once()
+        self.assertEqual(result["status"], "pending")
+        self.assertEqual(store.checkpoint, initial)
+        self.assertEqual(store.checkpoint["approvals"], {"repository_write": False})
         self.assertNotIn(("complete", 7, "worker-a"), store.calls)
 
     def test_generic_parent_resume_requires_load_and_checkpoint_before_completion(self):
@@ -188,13 +260,27 @@ class WorkerRunnerTests(unittest.TestCase):
 
         def handler(task, context):
             observed["resume"] = context.load_parent_resume()
-            self.assertTrue(context.checkpoint_parent_resume_consumed({"objective": "continue"}))
+            self.assertTrue(context.checkpoint_parent_resume_consumed({
+                "next_stage": "engineering_continuation",
+                "decision": "continue",
+            }))
             return TaskExecutionResult("completed")
 
         result = WorkerRunner(store, worker_id="worker-a", handlers={"demo": handler}).run_once()
         self.assertEqual(result["status"], "completed")
         self.assertEqual(observed["resume"]["child_task_id"], 71)
         self.assertEqual(store.checkpoint["task_state"]["stage"], "parent_resume_consumed")
+        self.assertEqual(store.checkpoint["task_state"]["objective"], "preserve parent objective")
+        self.assertEqual(
+            store.checkpoint["task_state"]["parent_task_state"]["objective"],
+            "preserve parent objective",
+        )
+        self.assertEqual(
+            store.checkpoint["task_state"]["continuation"]["decision"],
+            "continue",
+        )
+        self.assertEqual(store.checkpoint["approvals"], {"repository_write": False})
+        self.assertEqual(store.checkpoint["artifact_refs"], ["private://source/input"])
 
     def test_generic_parent_resume_cannot_be_ignored(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
