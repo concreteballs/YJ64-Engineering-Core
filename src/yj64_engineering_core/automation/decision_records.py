@@ -6,6 +6,7 @@ instructions, executes actions, or grants permissions.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 from typing import Any, Mapping, Sequence
@@ -245,7 +246,7 @@ def _verify(record: Mapping[str, Any], expected_type: str | None) -> dict[str, A
         raise ValueError("record_hash must be a lowercase SHA-256 hash")
     canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     expected_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    if not hashlib.compare_digest(supplied_hash, expected_hash):
+    if not hmac.compare_digest(supplied_hash, expected_hash):
         raise ValueError("decision record integrity check failed")
     data["record_hash"] = supplied_hash
     return data
