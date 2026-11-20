@@ -204,6 +204,20 @@ or database was modified.
 
 `yj64_engineering_core.automation.parent_resume.fetch_child_result_artifact(resume, artifact_store)` provides a shared integrity boundary for parent handlers. It accepts only a completed child result, fetches through the supplied artifact store, checks SHA-256 against the immutable resume envelope, and parses only a non-empty UTF-8 JSON object. It does not interpret domain fields or grant trust. Parent handlers must still validate the artifact schema, candidate identity, and assessment decision before acting. Negative tests cover digest mismatch, malformed JSON, and non-completed child results.
 
+
+The Core now also exposes
+`consume_cross_module_assessment_resume(context, artifact_store, next_stage=...)`
+as a parent-side domain validation helper. It requires the completed child
+artifact to match the exact candidate digest and correlation key recorded in
+the parent's waiting checkpoint, validates both assessment envelope schema
+IDs/versions and the embedded candidate digest, then checkpoints a
+parent-authored continuation containing the decision and candidate digest.
+It does not treat an `accepted` assessment as authorization to execute or
+deploy the candidate; the parent retains its own decision and approval gates.
+Focused tests cover successful consumption and candidate-digest mismatch.
+This helper is injectable and is not automatically attached to an arbitrary
+parent task handler.
+
 ## 8. Explicit non-goals
 
 This integration does not implement wet-lab execution, synthesis, transformation, culturing, release or deployment. It does not grant new autonomy, modify the application's supervisory module, change live queues/databases or create a second worker lifecycle.
