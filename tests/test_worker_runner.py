@@ -242,7 +242,14 @@ class WorkerRunnerTests(unittest.TestCase):
                 "stage": "waiting_child",
                 "expected_child_correlation_key": "parent:7:revision:2",
                 "expected_child_protocol_version": PARENT_RESUME_PROTOCOL,
-            }, budgets={"tokens": 1000}, approvals={"repository_write": False},
+                "objective": "preserve parent objective",
+                "context": {"origin": "parent"},
+                "decisions": [{"id": "decision-1", "value": "retain"}],
+                "history": [{"event": "parent-created"}],
+            },
+            budgets={"tokens": 1000},
+            approvals={"repository_write": False},
+            artifact_refs=["private://source/input"],
         )
         child_result = {
             "protocol_version": PARENT_RESUME_PROTOCOL,
@@ -271,6 +278,9 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual(observed["resume"]["child_task_id"], 71)
         self.assertEqual(store.checkpoint["task_state"]["stage"], "parent_resume_consumed")
         self.assertEqual(store.checkpoint["task_state"]["objective"], "preserve parent objective")
+        self.assertEqual(store.checkpoint["task_state"]["context"], {"origin": "parent"})
+        self.assertEqual(store.checkpoint["task_state"]["decisions"], [{"id": "decision-1", "value": "retain"}])
+        self.assertEqual(store.checkpoint["task_state"]["history"], [{"event": "parent-created"}])
         self.assertEqual(
             store.checkpoint["task_state"]["parent_task_state"]["objective"],
             "preserve parent objective",
