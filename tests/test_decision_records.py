@@ -113,7 +113,7 @@ class DecisionRecordTests(unittest.TestCase):
             ensure_ascii=False, allow_nan=False,
         )
         forged["record_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-        with self.assertRaisesRegex(ValueError, "invalid values"):
+        with self.assertRaisesRegex(ValueError, "unsupported claim status"):
             verify_record(forged)
 
     def test_rehashed_record_with_extra_field_is_rejected(self):
