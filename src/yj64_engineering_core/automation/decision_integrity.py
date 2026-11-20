@@ -49,11 +49,11 @@ def evaluate_decision_integrity(
         refutes = grouped["refutes"]
         qualifies = grouped["qualifies"]
         contextualizes = grouped["contextualizes"]
-        independently_verified_support = sorted(
+        declared_independent_support = sorted(
             evidence_id for evidence_id in support
             if evidence_by_id[evidence_id]["independently_verified"]
         )
-        independently_verified_refutations = sorted(
+        declared_independent_refutations = sorted(
             evidence_id for evidence_id in refutes
             if evidence_by_id[evidence_id]["independently_verified"]
         )
@@ -72,8 +72,9 @@ def evaluate_decision_integrity(
             ))
         elif support and qualifies:
             assessment = "qualified_support"
-        elif support and independently_verified_support:
-            assessment = "supported_by_independent_evidence"
+        elif support and declared_independent_support:
+            # Producer-supplied metadata is not an authenticated attestation.
+            assessment = "support_with_independence_claim"
         elif support:
             assessment = "support_not_independently_verified"
             findings.append(_finding(
@@ -109,8 +110,8 @@ def evaluate_decision_integrity(
             "declared_status": claim["status"],
             "assessment": assessment,
             "relationships": grouped,
-            "independently_verified_support_ids": independently_verified_support,
-            "independently_verified_refutation_ids": independently_verified_refutations,
+            "declared_independent_verification_support_ids": declared_independent_support,
+            "declared_independent_verification_refutation_ids": declared_independent_refutations,
             "provenance_gaps": provenance_gaps,
             "claim_limitations": list(claim["limitations"]),
             "linked_evidence_limitations": sorted({
@@ -130,8 +131,8 @@ def evaluate_decision_integrity(
         overall = "insufficient_evidence"
     elif any(status in {"qualified_support", "qualification_only"} for status in statuses):
         overall = "qualified"
-    elif all(status == "supported_by_independent_evidence" for status in statuses):
-        overall = "supported"
+    elif any(status == "support_with_independence_claim" for status in statuses):
+        overall = "insufficient_evidence"
     else:
         overall = "unresolved"
 
@@ -148,6 +149,8 @@ def evaluate_decision_integrity(
         "integrity": "records_hash_verified",
         "claim_statuses_mutated": False,
         "evidence_kind_used_as_truth_rank": False,
+        "independent_verification_authenticated": False,
+        "verification_boundary": "producer_supplied_flags_are_claims_not_authenticated_attestations",
         "authority": "advisory_only",
     }
 
