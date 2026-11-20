@@ -6,6 +6,7 @@ from yj64_engineering_core.cross_module import ConditionDisposition, ConditionSt
 from yj64_engineering_core.automation.cross_module_tasks import (
     PROTOCOL_VERSION, TASK_TYPE, create_cross_module_task_handler,
     enqueue_cross_module_assessment_from_parent,
+    consume_cross_module_assessment_resume,
 )
 from yj64_engineering_core.automation.worker import TaskExecutionResult
 from yj64_engineering_core.extensions import (
@@ -328,6 +329,70 @@ class CrossModuleTaskHandlerTests(unittest.TestCase):
         self.assertEqual(
             self.context.checkpoint["task_state"]["assessment"]["decision"], "accepted"
         )
+
+
+class ParentAssessmentConsumptionTests(unittest.TestCase):
+    def setUp(self):
+        self.candidate = dict(CANDIDATE)
+        self.digest = hashlib.sha256(
+            __import__("json").dumps(
+                self.candidate, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assessment = {
+            "schema_id": "yj64.cross_module.assessment.v1",
+            "schema_version": "1.0",
+            "candidate": self.candidate,
+            "decision": "pending",
+        }
+        self.loaded = {
+            "resume": {
+                "correlation_key": "cross-module:77:candidate-42:3",
+                "parent_task_state": {
+                    "child_candidate_digest": self.digest,
+                    "expected_child_correlation_key": "cross-module:77:candidate-42:3",
+                },
+            },
+            "artifact": {
+                "schema_id": "yj64.cross_module.assessment-artifact.v1",
+                "schema_version": "1.0",
+                "candidate_digest": self.digest,
+                "assessment": self.assessment,
+            },
+        }
+
+    def test_validates_and_checkpoints_parent_consumption(self):
+        class Context:
+            def __init__(self, loaded):
+                self.loaded = loaded
+                self.continuation = None
+            def load_parent_resume_artifact(self, store):
+                return self.loaded
+            def checkpoint_parent_resume_consumed(self, continuation):
+                self.continuation = continuation
+                return True
+
+        context = Context(self.loaded)
+        result = consume_cross_module_assessment_resume(
+            context, object(), next_stage="parent_decision",
+        )
+        self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(context.continuation["assessment_decision"], "pending")
+        self.assertEqual(context.continuation["candidate_digest"], self.digest)
+
+    def test_rejects_candidate_digest_mismatch(self):
+        class Context:
+            def load_parent_resume_artifact(self, store):
+                return self.loaded
+            def checkpoint_parent_resume_consumed(self, continuation):
+                raise AssertionError("must not consume mismatched result")
+        context = Context()
+        context.loaded = self.loaded
+        context.loaded["artifact"]["candidate_digest"] = "0" * 64
+        result = consume_cross_module_assessment_resume(context, object())
+        self.assertEqual(result.outcome, "blocked")
+        self.assertEqual(result.reason, "cross_module_parent_assessment_identity_mismatch")
 
 
 if __name__ == "__main__":
