@@ -177,6 +177,8 @@ def validate_decision_bundle(
     if missing_claims or missing_evidence:
         raise ValueError("decision references missing claim or evidence records")
 
+    decision_claim_ids = set(decision_data["claim_ids"])
+    decision_evidence_ids = set(decision_data["evidence_ids"])
     normalized_relationships = []
     seen = set()
     for item in relationships:
@@ -186,6 +188,8 @@ def validate_decision_bundle(
         relationship = rel.get("relationship")
         if claim_id not in claim_map or evidence_id not in evidence_map:
             raise ValueError("relationship references an unknown claim or evidence record")
+        if claim_id not in decision_claim_ids or evidence_id not in decision_evidence_ids:
+            raise ValueError("relationship references a record outside the decision scope")
         if relationship not in RELATIONSHIPS:
             raise ValueError("unsupported evidence relationship")
         key = (claim_id, evidence_id, relationship)
