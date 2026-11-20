@@ -290,7 +290,10 @@ class WorkerRunnerTests(unittest.TestCase):
             "continue",
         )
         self.assertEqual(store.checkpoint["approvals"], {"repository_write": False})
-        self.assertEqual(store.checkpoint["artifact_refs"], ["private://source/input"])
+        self.assertEqual(
+            store.checkpoint["artifact_refs"],
+            ["private://source/input", "private://assessment/2"],
+        )
 
     def test_generic_parent_resume_cannot_be_ignored(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
