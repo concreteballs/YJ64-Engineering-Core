@@ -45,7 +45,7 @@ class DecisionIntegrityTests(unittest.TestCase):
             dissent=["Boundary conditions need review."],
         )
 
-    def test_independent_support_is_assessed_without_promoting_claim_status(self):
+    def test_independence_flag_is_not_an_authenticated_attestation(self):
         claim = self.make_claim()
         result = evaluate_decision_integrity(
             claims=[claim],
@@ -57,9 +57,14 @@ class DecisionIntegrityTests(unittest.TestCase):
                 "relationship": "supports",
             }],
         )
-        self.assertEqual(result["assessment"], "supported")
+        self.assertEqual(result["assessment"], "insufficient_evidence")
+        self.assertEqual(
+            result["claims"][0]["assessment"],
+            "support_with_independence_claim",
+        )
         self.assertEqual(result["claims"][0]["declared_status"], "unverified")
         self.assertFalse(result["claim_statuses_mutated"])
+        self.assertFalse(result["independent_verification_authenticated"])
         self.assertEqual(result["authority"], "advisory_only")
         self.assertEqual(result["dissent"], ["Boundary conditions need review."])
 
@@ -119,8 +124,13 @@ class DecisionIntegrityTests(unittest.TestCase):
                 "relationship": "supports",
             }],
         )
-        self.assertEqual(result["assessment"], "supported")
+        self.assertEqual(result["assessment"], "insufficient_evidence")
+        self.assertEqual(
+            result["claims"][0]["assessment"],
+            "support_with_independence_claim",
+        )
         self.assertFalse(result["evidence_kind_used_as_truth_rank"])
+        self.assertFalse(result["independent_verification_authenticated"])
 
     def test_qualifying_evidence_yields_qualified_assessment(self):
         result = evaluate_decision_integrity(
