@@ -249,4 +249,49 @@ def _verify(record: Mapping[str, Any], expected_type: str | None) -> dict[str, A
     if not hmac.compare_digest(supplied_hash, expected_hash):
         raise ValueError("decision record integrity check failed")
     data["record_hash"] = supplied_hash
+    _validate_record_payload(data)
     return data
+
+
+def _validate_record_payload(data: Mapping[str, Any]) -> None:
+    """Re-validate semantics even when an untrusted producer recomputes the hash."""
+    record_type = data.get("record_type")
+    try:
+        if record_type == "claim":
+            expected = create_claim_record(
+                claim_id=data["claim_id"], statement=data["statement"],
+                kind=data["kind"], source_id=data["source_id"],
+                status=data["status"], scope=data["scope"],
+                limitations=data["limitations"],
+            )
+        elif record_type == "evidence":
+            expected = create_evidence_record(
+                evidence_id=data["evidence_id"], kind=data["kind"],
+                description=data["description"], source_id=data["source_id"],
+                source_version=data["source_version"],
+                content_hash=data["content_hash"], location=data["location"],
+                method=data["method"], assumptions=data["assumptions"],
+                limitations=data["limitations"],
+                independently_verified=data["independently_verified"],
+            )
+        elif record_type == "decision":
+            if data.get("authority") != "advisory_only":
+                raise ValueError("decision authority must remain advisory_only")
+            expected = create_decision_record(
+                decision_id=data["decision_id"], outcome=data["outcome"],
+                summary=data["summary"], claim_ids=data["claim_ids"],
+                evidence_ids=data["evidence_ids"],
+                unresolved_questions=data["unresolved_questions"],
+                dissent=data["dissent"], assumptions=data["assumptions"],
+                limitations=data["limitations"],
+                requires_human_approval=data["requires_human_approval"],
+            )
+        else:
+            raise ValueError("unsupported decision record type")
+    except (KeyError, TypeError) as exc:
+        raise ValueError("decision record has an invalid or incomplete structure") from exc
+    expected.pop("record_hash", None)
+    actual = dict(data)
+    actual.pop("record_hash", None)
+    if actual != expected:
+        raise ValueError("decision record contains unsupported fields or invalid values")
