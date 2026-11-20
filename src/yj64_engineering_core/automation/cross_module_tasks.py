@@ -217,6 +217,64 @@ def enqueue_cross_module_assessment_from_parent(
         return TaskExecutionResult("retry", "cross_module_parent_orchestration_failed", 90)
 
 
+
+def consume_cross_module_assessment_resume(
+    context: Any,
+    artifact_store: Any,
+    *,
+    next_stage: str = "evaluate_cross_module_assessment",
+) -> TaskExecutionResult:
+    """Validate and checkpoint a child assessment as untrusted parent input.
+
+    This consumes only a completed assessment for the exact candidate revision
+    and correlation key recorded in the parent's waiting checkpoint. It never
+    changes approvals, budgets, or the parent's authority.
+    """
+    try:
+        loaded = context.load_parent_resume_artifact(artifact_store)
+        if not isinstance(loaded, dict):
+            return TaskExecutionResult("blocked", "cross_module_parent_resume_missing")
+        resume, artifact = loaded.get("resume"), loaded.get("artifact")
+        if not isinstance(resume, dict) or not isinstance(artifact, dict):
+            return TaskExecutionResult("blocked", "cross_module_parent_resume_invalid")
+        parent_state = resume.get("parent_task_state")
+        if not isinstance(parent_state, dict):
+            return TaskExecutionResult("blocked", "cross_module_parent_state_invalid")
+        expected_digest = parent_state.get("child_candidate_digest")
+        expected_key = parent_state.get("expected_child_correlation_key")
+        if (
+            not isinstance(expected_digest, str) or len(expected_digest) != 64
+            or artifact.get("schema_id") != "yj64.cross_module.assessment-artifact.v1"
+            or artifact.get("schema_version") != "1.0"
+            or artifact.get("candidate_digest") != expected_digest
+            or resume.get("correlation_key") != expected_key
+        ):
+            return TaskExecutionResult("blocked", "cross_module_parent_assessment_identity_mismatch")
+        assessment = artifact.get("assessment")
+        if (
+            not isinstance(assessment, dict)
+            or assessment.get("schema_id") != "yj64.cross_module.assessment.v1"
+            or assessment.get("schema_version") != "1.0"
+            or assessment.get("decision") not in {"accepted", "pending", "rejected"}
+            or not isinstance(assessment.get("candidate"), dict)
+            or _digest(assessment["candidate"]) != expected_digest
+        ):
+            return TaskExecutionResult("blocked", "cross_module_parent_assessment_invalid")
+        if not isinstance(next_stage, str) or not next_stage.strip() or len(next_stage) > 128:
+            return TaskExecutionResult("blocked", "cross_module_parent_continuation_invalid")
+        consumed = context.checkpoint_parent_resume_consumed({
+            "next_stage": next_stage,
+            "assessment_decision": assessment["decision"],
+            "candidate_digest": expected_digest,
+        })
+        if not consumed:
+            return TaskExecutionResult("retry", "cross_module_parent_consumption_checkpoint_failed", 90)
+        return TaskExecutionResult("completed")
+    except (TypeError, ValueError):
+        return TaskExecutionResult("blocked", "cross_module_parent_resume_invalid")
+    except Exception:
+        return TaskExecutionResult("retry", "cross_module_parent_resume_failed", 90)
+
 def create_cross_module_task_handler(
     *,
     registry: ExtensionRegistry,
