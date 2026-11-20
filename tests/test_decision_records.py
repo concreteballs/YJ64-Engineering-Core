@@ -98,6 +98,45 @@ class DecisionRecordTests(unittest.TestCase):
                 }],
             )
 
+    def test_relationship_cannot_use_claim_outside_decision_scope(self):
+        extra_claim = create_claim_record(
+            claim_id="claim-extra",
+            statement="An unrelated claim.",
+            kind="hypothesis",
+            source_id="source-extra",
+        )
+        with self.assertRaisesRegex(ValueError, "outside the decision scope"):
+            validate_decision_bundle(
+                claims=[self.claim, extra_claim],
+                evidence=[self.evidence],
+                decision=self.decision,
+                relationships=[{
+                    "claim_id": "claim-extra",
+                    "evidence_id": "evidence-1",
+                    "relationship": "supports",
+                }],
+            )
+
+    def test_relationship_cannot_use_evidence_outside_decision_scope(self):
+        extra_evidence = create_evidence_record(
+            evidence_id="evidence-extra",
+            kind="document",
+            description="Unrelated evidence.",
+            source_id="source-extra",
+            source_version="v1",
+        )
+        with self.assertRaisesRegex(ValueError, "outside the decision scope"):
+            validate_decision_bundle(
+                claims=[self.claim],
+                evidence=[self.evidence, extra_evidence],
+                decision=self.decision,
+                relationships=[{
+                    "claim_id": "claim-1",
+                    "evidence_id": "evidence-extra",
+                    "relationship": "supports",
+                }],
+            )
+
     def test_consensus_does_not_upgrade_claim_status(self):
         bundle = validate_decision_bundle(
             claims=[self.claim], evidence=[self.evidence], decision=self.decision
