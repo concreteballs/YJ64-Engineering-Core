@@ -96,7 +96,7 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 Новые типы задач:
 - submit_council_request;
 - poll_council_request;
-- council_result_ready — handoff для будущего обработчика инженерного агента; Council Gateway worker эту задачу не забирает.
+- council_result_ready — результатный handoff, который обрабатывает зарегистрированный handler handle_council_result_ready в Council Gateway worker.
 
 Жизненный цикл:
 1. GitHub-агент отправляет council_request в существующем формате yj64.browser-agent-envelope.v1. Функция enqueue_council_request_from_envelope(...) проверяет область репозитория/ветки, срок действия, тип сообщения, idempotency key и хеш payload. Хеш подтверждает целостность, но не подлинность отправителя: принимающая граница всё равно должна аутентифицировать агента и проверить его полномочия.
@@ -104,8 +104,13 @@ consensus, qualified_consensus, unresolved_disagreement, insufficient_evidence.
 3. Submit worker отправляет один аутентифицированный запрос и получает request_id и session_id.
 4. Идентификаторы сохраняются в checkpoint, создаётся poll task, текущий worker освобождается.
 5. Каждый poll worker делает один запрос статуса. Если сессия ещё выполняется, он создаёт следующее поколение poll task и завершает текущую задачу.
-6. После завершения результат проверяется и сохраняется как immutable artifact в существующем private Supabase Storage.
-7. Создаётся council_result_ready со ссылкой на artifact и envelope council_result, привязанный к исходной задаче. Агент-потребитель вызывает load_council_result_artifact(...): функция проверяет envelope и совпадение request/session ID, затем читает private artifact. После этого агент самостоятельно проверяет утверждения по коду, тестам и CI и только затем продолжает исходную задачу.
+6. После завершения результат проверяется и сохраняется как immutable artifact в существующем private Supabase Storage. Задача council_result_ready содержит ссылку на artifact и envelope council_result, связанный с исходной задачей.
+7. Result-ready handler проверяет envelope, artifact, request/session IDs, parent identity и структуру результата. Проверенные summary, claims, evidence, dissent, unresolved_questions, assumptions и limitations сохраняются в checkpoint как недоверенные аналитические данные.
+8. Если передан числовой parent_task_id без внешнего parent_task_ref, та же транзакция PostgreSQL проверяет, что родительская запись находится в состоянии waiting, а последний checkpoint ожидает именно этот Council request. Затем создаётся идемпотентное resume-событие, добавляется hash-linked checkpoint родителя со ссылкой и digest результата, и та же родительская задача возвращается в pending. Повторная доставка не создаёт второе событие и не запускает повторную постановку задачи.
+9. Существующий handler родительской задачи, а не новый цикл, должен вызвать TaskContext.load_council_resume(), сформировать собственное решение и записать продолжение через TaskContext.checkpoint_council_resume_consumed(...). Helper сохраняет снимок исходного состояния родителя, budgets, approvals и исходные artifact refs; checkpoint нельзя использовать для повышения разрешений/бюджетов или удаления/перестановки исходных артефактов. Worker блокирует завершение, если результат не был загружен и потреблён.
+10. Если передан только внешний parent_task_ref, Engineering Core проверяет и сохраняет ссылку, но не пытается угадать числовой ID очереди и не переотправляет постороннюю задачу. Для такого родителя необходим cycle-side consumer с отдельным согласованным контрактом чтения/диспетчеризации.
+
+Результат консилиума остаётся недоверенными данными. Он не передаётся напрямую исполнителю команд и не может выдавать разрешения или approvals.
 
 ## Настройка GitHub Actions secrets
 
@@ -131,6 +136,6 @@ Polling выполняется каждые пять минут, максиму�
 4. обеспечить idempotency, восстановление после рестарта, отмену, лимиты и аудит;
 5. пройти сквозные тесты на настоящем приложении, а не только на mock API.
 
-В текущем Engineering Core найдены CI workers, но не обнаружен общий runner автономного агента, который забирает council_result_ready и возобновляет исходную инженерную задачу. Handoff и функция загрузки/проверки результата готовы; runner агента должен забрать этот тип задачи, вызвать load_council_result_artifact(...) и продолжить parent workflow. Пока этот consumer не подключён, результат надёжно сохраняется в очереди, но автоматического возобновления исходной задачи ещё нет.
+Motocicl остаётся владельцем автономного инженерного цикла и его dispatcher. Engineering Core предоставляет долговечный Gateway adapter и контракт возобновления числовой parent-задачи в той же PostgreSQL очереди, но не регистрирует и не запускает parent handler Motocicl. Cycle-side worker должен потреблять внешний parent_task_ref через отдельно согласованный контракт чтения и диспетчеризации. Эта часть не реализована и не проверена изменениями в данном репозитории; поэтому автоматическое продолжение всего цикла и live E2E пока не подтверждены.
 
 До готовности API и этого consumer в Engineering Core есть клиент и асинхронная оркестрация, но реальное сквозное подключение к консилиуму не считается завершённым.

@@ -83,7 +83,7 @@ Files:
 The existing PostgreSQL task queue is reused. New allowlisted task types:
 - `submit_council_request`
 - `poll_council_request`
-- `council_result_ready` (handoff for the engineering-agent consumer; intentionally not consumed by the Gateway worker).
+- `council_result_ready` (consumed by the registered `handle_council_result_ready` handler in the Council Gateway worker).
 
 Lifecycle:
 1. The GitHub agent sends a `council_request` message using the existing `yj64.browser-agent-envelope.v1`. `enqueue_council_request_from_envelope(...)` validates repository/branch scope, expiry, message type, idempotency key, and payload hash before placing the request in the queue. The envelope hash protects integrity but does not authenticate the sender; the receiving boundary must authenticate and authorize the agent.
@@ -91,12 +91,17 @@ Lifecycle:
 3. The submit task sends one authenticated request. The same key is reused on a retry after an ambiguous transport failure.
 4. The Gateway checkpoints the returned request/session IDs, enqueues a poll task, and completes the submit task. It does not hold a worker while the discussion runs.
 5. Each poll task performs one status request. If still running, it enqueues the next generation and completes itself.
-6. On completion, the structured result is validated, stored in the existing private content-addressed Supabase artifact store, and referenced by a `council_result_ready` queue item. The handoff also contains a `council_result` browser-agent envelope bound to the original task reference.
-7. The engineering-agent workflow consumes that handoff through `load_council_result_artifact(...)`, which validates the result envelope and request/session identity before loading the private artifact. The agent independently verifies claims against repository state, tests, and CI, and resumes its parent engineering task.
+6. On completion, the structured result is validated and stored in the existing private content-addressed Supabase artifact store. A `council_result_ready` task carries the artifact reference and a `council_result` browser-agent envelope bound to the original parent identity.
+7. The result-ready handler validates the envelope, artifact, request/session IDs, parent identity, and result structure. It checkpoints the validated summary, claims, evidence, dissent, unresolved questions, assumptions, and limitations as untrusted analytical data.
+8. If the handoff has a numeric `parent_task_id` and no external `parent_task_ref`, the same PostgreSQL transaction verifies that the parent row is `waiting` and that its latest checkpoint expects this exact Council request. It inserts an idempotent resume event, appends a hash-linked parent checkpoint with the result reference/digest, and requeues the same parent task. Duplicate delivery does not append another event or requeue it again.
+9. The existing parent task handler—not a new cycle—must then load `TaskContext.load_council_resume()` and checkpoint a parent-authored continuation with `TaskContext.checkpoint_council_resume_consumed(...)`. That helper preserves the parent-state snapshot, budgets, approvals, and original artifact references; checkpoint writes cannot escalate approvals/budgets or discard/reorder those artifacts. The worker blocks completion if the result was not loaded and consumed.
+10. If only an external `parent_task_ref` is supplied, Engineering Core validates and retains it but deliberately does not guess a numeric queue ID or requeue an unrelated task. That reference requires the cycle-side consumer described below.
 
-The current Engineering Core repository contains CI-event workers, but the audit did not find a general autonomous-agent continuation runner that claims `council_result_ready`. The durable handoff and result loader are implemented; the agent runner must claim this task type, call `load_council_result_artifact(...)`, and resume the parent workflow. Until that consumer is wired in, the handoff is persisted but the original engineering task is not automatically resumed.
+Council output remains untrusted data. It is not passed to a command runner and cannot grant permissions or approvals.
 
-The Gateway never treats the council's conclusion as proof that a patch is correct. The consumer must validate the result and preserve the distinction between consensus, qualified consensus, unresolved disagreement, and insufficient evidence.
+The Gateway never treats the council's conclusion as proof that a patch is correct. The parent workflow must independently validate claims against repository state, evidence, tests, and CI, and preserve the distinction between consensus, qualified consensus, unresolved disagreement, and insufficient evidence.
+
+Motocicl remains the owner of the autonomous engineering cycle and its dispatcher. Engineering Core provides the durable Gateway adapter and the same-queue numeric-parent resume contract, but it does not register or start Motocicl's parent handler. The cycle-side worker must consume the external parent reference through an explicitly agreed read/dispatch contract. That integration is not implemented or verified by changes in this repository, so no full-cycle resume or live E2E is claimed.
 
 ## Runtime configuration
 
