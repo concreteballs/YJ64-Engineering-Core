@@ -352,13 +352,22 @@ class TaskContext:
         if not isinstance(resume, dict):
             raise ValueError("council resume payload is missing")
         if (
-            not isinstance(resume.get("result_task_id"), int)
+            not isinstance(resume.get("resume_event_id"), int)
+            or isinstance(resume.get("resume_event_id"), bool)
+            or resume["resume_event_id"] < 1
+            or not isinstance(resume.get("result_task_id"), int)
             or isinstance(resume.get("result_task_id"), bool)
             or resume["result_task_id"] < 1
+            or resume["result_task_id"] == self.task_id
+            or not isinstance(resume.get("request_id"), str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", resume["request_id"])
             or not isinstance(resume.get("session_id"), str)
             or not resume["session_id"]
             or not isinstance(resume.get("result_artifact_ref"), str)
             or not resume["result_artifact_ref"]
+            or len(resume["result_artifact_ref"]) > 1024
+            or "?" in resume["result_artifact_ref"]
+            or "#" in resume["result_artifact_ref"]
             or not isinstance(resume.get("result_sha256"), str)
             or not re.fullmatch(r"[0-9a-f]{64}", resume["result_sha256"])
             or resume.get("model_output_is_untrusted_data") is not True
