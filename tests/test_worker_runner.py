@@ -142,6 +142,40 @@ class WorkerRunnerTests(unittest.TestCase):
             ["private://source/evidence-1", "private://council/result-1"],
         )
 
+    def test_resumed_parent_cannot_suspend_without_checkpointing_continuation(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        resume = {
+            "request_id": "req-resume-suspend",
+            "result_task_id": 72,
+            "result_artifact_ref": "private://council/result-suspend",
+            "result_sha256": "f" * 64,
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Review the design."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        checkpoint = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
+            task_state={"stage": "council_resume_ready", "council_resume": resume},
+            budgets={}, approvals={}, artifact_refs=["private://council/result-suspend"],
+        )
+        store = FakeStore(self.task())
+        store.checkpoint = checkpoint
+        store.task["checkpoint"] = checkpoint
+        result = WorkerRunner(
+            store,
+            worker_id="worker-a",
+            handlers={"demo": lambda task, context: TaskExecutionResult("suspended")},
+        ).run_once()
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["reason"], "council_resume_not_checkpointed")
+        self.assertIn(
+            ("block", 7, "worker-a", "council_resume_not_checkpointed"),
+            store.calls,
+        )
+        self.assertNotIn(("complete", 7, "worker-a"), store.calls)
+
     def test_resumed_parent_cannot_complete_by_only_returning_completed(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
 

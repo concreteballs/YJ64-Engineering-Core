@@ -553,6 +553,32 @@ class WorkerRunner:
         outcome = context.record_parent_resume_event(parent_id, child_result)
         return isinstance(outcome, dict) and outcome.get("accepted") is True
 
+    def _resume_transition_gate(
+        self, task_id: int, context: TaskContext, recovery: dict,
+    ) -> dict | None:
+        """Require resumed parent state to be checkpointed before completion or suspension."""
+        contracts = (
+            ("_council_resume_required", "council", "council_resume_not_checkpointed"),
+            ("_parent_resume_required", "child", "parent_resume_not_consumed"),
+        )
+        for required_attr, kind, reason in contracts:
+            if not getattr(context, required_attr, False):
+                continue
+            try:
+                latest = context.load_latest_checkpoint()
+                consumed = context._resume_checkpoint_is_consumed(latest, kind=kind)
+            except Exception:
+                consumed = False
+            if not consumed:
+                blocked = self.store.block_task(task_id, self.worker_id, reason)
+                return {
+                    "status": "blocked" if blocked else "lease_lost",
+                    "task_id": task_id,
+                    "reason": reason,
+                    "recovery": recovery,
+                }
+        return None
+
     def run_once(self) -> dict:
         """Run recovery and process no more than one task; never loops in background."""
         recovery = self.store.run_recovery_maintenance(limit=self.recovery_limit)
@@ -654,43 +680,15 @@ class WorkerRunner:
                 "recovery": recovery,
             }
 
-        if decision.outcome == "suspended":
-            waiting_status = "waiting_child" if context._suspended_for_child else "waiting_council"
-            return {"status": waiting_status, "task_id": task_id, "recovery": recovery}
+        if decision.outcome in {"suspended", "completed"}:
+            gate_failure = self._resume_transition_gate(task_id, context, recovery)
+            if gate_failure is not None:
+                return gate_failure
 
-        if decision.outcome == "completed":
-            if context._council_resume_required:
-                try:
-                    latest = context.load_latest_checkpoint()
-                    consumed = context._resume_checkpoint_is_consumed(latest, kind="council")
-                except Exception:
-                    consumed = False
-                if not consumed:
-                    blocked = self.store.block_task(
-                        task_id, self.worker_id, "council_resume_not_checkpointed"
-                    )
-                    return {
-                        "status": "blocked" if blocked else "lease_lost",
-                        "task_id": task_id,
-                        "reason": "council_resume_not_checkpointed",
-                        "recovery": recovery,
-                    }
-            if context._parent_resume_required:
-                try:
-                    latest = context.load_latest_checkpoint()
-                    consumed = context._resume_checkpoint_is_consumed(latest, kind="child")
-                except Exception:
-                    consumed = False
-                if not consumed:
-                    blocked = self.store.block_task(
-                        task_id, self.worker_id, "parent_resume_not_consumed"
-                    )
-                    return {
-                        "status": "blocked" if blocked else "lease_lost",
-                        "task_id": task_id,
-                        "reason": "parent_resume_not_consumed",
-                        "recovery": recovery,
-                    }
+            if decision.outcome == "suspended":
+                waiting_status = "waiting_child" if context._suspended_for_child else "waiting_council"
+                return {"status": waiting_status, "task_id": task_id, "recovery": recovery}
+
             completed = self.store.complete_task(task_id, self.worker_id)
             return {
                 "status": "completed" if completed else "lease_lost",

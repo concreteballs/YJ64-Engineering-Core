@@ -231,12 +231,55 @@ def handle_council_request_in_parent_task(
     context: Any,
     *,
     client_factory: Callable[[], CouncilGatewayClient] | None = None,
+    continuation_handler: Callable[[dict, Any, dict], TaskExecutionResult] | None = None,
 ) -> TaskExecutionResult:
-    """Submit Council and suspend the parent without discarding its checkpoint.
+    """Submit/suspend or resume the same parent task through its registered continuation.
 
-    A re-entered parent handler must call context.load_council_resume() first;
-    this helper is only the submit-and-suspend half of that task's lifecycle.
+    On re-entry, the continuation callback receives the original task, its
+    lease-scoped context, and a validated but untrusted Council handoff. The
+    callback must use the existing parent workflow/dispatcher and checkpoint a
+    parent-authored continuation with context.checkpoint_council_resume_consumed
+    before returning completed or suspended. This adapter never interprets
+    Council prose as commands and never starts a second worker or task loop.
     """
+    if continuation_handler is not None and not callable(continuation_handler):
+        return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
+    loader = getattr(context, "load_council_resume", None)
+    if not callable(loader):
+        return TaskExecutionResult("blocked", "council_resume_loader_unavailable")
+    try:
+        resume = loader()
+    except (TypeError, ValueError, KeyError):
+        return TaskExecutionResult("blocked", "council_resume_invalid")
+    except Exception:
+        return TaskExecutionResult("retry", "council_resume_load_failed", 90)
+
+    if resume is not None:
+        parent_state = resume.get("parent_task_state") if isinstance(resume, dict) else None
+        if (
+            not isinstance(task, dict)
+            or task.get("task_id") != context.task_id
+            or not isinstance(resume, dict)
+            or resume.get("parent_task_id") != context.task_id
+            or resume.get("model_output_is_untrusted_data") is not True
+            or not isinstance(resume.get("request_id"), str)
+            or not resume.get("request_id")
+            or not isinstance(parent_state, dict)
+            or parent_state.get("expected_council_request_id") != resume.get("request_id")
+        ):
+            return TaskExecutionResult("blocked", "council_resume_identity_invalid")
+        if continuation_handler is None:
+            return TaskExecutionResult("blocked", "council_resume_continuation_unconfigured")
+        try:
+            decision = continuation_handler(task, context, resume)
+        except (TypeError, ValueError, KeyError):
+            return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
+        except Exception:
+            return TaskExecutionResult("retry", "council_resume_continuation_failed", 90)
+        if not isinstance(decision, TaskExecutionResult):
+            return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
+        return decision
+
     try:
         payload = _payload(task)
         raw = payload.get("request")
