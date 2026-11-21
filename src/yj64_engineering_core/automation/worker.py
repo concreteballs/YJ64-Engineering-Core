@@ -105,6 +105,7 @@ class TaskContext:
     task_id: int
     worker_id: str
     lease_seconds: int
+    task_payload: dict | str | None = None
 
     def renew_lease(self) -> bool:
         return self.store.renew_task_lease(
@@ -351,6 +352,31 @@ class TaskContext:
         resume = state.get("council_resume")
         if not isinstance(resume, dict):
             raise ValueError("council resume payload is missing")
+        expected_payload_digest = state.get("parent_task_payload_sha256")
+        if expected_payload_digest is not None:
+            if (
+                not isinstance(expected_payload_digest, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", expected_payload_digest)
+            ):
+                raise ValueError("council resume parent payload digest is invalid")
+            raw_payload = self.task_payload
+            if isinstance(raw_payload, str):
+                try:
+                    raw_payload = json.loads(raw_payload)
+                except (TypeError, ValueError):
+                    raise ValueError("council resume parent task payload is invalid") from None
+            if not isinstance(raw_payload, Mapping):
+                raise ValueError("council resume parent task payload is unavailable")
+            try:
+                payload_bytes = json.dumps(
+                    dict(raw_payload), sort_keys=True, separators=(",", ":"),
+                    ensure_ascii=False, allow_nan=False,
+                ).encode("utf-8")
+            except (TypeError, ValueError):
+                raise ValueError("council resume parent task payload is invalid") from None
+            actual_payload_digest = hashlib.sha256(payload_bytes).hexdigest()
+            if actual_payload_digest != expected_payload_digest:
+                raise ValueError("council resume parent task payload digest mismatch")
         if (
             not isinstance(resume.get("resume_event_id"), int)
             or isinstance(resume.get("resume_event_id"), bool)
@@ -643,6 +669,7 @@ class WorkerRunner:
             task_id=task_id,
             worker_id=self.worker_id,
             lease_seconds=self.lease_seconds,
+            task_payload=task.get("payload"),
         )
         claimed_checkpoint = task.get("checkpoint")
         if isinstance(claimed_checkpoint, dict):
