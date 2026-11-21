@@ -244,6 +244,7 @@ class CouncilTaskTests(unittest.TestCase):
 
     def test_retry_after_wait_checkpoint_only_releases_parent_without_resubmitting(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.council_tasks import handle_council_request_in_parent_task
 
         task = self.submit_task()
         payload_digest = hashlib.sha256(json.dumps(
