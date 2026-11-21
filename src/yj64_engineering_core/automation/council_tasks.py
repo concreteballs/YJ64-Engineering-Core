@@ -362,8 +362,14 @@ def handle_council_request_in_parent_task(
             request_id = previous_state.get("expected_council_request_id")
             if (
                 not isinstance(request_id, str) or not request_id
+                or previous_state.get("request_id") != request_id
+                or not isinstance(previous_state.get("session_id"), str)
+                or not previous_state.get("session_id")
                 or previous_state.get("idempotency_key") != request.idempotency_key
-                or previous_state.get("parent_task_payload_sha256") != payload_digest
+                or (
+                    stored_payload_digest is not None
+                    and stored_payload_digest != payload_digest
+                )
             ):
                 return TaskExecutionResult("blocked", "council_parent_wait_identity_mismatch")
             try:
