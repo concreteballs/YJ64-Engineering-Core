@@ -1,3 +1,5 @@
+import hashlib
+import json
 import unittest
 
 from yj64_engineering_core.automation.council_decision_adapter import (
@@ -7,14 +9,7 @@ from yj64_engineering_core.automation.council_decision_adapter import (
 
 class CouncilDecisionAdapterTests(unittest.TestCase):
     def resume(self):
-        return {
-            "parent_task_id": 42,
-            "request_id": "req-42",
-            "session_id": "session-42",
-            "result_sha256": "a" * 64,
-            "execution_status": "completed",
-            "model_output_is_untrusted_data": True,
-            "result": {
+        result = {
                 "outcome": "qualified_consensus",
                 "summary": "A bounded screening step may be considered.",
                 "claims": [{
@@ -48,6 +43,23 @@ class CouncilDecisionAdapterTests(unittest.TestCase):
                     "aggregate_counts": {"FOR": 1, "CONDITIONAL": 1},
                 },
             },
+        }
+        canonical = json.dumps(
+            result, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+        return {
+            "parent_task_id": 42,
+            "request_id": "req-42",
+            "session_id": "session-42",
+            "result_sha256": hashlib.sha256(canonical).hexdigest(),
+            "execution_status": "completed",
+            "model_output_is_untrusted_data": True,
+            "parent_task_state": {
+                "stage": "council_resume_ready",
+                "expected_council_request_id": "req-42",
+            },
+            "result": result,
         }
 
     def test_builds_advisory_bundle_without_upgrading_claim_or_evidence_trust(self):
