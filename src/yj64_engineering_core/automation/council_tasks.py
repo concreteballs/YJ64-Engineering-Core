@@ -237,10 +237,11 @@ def handle_council_request_in_parent_task(
 
     On re-entry, the continuation callback receives the original task, its
     lease-scoped context, and a validated but untrusted Council handoff. The
-    callback must use the existing parent workflow/dispatcher and checkpoint a
-    parent-authored continuation with context.checkpoint_council_resume_consumed
-    before returning completed or suspended. This adapter never interprets
-    Council prose as commands and never starts a second worker or task loop.
+    callback receives a deterministic advisory decision assessment for completed
+    results, must use the existing parent workflow/dispatcher, and must checkpoint
+    a parent-authored continuation with context.checkpoint_council_resume_consumed
+    before returning completed or suspended. Council prose is never interpreted
+    as commands and this adapter never starts a second worker or task loop.
     """
     if continuation_handler is not None and not callable(continuation_handler):
         return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
@@ -270,8 +271,20 @@ def handle_council_request_in_parent_task(
             return TaskExecutionResult("blocked", "council_resume_identity_invalid")
         if continuation_handler is None:
             return TaskExecutionResult("blocked", "council_resume_continuation_unconfigured")
+        execution_status = resume.get("execution_status")
+        if execution_status not in {"completed", "blocked", "failed", "cancelled"}:
+            return TaskExecutionResult("blocked", "council_resume_status_invalid")
+        decision_assessment = None
+        if execution_status == "completed":
+            try:
+                from .council_decision_adapter import build_council_decision_assessment
+                decision_assessment = build_council_decision_assessment(resume)
+            except (TypeError, ValueError, KeyError):
+                return TaskExecutionResult("blocked", "council_decision_assessment_invalid")
+        resume_for_handler = dict(resume)
+        resume_for_handler["decision_assessment"] = decision_assessment
         try:
-            decision = continuation_handler(task, context, resume)
+            decision = continuation_handler(task, context, resume_for_handler)
         except (TypeError, ValueError, KeyError):
             return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
         except Exception:
