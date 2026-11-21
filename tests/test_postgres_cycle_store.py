@@ -428,6 +428,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
         self.assertEqual(resumed["task_state"]["objective"], "original objective")
         self.assertEqual(resumed["task_state"]["decision_log"], ["decision-1"])
         self.assertEqual(resumed["task_state"]["council_resume"]["result"]["outcome"], "qualified_consensus")
+        self.assertEqual(resumed["task_state"]["council_resume"]["session_id"], "session-9")
         self.assertEqual(resumed["budgets"], {"tokens": 5000})
         self.assertEqual(resumed["approvals"], {
             "repository_write": False, "deploy": False,
@@ -450,12 +451,38 @@ class PostgresCycleStoreTests(unittest.TestCase):
                 })
 
         resume_payload = {
+            "request_id": "req-9",
+            "session_id": "session-9",
             "execution_status": "completed",
             "result": {"outcome": "consensus", "summary": "Review."},
             "model_output_is_untrusted_data": True,
         }
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.store(WrongParentCursor()).record_council_resume_event(
+                9, 71, "worker-a", "req-9", "private://council/result-9",
+                "c" * 64, resume_payload,
+            )
+
+    def test_council_resume_rejects_result_task_from_another_session(self):
+        class WrongSessionCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                self._fetch = (71, {
+                    "parent_task_id": 9, "parent_task_ref": None,
+                    "request_id": "req-9", "session_id": "other-session",
+                    "execution_status": "completed",
+                    "result_artifact_ref": "private://council/result-9",
+                })
+
+        resume_payload = {
+            "request_id": "req-9",
+            "session_id": "session-9",
+            "execution_status": "completed",
+            "result": {"outcome": "consensus", "summary": "Review."},
+            "model_output_is_untrusted_data": True,
+        }
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            self.store(WrongSessionCursor()).record_council_resume_event(
                 9, 71, "worker-a", "req-9", "private://council/result-9",
                 "c" * 64, resume_payload,
             )
@@ -486,6 +513,8 @@ class PostgresCycleStoreTests(unittest.TestCase):
                     self._fetch = None
 
         resume_payload = {
+            "request_id": "req-9",
+            "session_id": "session-9",
             "execution_status": "completed",
             "result": {"outcome": "consensus", "summary": "Review."},
             "model_output_is_untrusted_data": True,
