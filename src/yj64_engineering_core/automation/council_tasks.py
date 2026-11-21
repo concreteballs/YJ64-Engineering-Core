@@ -175,6 +175,18 @@ def _payload(task: Mapping[str, Any]) -> dict[str, Any]:
     return raw
 
 
+def _payload_digest(payload: Mapping[str, Any]) -> str:
+    """Bind a parent resume to the exact durable task payload."""
+    try:
+        encoded = json.dumps(
+            dict(payload), sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        raise ValueError("parent_task_payload_must_be_finite_json") from None
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _client(factory: Callable[[], CouncilGatewayClient] | None) -> CouncilGatewayClient:
     return factory() if factory is not None else CouncilGatewayClient.from_environment()
 
@@ -235,16 +247,17 @@ def handle_council_request_in_parent_task(
 ) -> TaskExecutionResult:
     """Submit/suspend or resume the same parent task through its registered continuation.
 
-    On re-entry, the continuation callback receives the original task, its
-    lease-scoped context, and a validated but untrusted Council handoff. The
-    callback receives a deterministic advisory decision assessment for completed
-    results, must use the existing parent workflow/dispatcher, and must checkpoint
-    a parent-authored continuation with context.checkpoint_council_resume_consumed
-    before returning completed or suspended. Council prose is never interpreted
-    as commands and this adapter never starts a second worker or task loop.
+    A parent must already have a verified, non-empty checkpoint before Council is
+    contacted. The checkpoint preserves the original goal, context, decisions,
+    history, budgets, approvals, and artifacts. Its payload digest binds the
+    resumed callback to the same durable queue row. Council prose remains
+    untrusted analytical data and is never interpreted as commands.
     """
     if continuation_handler is not None and not callable(continuation_handler):
         return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
+    if not isinstance(task, dict) or task.get("task_id") != context.task_id:
+        return TaskExecutionResult("blocked", "council_parent_task_identity_invalid")
+
     loader = getattr(context, "load_council_resume", None)
     if not callable(loader):
         return TaskExecutionResult("blocked", "council_resume_loader_unavailable")
@@ -257,10 +270,21 @@ def handle_council_request_in_parent_task(
 
     if resume is not None:
         parent_state = resume.get("parent_task_state") if isinstance(resume, dict) else None
+        try:
+            current_payload_digest = _payload_digest(_payload(task))
+        except (TypeError, ValueError, KeyError):
+            return TaskExecutionResult("blocked", "council_resume_parent_payload_invalid")
+        expected_payload_digest = (
+            parent_state.get("parent_task_payload_sha256")
+            if isinstance(parent_state, dict) else None
+        )
         if (
-            not isinstance(task, dict)
-            or task.get("task_id") != context.task_id
-            or not isinstance(resume, dict)
+            expected_payload_digest is not None
+            and expected_payload_digest != current_payload_digest
+        ):
+            return TaskExecutionResult("blocked", "council_resume_parent_payload_mismatch")
+        if (
+            not isinstance(resume, dict)
             or resume.get("parent_task_id") != context.task_id
             or resume.get("model_output_is_untrusted_data") is not True
             or not isinstance(resume.get("request_id"), str)
@@ -311,6 +335,51 @@ def handle_council_request_in_parent_task(
             weighted_voting_enabled=raw.get("weighted_voting_enabled", False),
             allow_early_stop=raw.get("allow_early_stop", True),
         )
+        payload_digest = _payload_digest(payload)
+    except (TypeError, ValueError, KeyError):
+        return TaskExecutionResult("blocked", "invalid_council_request")
+
+    from .checkpoints import verify_checkpoint
+    try:
+        previous = context.load_latest_checkpoint()
+        if previous is None:
+            return TaskExecutionResult("blocked", "council_parent_checkpoint_missing")
+        verify_checkpoint(previous)
+        if previous.get("task_id") != str(context.task_id):
+            return TaskExecutionResult("blocked", "parent_checkpoint_identity_mismatch")
+        previous_state = previous.get("task_state")
+        if not isinstance(previous_state, dict) or not previous_state:
+            return TaskExecutionResult("blocked", "council_parent_context_missing")
+        previous_state = dict(previous_state)
+        stored_payload_digest = previous_state.get("parent_task_payload_sha256")
+        if stored_payload_digest is not None and stored_payload_digest != payload_digest:
+            return TaskExecutionResult("blocked", "council_parent_payload_mismatch")
+
+        # If a prior attempt persisted the waiting checkpoint but lost its lease
+        # before suspension completed, re-release the same parent lease. Do not
+        # submit a second Council request or create another poll generation.
+        if previous_state.get("stage") == "waiting_council":
+            request_id = previous_state.get("expected_council_request_id")
+            if (
+                not isinstance(request_id, str) or not request_id
+                or previous_state.get("idempotency_key") != request.idempotency_key
+                or previous_state.get("parent_task_payload_sha256") != payload_digest
+            ):
+                return TaskExecutionResult("blocked", "council_parent_wait_identity_mismatch")
+            try:
+                if not context.suspend_for_council(previous, request_id):
+                    return TaskExecutionResult("retry", "council_parent_suspend_failed", 90)
+            except (RuntimeError, ValueError):
+                return TaskExecutionResult("retry", "council_parent_suspend_failed", 90)
+            return TaskExecutionResult("suspended")
+        if previous_state.get("stage") in {"council_resume_ready", "parent_resume_ready"}:
+            return TaskExecutionResult("blocked", "council_parent_resume_checkpoint_invalid")
+    except ValueError:
+        return TaskExecutionResult("blocked", "invalid_parent_checkpoint")
+    except Exception:
+        return TaskExecutionResult("retry", "council_parent_checkpoint_unavailable", 90)
+
+    try:
         accepted = _client(client_factory).submit(request)
     except CouncilGatewayError as exc:
         if exc.retryable:
@@ -331,38 +400,14 @@ def handle_council_request_in_parent_task(
     if not queued.get("enqueued") and not queued.get("duplicate"):
         return TaskExecutionResult("retry", "council_poll_enqueue_failed", 90)
 
-    from .checkpoints import verify_checkpoint
-    previous = context.load_latest_checkpoint()
-    if previous is not None:
-        try:
-            verify_checkpoint(previous)
-        except ValueError:
-            return TaskExecutionResult("blocked", "invalid_parent_checkpoint")
-        if previous.get("task_id") != str(context.task_id):
-            return TaskExecutionResult("blocked", "parent_checkpoint_identity_mismatch")
-        task_state = dict(previous.get("task_state", {}))
-        if not isinstance(previous.get("task_state"), dict):
-            return TaskExecutionResult("blocked", "invalid_parent_checkpoint")
-        previous_stage = task_state.get("stage")
-        if previous_stage is not None:
-            task_state["stage_before_council"] = previous_stage
-        sequence = previous["sequence"] + 1
-        previous_hash = previous["checkpoint_hash"]
-        task_spec_version = previous["task_spec_version"]
-        budgets = previous.get("budgets", {})
-        approvals = previous.get("approvals", {})
-        artifact_refs = previous.get("artifact_refs", [])
-    else:
-        task_state = {}
-        sequence = 1
-        previous_hash = None
-        task_spec_version = PROTOCOL_VERSION
-        budgets = {}
-        approvals = {}
-        artifact_refs = []
+    task_state = dict(previous_state)
+    previous_stage = task_state.get("stage")
+    if previous_stage is not None:
+        task_state.setdefault("stage_before_council", previous_stage)
     task_state.update({
         "stage": "waiting_council",
         "status": "waiting",
+        "parent_task_payload_sha256": payload_digest,
         "expected_council_request_id": accepted["request_id"],
         "request_id": accepted["request_id"],
         "session_id": accepted["session_id"],
@@ -378,14 +423,14 @@ def handle_council_request_in_parent_task(
     })
     checkpoint = create_checkpoint(
         task_id=str(context.task_id),
-        sequence=sequence,
+        sequence=previous["sequence"] + 1,
         state="checkpointed",
-        task_spec_version=task_spec_version,
+        task_spec_version=previous["task_spec_version"],
         task_state=task_state,
-        budgets=budgets,
-        approvals=approvals,
-        artifact_refs=artifact_refs,
-        previous_checkpoint_hash=previous_hash,
+        budgets=previous.get("budgets", {}),
+        approvals=previous.get("approvals", {}),
+        artifact_refs=previous.get("artifact_refs", []),
+        previous_checkpoint_hash=previous["checkpoint_hash"],
     )
     try:
         if not context.suspend_for_council(checkpoint, accepted["request_id"]):
