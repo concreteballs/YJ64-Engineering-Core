@@ -1,3 +1,5 @@
+import hashlib
+import json
 import unittest
 
 from yj64_engineering_core.automation.browser_agent_bridge import create_envelope
@@ -74,8 +76,10 @@ class FakeContext:
 class FakeClient:
     def __init__(self, status="accepted"):
         self.status = status
+        self.submit_calls = 0
 
     def submit(self, request):
+        self.submit_calls += 1
         return {
             "request_id": "request-123",
             "session_id": "session-123",
@@ -188,16 +192,91 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(store.enqueued[0]["payload"]["parent_task_ref"], "engineering-task-123")
         self.assertEqual(store.enqueued[0]["payload"]["request"]["mode"], "critique")
 
+    def parent_checkpoint(self, task):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        return create_checkpoint(
+            task_id=str(task["task_id"]), sequence=1, state="running",
+            task_spec_version="engineering.v1",
+            task_state={
+                "stage": "analysis",
+                "objective": "Continue the original engineering objective.",
+                "context": {"project": "original-project", "constraints": ["SI units"]},
+                "decision_log": [{"id": "decision-1", "value": "retain"}],
+                "history": [{"event": "parent-created"}],
+            },
+            budgets={"tokens": 9000},
+            approvals={"repository_write": False, "hardware_action": False},
+            artifact_refs=["private://source/evidence-1"],
+        )
+
     def test_parent_task_can_submit_and_suspend_for_council(self):
         from yj64_engineering_core.automation.council_tasks import handle_council_request_in_parent_task
-        context = FakeContext()
+        task = self.submit_task()
+        context = FakeContext(self.parent_checkpoint(task))
+        client = FakeClient()
         result = handle_council_request_in_parent_task(
-            self.submit_task(), context, client_factory=lambda: FakeClient(),
+            task, context, client_factory=lambda: client,
         )
         self.assertEqual(result, TaskExecutionResult("suspended"))
+        self.assertEqual(client.submit_calls, 1)
         self.assertEqual(context.suspended[1], "request-123")
-        self.assertEqual(context.suspended[0]["task_state"]["stage"], "waiting_council")
+        checkpoint = context.suspended[0]
+        self.assertEqual(checkpoint["task_state"]["stage"], "waiting_council")
+        self.assertEqual(checkpoint["task_state"]["objective"], "Continue the original engineering objective.")
+        self.assertEqual(checkpoint["task_state"]["context"]["project"], "original-project")
+        self.assertEqual(checkpoint["task_state"]["history"], [{"event": "parent-created"}])
+        self.assertEqual(len(checkpoint["task_state"]["parent_task_payload_sha256"]), 64)
         self.assertEqual(context.store.enqueued[0]["task_type"], POLL_TASK)
+
+    def test_parent_submission_without_checkpoint_is_blocked_before_remote_side_effects(self):
+        from yj64_engineering_core.automation.council_tasks import handle_council_request_in_parent_task
+
+        context = FakeContext()
+        client = FakeClient()
+        result = handle_council_request_in_parent_task(
+            self.submit_task(), context, client_factory=lambda: client,
+        )
+        self.assertEqual(result, TaskExecutionResult("blocked", "council_parent_checkpoint_missing"))
+        self.assertEqual(client.submit_calls, 0)
+        self.assertEqual(context.store.enqueued, [])
+        self.assertFalse(hasattr(context, "suspended"))
+
+    def test_retry_after_wait_checkpoint_only_releases_parent_without_resubmitting(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+
+        task = self.submit_task()
+        payload_digest = hashlib.sha256(json.dumps(
+            task["payload"], sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        base = self.parent_checkpoint(task)
+        waiting = create_checkpoint(
+            task_id="42", sequence=2, state="checkpointed",
+            task_spec_version=base["task_spec_version"],
+            task_state={
+                **base["task_state"],
+                "stage_before_council": "analysis",
+                "stage": "waiting_council",
+                "expected_council_request_id": "request-123",
+                "request_id": "request-123",
+                "session_id": "session-123",
+                "idempotency_key": task["payload"]["request"]["idempotency_key"],
+                "parent_task_payload_sha256": payload_digest,
+            },
+            budgets=base["budgets"], approvals=base["approvals"],
+            artifact_refs=base["artifact_refs"],
+            previous_checkpoint_hash=base["checkpoint_hash"],
+        )
+        context = FakeContext(waiting)
+        client = FakeClient()
+        result = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+        )
+        self.assertEqual(result, TaskExecutionResult("suspended"))
+        self.assertEqual(client.submit_calls, 0)
+        self.assertEqual(context.store.enqueued, [])
+        self.assertEqual(context.suspended, (waiting, "request-123"))
 
     def test_parent_suspension_preserves_existing_task_context_and_permissions(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
@@ -205,7 +284,13 @@ class CouncilTaskTests(unittest.TestCase):
 
         previous = create_checkpoint(
             task_id="42", sequence=1, state="running", task_spec_version="engineering.v1",
-            task_state={"stage": "analysis", "objective": "retain this objective", "decision_log": ["d1"]},
+            task_state={
+                "stage": "analysis",
+                "objective": "retain this objective",
+                "context": {"project": "original-project"},
+                "decision_log": ["d1"],
+                "history": [{"event": "parent-created"}],
+            },
             budgets={"tokens": 9000},
             approvals={"repository_write": False, "hardware_action": False},
             artifact_refs=["private://source/evidence-1"],
@@ -220,13 +305,21 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(checkpoint["task_state"]["stage_before_council"], "analysis")
         self.assertEqual(checkpoint["task_state"]["objective"], "retain this objective")
         self.assertEqual(checkpoint["task_state"]["decision_log"], ["d1"])
+        self.assertEqual(checkpoint["task_state"]["context"], {"project": "original-project"})
+        self.assertEqual(checkpoint["task_state"]["history"], [{"event": "parent-created"}])
+        self.assertEqual(len(checkpoint["task_state"]["parent_task_payload_sha256"]), 64)
         self.assertEqual(checkpoint["budgets"], {"tokens": 9000})
         self.assertEqual(checkpoint["approvals"], {
             "repository_write": False, "hardware_action": False,
         })
         self.assertEqual(checkpoint["artifact_refs"], ["private://source/evidence-1"])
 
-    def council_resume(self, *, parent_task_id=42):
+    def council_resume(self, *, parent_task_id=42, task=None):
+        task = task or self.submit_task()
+        payload_digest = hashlib.sha256(json.dumps(
+            task["payload"], sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
         return {
             "parent_task_id": parent_task_id,
             "request_id": "request-123",
@@ -268,6 +361,7 @@ class CouncilTaskTests(unittest.TestCase):
                 "context": {"project": "original-project"},
                 "decision_log": [{"id": "decision-1", "value": "retain"}],
                 "history": [{"event": "parent-created"}],
+                "parent_task_payload_sha256": payload_digest,
             },
         }
 
@@ -281,7 +375,7 @@ class CouncilTaskTests(unittest.TestCase):
         task = self.submit_task()
         task["payload"]["parent_task_id"] = 42
         context = FakeContext()
-        context.council_resume = self.council_resume()
+        context.council_resume = self.council_resume(task=task)
 
         dispatcher = EngineeringDispatcher()
         dispatcher.register_physics_solver(AxialMemberSolver())
@@ -351,6 +445,29 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(context.resume_continuation["decision_authority"], "advisory_only")
         self.assertFalse(context.resume_continuation["execution_allowed"])
         self.assertNotIn("shell", str(context.resume_continuation).lower())
+
+    def test_parent_resume_rejects_changed_durable_task_payload(self):
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        context = FakeContext()
+        context.council_resume = self.council_resume(task=task)
+        task["payload"]["request"]["prompt"] = "A different request."
+        called = []
+        result = handle_council_request_in_parent_task(
+            task, context,
+            continuation_handler=lambda original_task, ctx, resume: (
+                called.append(True) or TaskExecutionResult("completed")
+            ),
+        )
+        self.assertEqual(
+            result,
+            TaskExecutionResult("blocked", "council_resume_parent_payload_mismatch"),
+        )
+        self.assertEqual(called, [])
+        self.assertEqual(context.store.enqueued, [])
 
     def test_invalid_council_claim_reference_blocks_before_parent_continuation(self):
         from yj64_engineering_core.automation.council_tasks import (
