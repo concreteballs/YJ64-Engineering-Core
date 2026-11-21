@@ -455,7 +455,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
                 elif "SELECT state FROM yj64_task_queue" in query:
                     self._fetch = ("completed",)
                 elif "FROM yj64_task_resume_events" in query:
-                    self._fetch = (101, result_ref, result_digest)
+                    self._fetch = (71, result_ref, result_digest)
                 else:
                     self._fetch = None
 
@@ -498,7 +498,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
                 elif "SELECT state FROM yj64_task_queue" in query:
                     self._fetch = ("pending",)
                 elif "FROM yj64_task_resume_events" in query:
-                    self._fetch = (101, result_ref, "d" * 64)
+                    self._fetch = (71, result_ref, "d" * 64)
                 else:
                     self._fetch = None
 
