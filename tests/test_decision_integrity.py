@@ -35,13 +35,13 @@ class DecisionIntegrityTests(unittest.TestCase):
             independently_verified=verified,
         )
 
-    def make_decision(self, outcome="supported"):
+    def make_decision(self, outcome="supported", evidence_ids=("evidence-1",)):
         return create_decision_record(
             decision_id="decision-1",
             outcome=outcome,
             summary="Advisory engineering assessment.",
             claim_ids=["claim-1"],
-            evidence_ids=["evidence-1"],
+            evidence_ids=list(evidence_ids),
             dissent=["Boundary conditions need review."],
         )
 
@@ -87,7 +87,9 @@ class DecisionIntegrityTests(unittest.TestCase):
                 self.make_evidence("evidence-1", verified=True),
                 self.make_evidence("evidence-2", verified=True),
             ],
-            decision=self.make_decision("qualified"),
+            decision=self.make_decision(
+                "qualified", evidence_ids=("evidence-1", "evidence-2")
+            ),
             relationships=[
                 {"claim_id": "claim-1", "evidence_id": "evidence-1", "relationship": "supports"},
                 {"claim_id": "claim-1", "evidence_id": "evidence-2", "relationship": "refutes"},
