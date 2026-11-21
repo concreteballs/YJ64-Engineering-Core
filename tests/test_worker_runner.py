@@ -1,3 +1,5 @@
+import hashlib
+import json
 import unittest
 
 from yj64_engineering_core.automation.worker import (
@@ -86,6 +88,11 @@ class WorkerRunnerTests(unittest.TestCase):
     def test_resumed_parent_handler_loads_result_after_worker_restart_and_checkpoints_continuation(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
 
+        task_payload = {"x": 1}
+        payload_digest = hashlib.sha256(json.dumps(
+            task_payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
         resume = {
             "request_id": "req-resume-1",
             "session_id": "session-resume-1",
@@ -105,6 +112,7 @@ class WorkerRunnerTests(unittest.TestCase):
                 "expected_council_request_id": "req-resume-1",
                 "session_id": "session-resume-1",
                 "objective": "preserve original task",
+                "parent_task_payload_sha256": payload_digest,
                 "council_resume": resume,
             },
             budgets={"tokens": 1000}, approvals={"repository_write": False},
@@ -179,6 +187,50 @@ class WorkerRunnerTests(unittest.TestCase):
             store=store, task_id=7, worker_id="worker-a", lease_seconds=300,
         )
         with self.assertRaisesRegex(ValueError, "identity or trust marker"):
+            context.load_council_resume()
+
+    def test_council_resume_rejects_changed_parent_task_payload(self):
+        import hashlib
+        import json
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.worker import TaskContext
+
+        original_payload = {"objective": "original"}
+        payload_digest = hashlib.sha256(json.dumps(
+            original_payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        resume = {
+            "request_id": "req-payload-check",
+            "session_id": "session-payload-check",
+            "resume_event_id": 9,
+            "result_task_id": 71,
+            "result_artifact_ref": "private://council/result-payload-check",
+            "result_sha256": "b" * 64,
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Review."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        checkpoint = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed",
+            task_spec_version="engineering.v1",
+            task_state={
+                "stage": "council_resume_ready",
+                "expected_council_request_id": "req-payload-check",
+                "session_id": "session-payload-check",
+                "parent_task_payload_sha256": payload_digest,
+                "council_resume": resume,
+            },
+            budgets={}, approvals={}, artifact_refs=[resume["result_artifact_ref"]],
+        )
+        store = FakeStore()
+        store.checkpoint = checkpoint
+        context = TaskContext(
+            store=store, task_id=7, worker_id="worker-a", lease_seconds=300,
+            task_payload={"objective": "modified"},
+        )
+        with self.assertRaisesRegex(ValueError, "payload digest mismatch"):
             context.load_council_resume()
 
     def test_resumed_parent_cannot_suspend_without_checkpointing_continuation(self):
