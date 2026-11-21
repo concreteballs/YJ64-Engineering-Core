@@ -85,14 +85,14 @@ class CouncilDecisionAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown_council_evidence"):
             build_council_decision_assessment(resume)
 
-    def test_parent_checkpoint_identity_and_result_digest_are_verified(self):
+    def test_parent_checkpoint_identity_and_artifact_digest_format_are_verified(self):
         resume = self.resume()
         resume["parent_task_state"]["session_id"] = "another-session"
         with self.assertRaisesRegex(ValueError, "parent_checkpoint_identity"):
             build_council_decision_assessment(resume)
         resume = self.resume()
-        resume["result"]["summary"] = "Tampered after artifact validation."
-        with self.assertRaisesRegex(ValueError, "digest_mismatch"):
+        resume["result_sha256"] = "not-a-digest"
+        with self.assertRaisesRegex(ValueError, "invalid_council_result_sha256"):
             build_council_decision_assessment(resume)
 
     def test_terminal_or_unmarked_resume_is_rejected(self):

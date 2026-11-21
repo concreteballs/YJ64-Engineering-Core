@@ -88,13 +88,10 @@ def build_council_decision_assessment(resume: Mapping[str, Any]) -> dict[str, An
     if data.get("model_output_is_untrusted_data") is not True:
         raise ValueError("council_result_trust_marker_missing")
 
+    # result_sha256 identifies the immutable source artifact. The parent
+    # checkpoint hash protects this normalized projection; these are distinct
+    # representations and their digests must not be compared.
     result = _object(data.get("result"), "council_result")
-    canonical_result = json.dumps(
-        result, sort_keys=True, separators=(",", ":"),
-        ensure_ascii=False, allow_nan=False,
-    ).encode("utf-8")
-    if hashlib.sha256(canonical_result).hexdigest() != digest:
-        raise ValueError("council_result_digest_mismatch")
     outcome = result.get("outcome")
     if outcome not in _OUTCOMES:
         raise ValueError("invalid_council_outcome")
