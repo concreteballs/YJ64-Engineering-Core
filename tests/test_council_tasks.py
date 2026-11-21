@@ -230,6 +230,7 @@ class CouncilTaskTests(unittest.TestCase):
         return {
             "parent_task_id": parent_task_id,
             "request_id": "request-123",
+            "session_id": "session-123",
             "result_task_id": 43,
             "result_artifact_ref": "private://council/result-123",
             "result_sha256": "a" * 64,
@@ -249,6 +250,7 @@ class CouncilTaskTests(unittest.TestCase):
             "parent_task_state": {
                 "stage": "council_resume_ready",
                 "expected_council_request_id": "request-123",
+                "session_id": "session-123",
                 "objective": "Continue the original engineering objective.",
                 "context": {"project": "original-project"},
                 "decision_log": [{"id": "decision-1", "value": "retain"}],

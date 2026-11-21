@@ -114,6 +114,8 @@ class CouncilResultConsumerTests(unittest.TestCase):
             artifact_store_factory=lambda: FakeArtifactStore(content),
         )
         self.assertEqual(decision, TaskExecutionResult("completed"))
+        self.assertEqual(context.resume_calls[0][4]["request_id"], "req-1")
+        self.assertEqual(context.resume_calls[0][4]["session_id"], "session-1")
         state = context.checkpoints[0]["task_state"]
         self.assertEqual(state["stage"], "council_result_verified")
         self.assertEqual(state["parent_task_id"], 12)

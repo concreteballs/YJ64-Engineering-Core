@@ -362,6 +362,7 @@ class PostgresCycleStoreTests(unittest.TestCase):
             task_state={
                 "stage": "waiting_council",
                 "expected_council_request_id": "req-9",
+                "session_id": "session-9",
                 "objective": "original objective",
                 "decision_log": ["decision-1"],
             },
@@ -406,6 +407,8 @@ class PostgresCycleStoreTests(unittest.TestCase):
 
         cursor = ResumeCursor()
         resume_payload = {
+            "request_id": "req-9",
+            "session_id": "session-9",
             "execution_status": "completed",
             "result": {"outcome": "qualified_consensus", "summary": "Run a bounded test."},
             "terminal": None,
@@ -441,7 +444,8 @@ class PostgresCycleStoreTests(unittest.TestCase):
                 self.statements.append((query, params))
                 self._fetch = (71, {
                     "parent_task_id": 10, "parent_task_ref": None,
-                    "request_id": "req-9", "execution_status": "completed",
+                    "request_id": "req-9", "session_id": "session-9",
+                    "execution_status": "completed",
                     "result_artifact_ref": "private://council/result-9",
                 })
 
@@ -461,7 +465,8 @@ class PostgresCycleStoreTests(unittest.TestCase):
 
         result_payload = {
             "parent_task_id": 9, "parent_task_ref": None,
-            "request_id": "req-9", "execution_status": "completed",
+            "request_id": "req-9", "session_id": "session-9",
+            "execution_status": "completed",
             "result_artifact_ref": "private://council/result-9",
         }
 

@@ -88,6 +88,7 @@ class WorkerRunnerTests(unittest.TestCase):
 
         resume = {
             "request_id": "req-resume-1",
+            "session_id": "session-resume-1",
             "result_task_id": 71,
             "result_artifact_ref": "private://council/result-1",
             "result_sha256": "a" * 64,
@@ -100,6 +101,8 @@ class WorkerRunnerTests(unittest.TestCase):
             task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
             task_state={
                 "stage": "council_resume_ready",
+                "expected_council_request_id": "req-resume-1",
+                "session_id": "session-resume-1",
                 "objective": "preserve original task",
                 "council_resume": resume,
             },
@@ -147,6 +150,7 @@ class WorkerRunnerTests(unittest.TestCase):
 
         resume = {
             "request_id": "req-resume-suspend",
+            "session_id": "session-resume-suspend",
             "result_task_id": 72,
             "result_artifact_ref": "private://council/result-suspend",
             "result_sha256": "f" * 64,
@@ -157,7 +161,12 @@ class WorkerRunnerTests(unittest.TestCase):
         }
         checkpoint = create_checkpoint(
             task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
-            task_state={"stage": "council_resume_ready", "council_resume": resume},
+            task_state={
+                "stage": "council_resume_ready",
+                "expected_council_request_id": "req-resume-suspend",
+                "session_id": "session-resume-suspend",
+                "council_resume": resume,
+            },
             budgets={}, approvals={}, artifact_refs=["private://council/result-suspend"],
         )
         store = FakeStore(self.task())
@@ -180,7 +189,8 @@ class WorkerRunnerTests(unittest.TestCase):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
 
         resume = {
-            "request_id": "req-resume-2", "result_task_id": 71,
+            "request_id": "req-resume-2",
+            "session_id": "session-resume-2", "result_task_id": 71,
             "result_artifact_ref": "private://council/result-2",
             "result_sha256": "b" * 64, "execution_status": "completed",
             "result": {"outcome": "consensus", "summary": "Proceed with tests."},
@@ -188,7 +198,12 @@ class WorkerRunnerTests(unittest.TestCase):
         }
         checkpoint = create_checkpoint(
             task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
-            task_state={"stage": "council_resume_ready", "council_resume": resume},
+            task_state={
+                "stage": "council_resume_ready",
+                "expected_council_request_id": "req-resume-2",
+                "session_id": "session-resume-2",
+                "council_resume": resume,
+            },
             budgets={}, approvals={}, artifact_refs=["private://council/result-2"],
         )
         store = FakeStore(self.task())
@@ -207,6 +222,7 @@ class WorkerRunnerTests(unittest.TestCase):
 
         resume = {
             "request_id": "req-resume-permissions",
+            "session_id": "session-resume-permissions",
             "result_task_id": 71,
             "result_artifact_ref": "private://council/result-permissions",
             "result_sha256": "e" * 64,
@@ -219,6 +235,8 @@ class WorkerRunnerTests(unittest.TestCase):
             task_id="7", sequence=1, state="checkpointed", task_spec_version="engineering.v1",
             task_state={
                 "stage": "council_resume_ready",
+                "expected_council_request_id": "req-resume-permissions",
+                "session_id": "session-resume-permissions",
                 "objective": "original objective",
                 "context": {"source": "original context"},
                 "decisions": [{"id": "decision-1", "value": "retain"}],
