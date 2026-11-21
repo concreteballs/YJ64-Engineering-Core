@@ -310,10 +310,19 @@ class TaskContext:
         state = checkpoint.get("task_state")
         resume = state.get("council_resume") if isinstance(state, dict) else None
         request_id = resume.get("request_id") if isinstance(resume, dict) else None
+        session_id = resume.get("session_id") if isinstance(resume, dict) else None
+        parent_state = (
+            {key: value for key, value in state.items() if key != "council_resume"}
+            if isinstance(state, dict) else {}
+        )
         if (
             not isinstance(state, dict)
             or state.get("stage") != "council_resume_ready"
             or not isinstance(request_id, str) or not request_id
+            or not isinstance(session_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session_id)
+            or parent_state.get("expected_council_request_id") != request_id
+            or parent_state.get("session_id") != session_id
         ):
             raise ValueError("checkpoint does not contain a pending council resume")
         object.__setattr__(self, "_council_resume_required", True)
@@ -346,6 +355,8 @@ class TaskContext:
             not isinstance(resume.get("result_task_id"), int)
             or isinstance(resume.get("result_task_id"), bool)
             or resume["result_task_id"] < 1
+            or not isinstance(resume.get("session_id"), str)
+            or not resume["session_id"]
             or not isinstance(resume.get("result_artifact_ref"), str)
             or not resume["result_artifact_ref"]
             or not isinstance(resume.get("result_sha256"), str)

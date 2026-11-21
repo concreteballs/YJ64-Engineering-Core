@@ -80,6 +80,7 @@ def build_council_decision_assessment(resume: Mapping[str, Any]) -> dict[str, An
         not isinstance(parent_state, Mapping)
         or parent_state.get("stage") != "council_resume_ready"
         or parent_state.get("expected_council_request_id") != request_id
+        or parent_state.get("session_id") != session_id
     ):
         raise ValueError("council_parent_checkpoint_identity_mismatch")
     if data.get("execution_status") != "completed":

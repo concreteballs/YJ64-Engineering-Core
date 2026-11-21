@@ -214,6 +214,8 @@ def handle_council_result_ready(
             ):
                 return TaskExecutionResult("retry", "council_result_checkpoint_failed", 90)
             resume_payload = {
+                "request_id": payload["request_id"],
+                "session_id": payload["session_id"],
                 "execution_status": execution_status,
                 "terminal": terminal,
                 "result": None,
@@ -245,6 +247,8 @@ def handle_council_result_ready(
             ):
                 return TaskExecutionResult("retry", "council_result_checkpoint_failed", 90)
             resume_payload = {
+                "request_id": payload["request_id"],
+                "session_id": payload["session_id"],
                 "execution_status": "completed",
                 "result": normalized,
                 "terminal": None,

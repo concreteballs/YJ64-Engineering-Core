@@ -991,6 +991,13 @@ class PostgresCycleStore:
             raise ValueError("result_sha256 must be a lowercase SHA-256 hash")
         if not isinstance(resume_payload, dict) or resume_payload.get("model_output_is_untrusted_data") is not True:
             raise ValueError("resume_payload must explicitly mark Council output as untrusted")
+        resume_session_id = resume_payload.get("session_id")
+        if (
+            resume_payload.get("request_id") != council_request_id
+            or not isinstance(resume_session_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", resume_session_id)
+        ):
+            raise ValueError("resume_payload must bind the exact Council request and session")
         execution_status = resume_payload.get("execution_status")
         if execution_status == "completed":
             result = resume_payload.get("result")
@@ -1042,6 +1049,7 @@ class PostgresCycleStore:
                     or result_task_payload.get("parent_task_id") != parent_task_id
                     or result_task_payload.get("parent_task_ref") is not None
                     or result_task_payload.get("request_id") != council_request_id
+                    or result_task_payload.get("session_id") != resume_session_id
                     or result_task_payload.get("result_artifact_ref") != result_artifact_ref
                     or result_task_payload.get("execution_status") != execution_status
                 ):
@@ -1097,11 +1105,14 @@ class PostgresCycleStore:
                     not isinstance(parent_state, dict)
                     or parent_state.get("stage") != "waiting_council"
                     or parent_state.get("expected_council_request_id") != council_request_id
+                    or parent_state.get("session_id") != resume_session_id
                 ):
                     return {"accepted": False, "duplicate": False, "reason": "council_request_mismatch"}
 
                 event_payload = {
                     "source": "council_result_ready",
+                    "request_id": council_request_id,
+                    "session_id": resume_session_id,
                     "execution_status": execution_status,
                     "result_artifact_ref": result_artifact_ref,
                     "result_sha256": result_sha256,
@@ -1143,6 +1154,7 @@ class PostgresCycleStore:
                 resumed_state["council_resume"] = {
                     "resume_event_id": inserted[0],
                     "request_id": council_request_id,
+                    "session_id": resume_session_id,
                     "result_task_id": result_task_id,
                     "result_artifact_ref": result_artifact_ref,
                     "result_sha256": result_sha256,
