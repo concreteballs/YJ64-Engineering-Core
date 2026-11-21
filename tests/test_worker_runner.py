@@ -89,6 +89,7 @@ class WorkerRunnerTests(unittest.TestCase):
         resume = {
             "request_id": "req-resume-1",
             "session_id": "session-resume-1",
+            "resume_event_id": 1,
             "result_task_id": 71,
             "result_artifact_ref": "private://council/result-1",
             "result_sha256": "a" * 64,
@@ -145,12 +146,48 @@ class WorkerRunnerTests(unittest.TestCase):
             ["private://source/evidence-1", "private://council/result-1"],
         )
 
+    def test_council_resume_requires_a_positive_durable_event_id(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.worker import TaskContext
+
+        resume = {
+            "request_id": "req-invalid-event",
+            "session_id": "session-invalid-event",
+            "resume_event_id": True,
+            "result_task_id": 71,
+            "result_artifact_ref": "private://council/result-invalid-event",
+            "result_sha256": "a" * 64,
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Review."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        checkpoint = create_checkpoint(
+            task_id="7", sequence=1, state="checkpointed",
+            task_spec_version="engineering.v1",
+            task_state={
+                "stage": "council_resume_ready",
+                "expected_council_request_id": "req-invalid-event",
+                "session_id": "session-invalid-event",
+                "council_resume": resume,
+            },
+            budgets={}, approvals={}, artifact_refs=[resume["result_artifact_ref"]],
+        )
+        store = FakeStore()
+        store.checkpoint = checkpoint
+        context = TaskContext(
+            store=store, task_id=7, worker_id="worker-a", lease_seconds=300,
+        )
+        with self.assertRaisesRegex(ValueError, "identity or trust marker"):
+            context.load_council_resume()
+
     def test_resumed_parent_cannot_suspend_without_checkpointing_continuation(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
 
         resume = {
             "request_id": "req-resume-suspend",
             "session_id": "session-resume-suspend",
+            "resume_event_id": 2,
             "result_task_id": 72,
             "result_artifact_ref": "private://council/result-suspend",
             "result_sha256": "f" * 64,
@@ -190,7 +227,7 @@ class WorkerRunnerTests(unittest.TestCase):
 
         resume = {
             "request_id": "req-resume-2",
-            "session_id": "session-resume-2", "result_task_id": 71,
+            "session_id": "session-resume-2", "resume_event_id": 3, "result_task_id": 71,
             "result_artifact_ref": "private://council/result-2",
             "result_sha256": "b" * 64, "execution_status": "completed",
             "result": {"outcome": "consensus", "summary": "Proceed with tests."},
@@ -223,6 +260,7 @@ class WorkerRunnerTests(unittest.TestCase):
         resume = {
             "request_id": "req-resume-permissions",
             "session_id": "session-resume-permissions",
+            "resume_event_id": 4,
             "result_task_id": 71,
             "result_artifact_ref": "private://council/result-permissions",
             "result_sha256": "e" * 64,
