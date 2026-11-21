@@ -437,6 +437,90 @@ class PostgresCycleStoreTests(unittest.TestCase):
             "private://source/input-1", "private://council/result-9",
         ])
 
+    def test_duplicate_council_result_delivery_does_not_requeue_parent(self):
+        result_ref = "private://council/result-9"
+        result_digest = "c" * 64
+        result_task_payload = {
+            "parent_task_id": 9, "parent_task_ref": None,
+            "request_id": "req-9", "session_id": "session-9",
+            "execution_status": "completed",
+            "result_artifact_ref": result_ref,
+        }
+
+        class DuplicateCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id, payload FROM yj64_task_queue" in query:
+                    self._fetch = (71, result_task_payload)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("completed",)
+                elif "FROM yj64_task_resume_events" in query:
+                    self._fetch = (101, result_ref, result_digest)
+                else:
+                    self._fetch = None
+
+        resume_payload = {
+            "request_id": "req-9",
+            "session_id": "session-9",
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Run a bounded test."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        cursor = DuplicateCursor()
+        result = self.store(cursor).record_council_resume_event(
+            9, 71, "worker-a", "req-9", result_ref, result_digest, resume_payload,
+        )
+        self.assertEqual(result, {
+            "accepted": True, "duplicate": True,
+            "parent_task_id": 9, "state": "completed",
+        })
+        sql = [query for query, _ in cursor.statements]
+        self.assertEqual(len(sql), 3)
+        self.assertFalse(any("INSERT INTO yj64_task_resume_events" in query for query in sql))
+        self.assertFalse(any("INSERT INTO yj64_task_checkpoints" in query for query in sql))
+        self.assertFalse(any("UPDATE yj64_task_queue" in query for query in sql))
+
+    def test_conflicting_duplicate_council_result_delivery_is_rejected(self):
+        result_ref = "private://council/result-9"
+        result_task_payload = {
+            "parent_task_id": 9, "parent_task_ref": None,
+            "request_id": "req-9", "session_id": "session-9",
+            "execution_status": "completed",
+            "result_artifact_ref": result_ref,
+        }
+
+        class ConflictingDuplicateCursor(FakeCursor):
+            def execute(self, query, params):
+                self.statements.append((query, params))
+                if "SELECT task_id, payload FROM yj64_task_queue" in query:
+                    self._fetch = (71, result_task_payload)
+                elif "SELECT state FROM yj64_task_queue" in query:
+                    self._fetch = ("pending",)
+                elif "FROM yj64_task_resume_events" in query:
+                    self._fetch = (101, result_ref, "d" * 64)
+                else:
+                    self._fetch = None
+
+        resume_payload = {
+            "request_id": "req-9",
+            "session_id": "session-9",
+            "execution_status": "completed",
+            "result": {"outcome": "qualified_consensus", "summary": "Run a bounded test."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        cursor = ConflictingDuplicateCursor()
+        with self.assertRaisesRegex(ValueError, "conflicts with an existing event"):
+            self.store(cursor).record_council_resume_event(
+                9, 71, "worker-a", "req-9", result_ref, "c" * 64, resume_payload,
+            )
+        self.assertFalse(any(
+            "INSERT INTO yj64_task_checkpoints" in query
+            or "UPDATE yj64_task_queue" in query
+            for query, _ in cursor.statements
+        ))
+
     def test_council_resume_rejects_result_task_bound_to_another_parent(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
 
