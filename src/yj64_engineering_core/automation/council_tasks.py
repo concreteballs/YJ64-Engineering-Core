@@ -302,11 +302,14 @@ def handle_council_request_in_parent_task(
         if execution_status == "completed":
             try:
                 from .council_decision_adapter import build_council_decision_assessment
+                from .council_decision_policy import evaluate_council_decision_policy
                 decision_assessment = build_council_decision_assessment(resume)
+                decision_policy = evaluate_council_decision_policy(decision_assessment)
             except (TypeError, ValueError, KeyError):
                 return TaskExecutionResult("blocked", "council_decision_assessment_invalid")
         resume_for_handler = dict(resume)
         resume_for_handler["decision_assessment"] = decision_assessment
+        resume_for_handler["decision_policy"] = decision_policy
         try:
             decision = continuation_handler(task, context, resume_for_handler)
         except (TypeError, ValueError, KeyError):

@@ -403,7 +403,14 @@ class CouncilTaskTests(unittest.TestCase):
             observed["untrusted"] = resume["model_output_is_untrusted_data"]
             observed["summary"] = resume["result"]["summary"]
             assessment = resume["decision_assessment"]
+            policy = resume["decision_policy"]
             observed["decision_id"] = assessment["decision_bundle"]["decision"]["decision_id"]
+            observed["policy_next_stage"] = policy["recommended_next_stage"]
+            self.assertEqual(policy["authority"], "advisory_only")
+            self.assertFalse(policy["execution_allowed"])
+            self.assertTrue(policy["requires_human_approval"])
+            self.assertEqual(policy["permission_changes"], [])
+            self.assertEqual(policy["executable_actions"], [])
             self.assertEqual(assessment["authority"], "advisory_only")
             self.assertFalse(assessment["execution_allowed"])
             self.assertTrue(assessment["decision_bundle"]["decision"]["requires_human_approval"])
@@ -442,6 +449,7 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertTrue(observed["untrusted"])
         self.assertIn("arbitrary shell command", observed["summary"])
         self.assertEqual(observed["dispatch_status"], "screening_only")
+        self.assertEqual(observed["policy_next_stage"], "collect_independent_evidence")
         self.assertEqual(context.resume_continuation["operation"], "physics.axial_member")
         self.assertEqual(context.resume_continuation["decision_authority"], "advisory_only")
         self.assertFalse(context.resume_continuation["execution_allowed"])
