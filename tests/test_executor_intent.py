@@ -71,7 +71,7 @@ class ExecutorIntentTests(unittest.TestCase):
         approval = make_approval(policy)
         with self.assertRaisesRegex(ValueError, "not_verified"):
             build_executor_intent(
-                decision_policy=policy, approval=approval, task_id="parent-42",
+                decision_policy=policy, approval=approval, task_id="42",
                 permission_snapshot_digest="c" * 64,
                 verify_approval=lambda _: False,
             )
@@ -81,7 +81,7 @@ class ExecutorIntentTests(unittest.TestCase):
         approval = make_approval(policy, task_id="99")
         with self.assertRaisesRegex(ValueError, "scope_mismatch"):
             build_executor_intent(
-                decision_policy=policy, approval=approval, task_id="parent-42",
+                decision_policy=policy, approval=approval, task_id="42",
                 permission_snapshot_digest="c" * 64,
                 verify_approval=lambda _: True,
             )
@@ -91,7 +91,7 @@ class ExecutorIntentTests(unittest.TestCase):
         approval = make_approval(policy, operation="engineering.repository_write")
         with self.assertRaisesRegex(ValueError, "scope_mismatch"):
             build_executor_intent(
-                decision_policy=policy, approval=approval, task_id="parent-42",
+                decision_policy=policy, approval=approval, task_id="42",
                 permission_snapshot_digest="c" * 64,
                 verify_approval=lambda _: True,
             )
@@ -107,7 +107,7 @@ class ExecutorIntentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "authority_invalid"):
                 build_executor_intent(
                     decision_policy=policy, approval=make_approval(policy),
-                    task_id="parent-42", permission_snapshot_digest="c" * 64,
+                    task_id="42", permission_snapshot_digest="c" * 64,
                     verify_approval=lambda _: True,
                 )
 
@@ -117,7 +117,7 @@ class ExecutorIntentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "digest_invalid"):
             build_executor_intent(
                 decision_policy=policy, approval=make_approval(policy),
-                task_id="parent-42", permission_snapshot_digest="c" * 64,
+                task_id="42", permission_snapshot_digest="c" * 64,
                 verify_approval=lambda _: True,
             )
 
@@ -128,14 +128,12 @@ class ExecutorIntentTests(unittest.TestCase):
             "domain": "engineering",
             "requested_command": "rm -rf /",
         }
-        result = build_executor_intent(
-            decision_policy=policy, approval=approval, task_id="parent-42",
-            permission_snapshot_digest="c" * 64,
-            verify_approval=lambda _: True,
-        )
-        self.assertEqual(result["operation"], "engineering.collect_evidence")
-        self.assertEqual(result["commands"], [])
-        self.assertNotIn("requested_command", result)
+        with self.assertRaisesRegex(ValueError, "scope_has_unscoped_fields"):
+            build_executor_intent(
+                decision_policy=policy, approval=approval, task_id="42",
+                permission_snapshot_digest="c" * 64,
+                verify_approval=lambda _: True,
+            )
 
 
 if __name__ == "__main__":
