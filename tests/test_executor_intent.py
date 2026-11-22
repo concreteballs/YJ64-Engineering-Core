@@ -136,5 +136,25 @@ class ExecutorIntentTests(unittest.TestCase):
             )
 
 
+    def test_approval_is_bound_to_the_exact_permission_snapshot(self):
+        policy = make_policy()
+        approval = make_approval(policy)
+        with self.assertRaisesRegex(ValueError, "scope_mismatch"):
+            build_executor_intent(
+                decision_policy=policy, approval=approval, task_id="42",
+                permission_snapshot_digest="d" * 64,
+                verify_approval=lambda _: True,
+            )
+
+    def test_policy_parent_identity_must_match_dispatch_target(self):
+        policy = make_policy()
+        with self.assertRaisesRegex(ValueError, "parent_task_mismatch"):
+            build_executor_intent(
+                decision_policy=policy, approval=make_approval(policy),
+                task_id="43", permission_snapshot_digest="c" * 64,
+                verify_approval=lambda _: True,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
