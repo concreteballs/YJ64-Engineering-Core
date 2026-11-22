@@ -27,7 +27,7 @@ _POLICY_KEYS = {
 }
 _APPROVAL_KEYS = {
     "approval_id", "issuer", "approved_at", "task_id",
-    "policy_digest_sha256", "operation", "scope", "signature",
+    "policy_digest_sha256", "permission_snapshot_digest", "operation", "scope", "signature",
 }
 
 
@@ -86,6 +86,9 @@ def _verify_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
     source = data["source"]
     if not isinstance(source, Mapping):
         raise ValueError("executor_policy_source_invalid")
+    parent_id = source.get("parent_task_id")
+    if not isinstance(parent_id, int) or isinstance(parent_id, bool) or parent_id < 1:
+        raise ValueError("executor_policy_parent_identity_invalid")
     return data
 
 
@@ -108,6 +111,8 @@ def build_executor_intent(
     permission_digest = _nonempty(permission_snapshot_digest, "permission_snapshot_digest", 64)
     if len(permission_digest) != 64 or any(ch not in "0123456789abcdef" for ch in permission_digest):
         raise ValueError("executor_permission_snapshot_digest_invalid")
+    if str(policy["source"]["parent_task_id"]) != task:
+        raise ValueError("executor_policy_parent_task_mismatch")
 
     if not isinstance(approval, Mapping):
         raise ValueError("executor_approval_must_be_object")
@@ -122,6 +127,8 @@ def build_executor_intent(
         or _nonempty(approved["policy_digest_sha256"], "approval_policy_digest", 64)
         != policy["policy_digest_sha256"]
         or _nonempty(approved["operation"], "approval_operation", 128) != operation
+        or _nonempty(approved["permission_snapshot_digest"], "approval_permission_digest", 64)
+        != permission_digest
     ):
         raise ValueError("executor_approval_scope_mismatch")
     _nonempty(approved["approval_id"], "approval_id", 128)
@@ -130,7 +137,20 @@ def build_executor_intent(
     approved_at = _timestamp(approved["approved_at"])
     if not isinstance(approved["scope"], Mapping):
         raise ValueError("executor_approval_scope_invalid")
-    _canonical(dict(approved["scope"]))
+    scope = dict(approved["scope"])
+    if set(scope) - {"domain", "artifact_refs", "resource_ids"}:
+        raise ValueError("executor_approval_scope_has_unscoped_fields")
+    if "domain" in scope:
+        _nonempty(scope["domain"], "approval_scope_domain", 128)
+    for key in ("artifact_refs", "resource_ids"):
+        if key in scope:
+            values = scope[key]
+            if not isinstance(values, list) or any(
+                not isinstance(item, str) or not item.strip() or len(item) > 1024
+                for item in values
+            ):
+                raise ValueError(f"executor_approval_{key}_invalid")
+    _canonical(scope)
 
     try:
         verified = verify_approval(approved)
@@ -150,7 +170,7 @@ def build_executor_intent(
             "approved_at": approved_at,
         },
         "permission_snapshot_digest": permission_digest,
-        "scope": dict(approved["scope"]),
+        "scope": scope,
         "authority": "externally_approved_typed_handler_intent",
         "dispatch_allowed": True,
         "commands": [],
