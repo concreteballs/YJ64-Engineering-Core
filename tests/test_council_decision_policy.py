@@ -16,19 +16,24 @@ class CouncilDecisionPolicyTests(unittest.TestCase):
     def assessment(
         self, *, outcome="qualified_consensus", summary="A bounded proposal.",
         claims=True, evidence=True, dissent=None, unresolved=None,
+        claim_statement="A preliminary screening calculation is within its stated limit.",
+        claim_reasoning="Based only on supplied assumptions.",
+        evidence_description="Unverified Council evidence reference.",
+        assumptions=None, limitations=None, participant_positions=None,
+        tests_and_simulations=None, completion_reason=None,
     ):
         claim_records = [{
             "claim_id": "claim-1",
-            "statement": "A preliminary screening calculation is within its stated limit.",
+            "statement": claim_statement,
             "epistemic_type": "inference",
-            "reasoning": "Based only on supplied assumptions.",
+            "reasoning": claim_reasoning,
             "evidence_refs": ["evidence-1"] if evidence else [],
             "confidence": 0.9,
         }] if claims else []
         evidence_records = [{
             "evidence_id": "evidence-1",
             "reference": "private://evidence/one",
-            "description": "Unverified Council evidence reference.",
+            "description": evidence_description,
             "evidence_type": "test",
             "provenance": {"independently_verified": True},
         }] if evidence else []
@@ -51,8 +56,11 @@ class CouncilDecisionPolicyTests(unittest.TestCase):
                 "evidence": evidence_records,
                 "dissent": dissent or [],
                 "unresolved_questions": unresolved or [],
-                "assumptions": [],
-                "limitations": [],
+                "assumptions": assumptions or [],
+                "limitations": limitations or [],
+                "participant_positions": participant_positions or [],
+                "tests_and_simulations": tests_and_simulations or [],
+                **({"completion_reason": completion_reason} if completion_reason is not None else {}),
             },
         }
         return build_council_decision_assessment(resume)
@@ -75,6 +83,16 @@ class CouncilDecisionPolicyTests(unittest.TestCase):
         baseline = evaluate_council_decision_policy(self.assessment())
         injected = evaluate_council_decision_policy(self.assessment(
             summary=hostile,
+            claim_statement=hostile,
+            claim_reasoning=hostile,
+            evidence_description=hostile,
+            dissent=[{"participant_id": "P2", "reason": hostile}],
+            unresolved=[hostile],
+            assumptions=[hostile],
+            limitations=[hostile],
+            participant_positions=[{"position": hostile}],
+            tests_and_simulations=[{"result": hostile}],
+            completion_reason=hostile,
         ))
         self.assertEqual(
             injected["recommended_next_stage"],
