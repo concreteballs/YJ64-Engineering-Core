@@ -203,8 +203,10 @@ def _council_resume_already_consumed(task: dict, context: Any) -> bool:
         raise ValueError("consumed_council_checkpoint_state_invalid")
     if state.get("stage") != "parent_resume_consumed":
         return False
+    if state.get("resume_kind") == "child":
+        return False
     if state.get("resume_kind") != "council" or state.get("resume_consumed") is not True:
-        raise ValueError("consumed_parent_checkpoint_is_not_council_resume")
+        raise ValueError("consumed_parent_checkpoint_contract_invalid")
 
     parent_state = state.get("parent_task_state")
     resume = state.get("council_resume")
