@@ -116,7 +116,11 @@ def make_approved_council_continuation(
         # Free-form Council summaries, claims, reasoning and evidence descriptions
         # are intentionally not passed to the provider.
         try:
-            approval = approval_provider(task_id, policy)
+            policy_for_approval = json.loads(_canonical(dict(policy)).decode("utf-8"))
+            policy_snapshot_digest = hashlib.sha256(_canonical(policy_for_approval)).hexdigest()
+            approval = approval_provider(task_id, policy_for_approval)
+            if hashlib.sha256(_canonical(policy_for_approval)).hexdigest() != policy_snapshot_digest:
+                return TaskExecutionResult("blocked", "council_executor_approval_provider_mutated_policy")
         except PermissionError:
             return TaskExecutionResult("blocked", "council_executor_human_approval_required")
         except (TypeError, ValueError):
