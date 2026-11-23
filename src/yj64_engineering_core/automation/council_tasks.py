@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
@@ -187,6 +188,76 @@ def _payload_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _council_resume_already_consumed(task: dict, context: Any) -> bool:
+    """Recognize a committed continuation after a worker restart without replaying Council."""
+    from .checkpoints import verify_checkpoint
+
+    checkpoint = context.load_latest_checkpoint()
+    if checkpoint is None:
+        return False
+    verify_checkpoint(checkpoint)
+    if checkpoint.get("task_id") != str(context.task_id):
+        raise ValueError("consumed_council_checkpoint_task_mismatch")
+    state = checkpoint.get("task_state")
+    if not isinstance(state, dict):
+        raise ValueError("consumed_council_checkpoint_state_invalid")
+    if state.get("stage") != "parent_resume_consumed":
+        return False
+    if state.get("resume_kind") != "council" or state.get("resume_consumed") is not True:
+        raise ValueError("consumed_parent_checkpoint_is_not_council_resume")
+
+    parent_state = state.get("parent_task_state")
+    resume = state.get("council_resume")
+    continuation = state.get("continuation")
+    if (
+        not isinstance(parent_state, dict)
+        or parent_state.get("stage") != "council_resume_ready"
+        or not isinstance(resume, dict)
+        or not isinstance(continuation, dict)
+        or not isinstance(continuation.get("next_stage"), str)
+        or not continuation["next_stage"].strip()
+        or len(continuation["next_stage"]) > 128
+    ):
+        raise ValueError("consumed_council_checkpoint_contract_invalid")
+
+    request_id = resume.get("request_id")
+    session_id = resume.get("session_id")
+    if (
+        not isinstance(resume.get("resume_event_id"), int)
+        or isinstance(resume.get("resume_event_id"), bool)
+        or resume["resume_event_id"] < 1
+        or not isinstance(resume.get("result_task_id"), int)
+        or isinstance(resume.get("result_task_id"), bool)
+        or resume["result_task_id"] < 1
+        or resume["result_task_id"] == context.task_id
+        or not isinstance(request_id, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", request_id)
+        or not isinstance(session_id, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session_id)
+        or parent_state.get("expected_council_request_id") != request_id
+        or parent_state.get("session_id") != session_id
+        or not isinstance(resume.get("result_artifact_ref"), str)
+        or not resume["result_artifact_ref"].strip()
+        or len(resume["result_artifact_ref"]) > 1024
+        or "?" in resume["result_artifact_ref"]
+        or "#" in resume["result_artifact_ref"]
+        or not isinstance(resume.get("result_sha256"), str)
+        or not re.fullmatch(r"[0-9a-f]{64}", resume["result_sha256"])
+        or resume.get("model_output_is_untrusted_data") is not True
+        or resume.get("execution_status") not in {"completed", "blocked", "failed", "cancelled"}
+    ):
+        raise ValueError("consumed_council_checkpoint_identity_invalid")
+
+    expected_payload_digest = parent_state.get("parent_task_payload_sha256")
+    if (
+        not isinstance(expected_payload_digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_payload_digest)
+        or expected_payload_digest != _payload_digest(_payload(task))
+    ):
+        raise ValueError("consumed_council_checkpoint_payload_mismatch")
+    return True
+
+
 def _client(factory: Callable[[], CouncilGatewayClient] | None) -> CouncilGatewayClient:
     return factory() if factory is not None else CouncilGatewayClient.from_environment()
 
@@ -258,6 +329,14 @@ def handle_council_request_in_parent_task(
     if not isinstance(task, dict) or task.get("task_id") != context.task_id:
         return TaskExecutionResult("blocked", "council_parent_task_identity_invalid")
 
+    try:
+        if _council_resume_already_consumed(task, context):
+            return TaskExecutionResult("completed")
+    except (TypeError, ValueError, KeyError):
+        return TaskExecutionResult("blocked", "council_resume_consumed_checkpoint_invalid")
+    except Exception:
+        return TaskExecutionResult("retry", "council_resume_checkpoint_unavailable", 90)
+
     loader = getattr(context, "load_council_resume", None)
     if not callable(loader):
         return TaskExecutionResult("blocked", "council_resume_loader_unavailable")
@@ -299,6 +378,7 @@ def handle_council_request_in_parent_task(
         if execution_status not in {"completed", "blocked", "failed", "cancelled"}:
             return TaskExecutionResult("blocked", "council_resume_status_invalid")
         decision_assessment = None
+        decision_policy = None
         if execution_status == "completed":
             try:
                 from .council_decision_adapter import build_council_decision_assessment
