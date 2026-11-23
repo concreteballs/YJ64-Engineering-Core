@@ -19,6 +19,7 @@ _STAGE_OPERATIONS = {
     "human_review": "engineering.human_review",
     "independent_domain_validation": "engineering.validate_domain",
 }
+SUPPORTED_EXECUTOR_OPERATIONS = frozenset(_STAGE_OPERATIONS.values())
 _POLICY_KEYS = {
     "schema_version", "source", "input_digest_sha256", "recommended_next_stage",
     "claim_checks", "review_flags", "rationale_codes", "authority",
@@ -75,7 +76,7 @@ def _verify_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("executor_policy_authority_invalid")
     stage = data["recommended_next_stage"]
-    if stage not in _STAGE_OPERATIONS:
+    if not isinstance(stage, str) or stage not in _STAGE_OPERATIONS:
         raise ValueError("executor_policy_stage_unsupported")
     supplied = data["policy_digest_sha256"]
     unsigned = dict(data)
@@ -89,6 +90,14 @@ def _verify_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
     parent_id = source.get("parent_task_id")
     if not isinstance(parent_id, int) or isinstance(parent_id, bool) or parent_id < 1:
         raise ValueError("executor_policy_parent_identity_invalid")
+    for key in ("request_id", "session_id"):
+        _nonempty(source.get(key), f"source_{key}", 256)
+    result_digest = source.get("result_sha256")
+    if (
+        not isinstance(result_digest, str) or len(result_digest) != 64
+        or any(ch not in "0123456789abcdef" for ch in result_digest)
+    ):
+        raise ValueError("executor_policy_result_digest_invalid")
     return data
 
 
@@ -102,9 +111,9 @@ def build_executor_intent(
 ) -> dict[str, Any]:
     """Build a typed handler request only after external approval verification.
 
-    The verifier must authenticate the issuer/signature and confirm that the
-    approval is still valid against the authoritative permission snapshot.
-    This function intentionally has no executor or command-running interface.
+    The verifier must authenticate the issuer/signature, reject replayed or
+    expired approvals, and confirm validity against the authoritative current
+    permission snapshot. This function intentionally has no command interface.
     """
     policy = _verify_policy(decision_policy)
     task = _nonempty(task_id, "task_id", 128)
@@ -116,8 +125,7 @@ def build_executor_intent(
 
     if not isinstance(approval, Mapping):
         raise ValueError("executor_approval_must_be_object")
-    approved = dict(approval)
-    _canonical(approved)
+    approved = json.loads(_canonical(dict(approval)).decode("utf-8"))
     if set(approved) != _APPROVAL_KEYS:
         raise ValueError("executor_approval_has_unscoped_fields")
 
@@ -145,17 +153,28 @@ def build_executor_intent(
     for key in ("artifact_refs", "resource_ids"):
         if key in scope:
             values = scope[key]
-            if not isinstance(values, list) or any(
-                not isinstance(item, str) or not item.strip() or len(item) > 1024
-                for item in values
+            if (
+                not isinstance(values, list) or not values
+                or any(
+                    not isinstance(item, str) or not item.strip() or len(item) > 1024
+                    for item in values
+                )
+                or len(set(values)) != len(values)
             ):
                 raise ValueError(f"executor_approval_{key}_invalid")
-    _canonical(scope)
+    if not any(key in scope for key in ("artifact_refs", "resource_ids")):
+        raise ValueError("executor_approval_scope_requires_resource_boundary")
+    scope = json.loads(_canonical(scope).decode("utf-8"))
 
+    if not callable(verify_approval):
+        raise ValueError("executor_approval_verifier_required")
+    approval_digest_before = hashlib.sha256(_canonical(approved)).hexdigest()
     try:
         verified = verify_approval(approved)
     except Exception:
         raise ValueError("executor_approval_verification_failed") from None
+    if hashlib.sha256(_canonical(approved)).hexdigest() != approval_digest_before:
+        raise ValueError("executor_approval_verifier_mutated_approval")
     if verified is not True:
         raise ValueError("executor_approval_not_verified")
 

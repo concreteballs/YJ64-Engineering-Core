@@ -1,15 +1,23 @@
 """Explicit dispatcher for engineering requests and backend adapters.
 
 The dispatcher never guesses which operation to run. Callers must choose
-"physics.<analysis_type>" or "cad.generate" explicitly.
+"physics.<analysis_type>" or "cad.generate" explicitly. Council-derived
+operations additionally require an externally verified approval and an
+explicitly registered typed handler; this class does not create a task loop.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import hashlib
+import json
 from typing import Any
 
+from .automation.executor_intent import (
+    SUPPORTED_EXECUTOR_OPERATIONS,
+    build_executor_intent,
+)
 from .contracts import ArtifactReference, EngineeringRequest, EngineeringResponse, SolverProvenance
 from .interfaces import CADBackend, PhysicsSolver
 from .models import AnalysisRequest, MaterialProperties
@@ -20,6 +28,13 @@ from .physics.statics import calculate_axial_member
 class DispatchResult:
     operation: str
     response: EngineeringResponse
+
+
+@dataclass(frozen=True)
+class ApprovedIntentDispatchResult:
+    operation: str
+    intent: dict[str, Any]
+    result: dict[str, Any]
 
 
 class AxialMemberSolver:
@@ -59,6 +74,9 @@ class EngineeringDispatcher:
     def __init__(self) -> None:
         self._physics_solvers: list[PhysicsSolver] = []
         self._cad_backends: dict[str, CADBackend] = {}
+        self._approved_intent_handlers: dict[
+            str, Callable[[Mapping[str, Any], Any], Mapping[str, Any]]
+        ] = {}
 
     def register_physics_solver(self, solver: PhysicsSolver) -> None:
         if not callable(getattr(solver, "supports", None)) or not callable(
@@ -75,6 +93,77 @@ class EngineeringDispatcher:
         if not callable(getattr(backend, "generate", None)):
             raise TypeError("CAD backend must implement generate()")
         self._cad_backends[name] = backend
+
+    def register_approved_intent_handler(
+        self,
+        operation: str,
+        handler: Callable[[Mapping[str, Any], Any], Mapping[str, Any]],
+    ) -> None:
+        """Register trusted code for one fixed operation; never register model text."""
+        if operation not in SUPPORTED_EXECUTOR_OPERATIONS:
+            raise ValueError("unsupported_approved_intent_operation")
+        if not callable(handler):
+            raise TypeError("approved intent handler must be callable")
+        if operation in self._approved_intent_handlers:
+            raise ValueError("approved intent handler is already registered")
+        self._approved_intent_handlers[operation] = handler
+
+    def dispatch_approved_intent(
+        self,
+        *,
+        decision_policy: Mapping[str, Any],
+        approval: Mapping[str, Any],
+        task_id: str,
+        permission_snapshot_digest: str,
+        verify_approval: Callable[[Mapping[str, Any]], bool],
+        execution_context: Any,
+    ) -> ApprovedIntentDispatchResult:
+        """Invoke only a registered typed handler after task-scoped approval.
+
+        The context must be the active parent TaskContext for the same task.
+        It is passed to trusted handler code so that continuation state can be
+        checkpointed by the existing worker. This method creates no queue,
+        worker, scheduler, or independent engineering cycle.
+        """
+        if execution_context is None:
+            raise ValueError("approved_intent_execution_context_required")
+        if str(getattr(execution_context, "task_id", None)) != str(task_id):
+            raise ValueError("approved_intent_context_task_mismatch")
+        if not callable(getattr(execution_context, "load_latest_checkpoint", None)) or not callable(
+            getattr(execution_context, "save_checkpoint", None)
+        ):
+            raise TypeError("approved_intent_requires_parent_task_context")
+
+        intent = build_executor_intent(
+            decision_policy=decision_policy,
+            approval=approval,
+            task_id=task_id,
+            permission_snapshot_digest=permission_snapshot_digest,
+            verify_approval=verify_approval,
+        )
+        handler = self._approved_intent_handlers.get(intent["operation"])
+        if handler is None:
+            raise LookupError("no_approved_intent_handler_registered")
+
+        handler_intent = json.loads(json.dumps(
+            intent, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ))
+        result = handler(handler_intent, execution_context)
+        if not isinstance(result, Mapping):
+            raise TypeError("approved_intent_handler_must_return_object")
+        try:
+            result_snapshot = json.loads(json.dumps(
+                dict(result), sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ))
+        except (TypeError, ValueError):
+            raise ValueError("approved_intent_handler_result_must_be_finite_json") from None
+        return ApprovedIntentDispatchResult(
+            operation=intent["operation"],
+            intent=intent,
+            result=result_snapshot,
+        )
 
     def dispatch(self, request: EngineeringRequest, operation: str) -> DispatchResult:
         if not isinstance(request, EngineeringRequest):
@@ -237,7 +326,6 @@ class EngineeringDispatcher:
             "length_m": geometry["length_m"],
             "material": material,
         }
-
 
     @staticmethod
     def _axial_truss_parameters(request: EngineeringRequest) -> dict[str, Any]:
