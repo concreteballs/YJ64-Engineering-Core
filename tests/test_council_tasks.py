@@ -608,5 +608,146 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(context.store.enqueued[0]["payload"]["reason"], "council_session_id_mismatch")
 
 
+    def test_terminal_council_resume_passes_none_policy_without_crashing(self):
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        context = FakeContext()
+        resume = self.council_resume(task=task)
+        resume["execution_status"] = "blocked"
+        resume["result"] = None
+        resume["terminal"] = {"status": "blocked", "reason": "upstream_unavailable"}
+        context.council_resume = resume
+        observed = {}
+
+        def continuation(original_task, original_context, value):
+            observed["assessment"] = value["decision_assessment"]
+            observed["policy"] = value["decision_policy"]
+            return TaskExecutionResult("blocked", "council_terminal_result")
+
+        result = handle_council_request_in_parent_task(
+            task, context, continuation_handler=continuation,
+        )
+        self.assertEqual(result, TaskExecutionResult("blocked", "council_terminal_result"))
+        self.assertIsNone(observed["assessment"])
+        self.assertIsNone(observed["policy"])
+        self.assertEqual(context.store.enqueued, [])
+
+    def test_worker_restart_after_resume_checkpoint_does_not_resubmit_council(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        payload_digest = hashlib.sha256(json.dumps(
+            task["payload"], sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        original = self.parent_checkpoint(task)
+        parent_state = {
+            **original["task_state"],
+            "stage": "council_resume_ready",
+            "expected_council_request_id": "request-123",
+            "session_id": "session-123",
+            "parent_task_payload_sha256": payload_digest,
+        }
+        resume = {
+            "resume_event_id": 7,
+            "request_id": "request-123",
+            "session_id": "session-123",
+            "result_task_id": 43,
+            "result_artifact_ref": "private://council/result-123",
+            "result_sha256": "a" * 64,
+            "execution_status": "completed",
+            "result": {"summary": "Validated result remains untrusted."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        consumed_state = {
+            **parent_state,
+            "stage": "parent_resume_consumed",
+            "parent_task_state": parent_state,
+            "continuation": {
+                "next_stage": "collect_independent_evidence",
+                "idempotency_key": "yj64-executor-v1:" + "b" * 64,
+            },
+            "resume_kind": "council",
+            "resume_consumed": True,
+            "council_resume": resume,
+        }
+        context = FakeContext()
+        context.latest_checkpoint = create_checkpoint(
+            task_id="42", sequence=3, state="checkpointed",
+            task_spec_version=original["task_spec_version"],
+            task_state=consumed_state,
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"],
+            previous_checkpoint_hash=original["checkpoint_hash"],
+        )
+        client = FakeClient()
+
+        result = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+            continuation_handler=lambda *_: self.fail("consumed continuation must not run twice"),
+        )
+        self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(client.submit_calls, 0)
+        self.assertEqual(context.resume_load_count, 0)
+        self.assertEqual(context.store.enqueued, [])
+
+    def test_worker_restart_rejects_consumed_checkpoint_for_changed_parent_payload(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        original = self.parent_checkpoint(task)
+        parent_state = {
+            **original["task_state"],
+            "stage": "council_resume_ready",
+            "expected_council_request_id": "request-123",
+            "session_id": "session-123",
+            "parent_task_payload_sha256": "a" * 64,
+        }
+        resume = {
+            "resume_event_id": 7, "request_id": "request-123",
+            "session_id": "session-123", "result_task_id": 43,
+            "result_artifact_ref": "private://council/result-123",
+            "result_sha256": "b" * 64, "execution_status": "completed",
+            "result": {"summary": "untrusted"}, "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        context = FakeContext()
+        context.latest_checkpoint = create_checkpoint(
+            task_id="42", sequence=3, state="checkpointed",
+            task_spec_version=original["task_spec_version"],
+            task_state={
+                **parent_state,
+                "stage": "parent_resume_consumed",
+                "parent_task_state": parent_state,
+                "continuation": {"next_stage": "collect_independent_evidence"},
+                "resume_kind": "council", "resume_consumed": True,
+                "council_resume": resume,
+            },
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"],
+            previous_checkpoint_hash=original["checkpoint_hash"],
+        )
+        client = FakeClient()
+        result = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+        )
+        self.assertEqual(
+            result,
+            TaskExecutionResult("blocked", "council_resume_consumed_checkpoint_invalid"),
+        )
+        self.assertEqual(client.submit_calls, 0)
+        self.assertEqual(context.store.enqueued, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -92,6 +92,15 @@ def _verify_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("executor_policy_parent_identity_invalid")
     for key in ("request_id", "session_id"):
         _nonempty(source.get(key), f"source_{key}", 256)
+    if set(source) != {"parent_task_id", "request_id", "session_id", "result_sha256"}:
+        raise ValueError("executor_policy_source_has_unscoped_fields")
+    for digest_key in ("input_digest_sha256",):
+        digest_value = data.get(digest_key)
+        if (
+            not isinstance(digest_value, str) or len(digest_value) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest_value)
+        ):
+            raise ValueError(f"executor_policy_{digest_key}_invalid")
     result_digest = source.get("result_sha256")
     if (
         not isinstance(result_digest, str) or len(result_digest) != 64
@@ -154,7 +163,7 @@ def build_executor_intent(
         if key in scope:
             values = scope[key]
             if (
-                not isinstance(values, list) or not values
+                not isinstance(values, list) or not values or len(values) > 100
                 or any(
                     not isinstance(item, str) or not item.strip() or len(item) > 1024
                     for item in values
@@ -178,11 +187,25 @@ def build_executor_intent(
     if verified is not True:
         raise ValueError("executor_approval_not_verified")
 
+    # Authorization is revalidated on every attempt, but it is not part of the
+    # logical operation identity. A refreshed permission snapshot must not turn
+    # a retry after an uncertain external side effect into a second operation.
+    idempotency_material = {
+        "task_id": task,
+        "policy_digest_sha256": policy["policy_digest_sha256"],
+        "operation": operation,
+        "scope": scope,
+    }
+    idempotency_key = "yj64-executor-v1:" + hashlib.sha256(
+        _canonical(idempotency_material)
+    ).hexdigest()
+
     return {
         "schema_version": SCHEMA_VERSION,
         "task_id": task,
         "policy_digest_sha256": policy["policy_digest_sha256"],
         "operation": operation,
+        "idempotency_key": idempotency_key,
         "approval": {
             "approval_id": approved["approval_id"],
             "issuer": approved["issuer"],

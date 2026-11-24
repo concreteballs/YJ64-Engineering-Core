@@ -156,5 +156,24 @@ class ExecutorIntentTests(unittest.TestCase):
             )
 
 
+    def test_idempotency_key_survives_permission_snapshot_refresh(self):
+        policy = make_policy()
+        first_approval = make_approval(policy)
+        second_approval = make_approval(policy)
+        second_approval["permission_snapshot_digest"] = "d" * 64
+
+        first = build_executor_intent(
+            decision_policy=policy, approval=first_approval, task_id="42",
+            permission_snapshot_digest="c" * 64,
+            verify_approval=lambda _: True,
+        )
+        second = build_executor_intent(
+            decision_policy=policy, approval=second_approval, task_id="42",
+            permission_snapshot_digest="d" * 64,
+            verify_approval=lambda _: True,
+        )
+        self.assertEqual(first["idempotency_key"], second["idempotency_key"])
+
+
 if __name__ == "__main__":
     unittest.main()
