@@ -54,8 +54,9 @@ def make_approved_council_continuation(
     """Create a parent continuation that dispatches only an approved typed intent.
 
     Registered domain handlers must be idempotent by intent.idempotency_key.
-    This key is stable across worker retries for the same task, policy, permission
-    snapshot, operation, and resource scope. A handler must persist/deduplicate
+    This key is stable across worker retries for the same task, policy, operation,
+    and resource scope, even if the permission snapshot is refreshed. Authorization
+    is revalidated independently on every attempt. A handler must persist/deduplicate
     its own domain operation using that key before performing external effects.
     """
     if not callable(getattr(dispatcher, "dispatch_approved_intent", None)):
