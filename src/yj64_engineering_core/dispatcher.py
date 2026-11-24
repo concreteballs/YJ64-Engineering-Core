@@ -105,7 +105,7 @@ class EngineeringDispatcher:
         if not callable(handler):
             raise TypeError("approved intent handler must be callable")
         if operation in self._approved_intent_handlers:
-            raise ValueError("approved intent handler is already registered")
+            raise ValueError("approved_intent_handler_already_registered")
         self._approved_intent_handlers[operation] = handler
 
     def dispatch_approved_intent(
