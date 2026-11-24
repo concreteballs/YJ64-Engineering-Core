@@ -187,11 +187,13 @@ def build_executor_intent(
     if verified is not True:
         raise ValueError("executor_approval_not_verified")
 
+    # Authorization is revalidated on every attempt, but it is not part of the
+    # logical operation identity. A refreshed permission snapshot must not turn
+    # a retry after an uncertain external side effect into a second operation.
     idempotency_material = {
         "task_id": task,
         "policy_digest_sha256": policy["policy_digest_sha256"],
         "operation": operation,
-        "permission_snapshot_digest": permission_digest,
         "scope": scope,
     }
     idempotency_key = "yj64-executor-v1:" + hashlib.sha256(
