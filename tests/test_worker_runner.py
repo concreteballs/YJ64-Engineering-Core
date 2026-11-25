@@ -240,6 +240,15 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual(latest["budgets"], original["budgets"])
         self.assertEqual(latest["approvals"], original["approvals"])
         self.assertTrue(context._resume_checkpoint_is_consumed(latest, kind="council"))
+        self.assertTrue(context.checkpoint_council_parent_progress(next_stage="completed"))
+
+        restarted_context = TaskContext(
+            store=store, task_id=7, worker_id="worker-b",
+            lease_seconds=300, task_payload=task["payload"],
+        )
+        terminal_progress = restarted_context.load_council_parent_continuation()
+        self.assertEqual(terminal_progress["checkpoint"]["task_state"]["stage"], "completed")
+        self.assertFalse(restarted_context._council_resume_required)
 
     def test_council_resume_requires_a_positive_durable_event_id(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
