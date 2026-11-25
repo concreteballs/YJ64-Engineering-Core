@@ -385,6 +385,11 @@ def handle_council_request_in_parent_task(
     history, budgets, approvals, and artifacts. Its payload digest binds the
     resumed callback to the same durable queue row. Council prose remains
     untrusted analytical data and is never interpreted as commands.
+
+    The approved continuation handler consumes the Council result and performs
+    at most the approved typed operation. The separate parent_cycle_handler
+    must then advance the original task through the existing cycle and persist
+    progress. A consumed result alone never completes the parent task.
     """
     if continuation_handler is not None and not callable(continuation_handler):
         return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
