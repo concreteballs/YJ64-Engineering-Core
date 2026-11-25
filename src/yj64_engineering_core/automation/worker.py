@@ -203,7 +203,13 @@ class TaskContext:
         ):
             raise ValueError("resume checkpoint requires an explicit next_stage")
         for key, value in parent_state.items():
-            if key != "stage" and state.get(key) != value:
+            if key == "stage":
+                continue
+            if key in {"decision_log", "history"} and isinstance(value, list):
+                current_items = state.get(key)
+                if not isinstance(current_items, list) or current_items[:len(value)] != value:
+                    raise ValueError("resume checkpoint changed original parent history")
+            elif state.get(key) != value:
                 raise ValueError("resume checkpoint changed original parent state")
         allowed_keys = set(parent_state) | {
             "parent_task_state", "resume_kind", "resume_consumed", "continuation", resume_key,
@@ -221,7 +227,12 @@ class TaskContext:
             ):
                 raise ValueError("resume checkpoint must extend the latest checkpoint")
             if previous.get("checkpoint_hash") == base.get("checkpoint_hash"):
-                if state.get("stage") != "parent_resume_consumed":
+                if base_state.get("resume_consumed") is True:
+                    if state.get("stage") in {
+                        "parent_resume_consumed", "council_resume_ready", "parent_resume_ready",
+                    }:
+                        raise ValueError("parent continuation must advance beyond the consumed checkpoint")
+                elif state.get("stage") != "parent_resume_consumed":
                     raise ValueError("first resume checkpoint must mark the result consumed")
             else:
                 previous_state = previous.get("task_state")
@@ -231,8 +242,23 @@ class TaskContext:
                     or previous_state.get("resume_kind") != kind
                     or previous_state.get("resume_consumed") is not True
                     or previous_state.get(resume_key) != base_state.get(resume_key)
+                    or previous_state.get("continuation") != state.get("continuation")
                 ):
                     raise ValueError("resume checkpoint chain lost its original parent context")
+                for key in ("decision_log", "history"):
+                    previous_items = previous_state.get(key)
+                    current_items = state.get(key)
+                    if isinstance(previous_items, list) and (
+                        not isinstance(current_items, list)
+                        or current_items[:len(previous_items)] != previous_items
+                    ):
+                        raise ValueError("resume checkpoint history must be append-only")
+                previous_artifacts = previous.get("artifact_refs", [])
+                if (
+                    not isinstance(previous_artifacts, list)
+                    or current_artifacts[:len(previous_artifacts)] != previous_artifacts
+                ):
+                    raise ValueError("resume checkpoint artifacts must be append-only")
         return True
 
     def _validate_resume_checkpoint_write(self, checkpoint: dict) -> None:
@@ -426,6 +452,175 @@ class TaskContext:
                 key: value for key, value in state.items() if key != "council_resume"
             },
         }
+
+    def load_council_parent_continuation(self) -> dict | None:
+        """Bind an already-consumed Council result for crash-safe parent-cycle continuation."""
+        from .checkpoints import verify_checkpoint
+
+        checkpoint = self.load_latest_checkpoint()
+        if checkpoint is None:
+            return None
+        verify_checkpoint(checkpoint)
+        if checkpoint.get("task_id") != str(self.task_id):
+            raise ValueError("council parent continuation task identity mismatch")
+        state = checkpoint.get("task_state")
+        if not isinstance(state, dict):
+            raise ValueError("council parent continuation state invalid")
+        if state.get("resume_kind") == "child":
+            return None
+        if state.get("resume_kind") != "council" or state.get("resume_consumed") is not True:
+            return None
+        stage = state.get("stage")
+        parent_state = state.get("parent_task_state")
+        resume = state.get("council_resume")
+        continuation = state.get("continuation")
+        if (
+            not isinstance(stage, str) or not stage.strip() or len(stage) > 128
+            or stage in {"council_resume_ready", "parent_resume_ready"}
+            or not isinstance(parent_state, dict)
+            or parent_state.get("stage") != "council_resume_ready"
+            or not isinstance(resume, dict)
+            or not isinstance(continuation, dict)
+            or not isinstance(continuation.get("next_stage"), str)
+            or not continuation["next_stage"].strip()
+            or len(continuation["next_stage"]) > 128
+        ):
+            raise ValueError("council parent continuation checkpoint contract invalid")
+        request_id = resume.get("request_id")
+        session_id = resume.get("session_id")
+        if (
+            not isinstance(resume.get("resume_event_id"), int)
+            or isinstance(resume.get("resume_event_id"), bool)
+            or resume["resume_event_id"] < 1
+            or not isinstance(resume.get("result_task_id"), int)
+            or isinstance(resume.get("result_task_id"), bool)
+            or resume["result_task_id"] < 1
+            or resume["result_task_id"] == self.task_id
+            or not isinstance(request_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", request_id)
+            or not isinstance(session_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", session_id)
+            or parent_state.get("expected_council_request_id") != request_id
+            or parent_state.get("session_id") != session_id
+            or not isinstance(resume.get("result_artifact_ref"), str)
+            or not resume["result_artifact_ref"].strip()
+            or len(resume["result_artifact_ref"]) > 1024
+            or "?" in resume["result_artifact_ref"]
+            or "#" in resume["result_artifact_ref"]
+            or not isinstance(resume.get("result_sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", resume["result_sha256"])
+            or resume.get("model_output_is_untrusted_data") is not True
+            or resume.get("execution_status") not in {"completed", "blocked", "failed", "cancelled"}
+        ):
+            raise ValueError("council parent continuation identity invalid")
+
+        expected_payload_digest = parent_state.get("parent_task_payload_sha256")
+        raw_payload = self.task_payload
+        if isinstance(raw_payload, str):
+            try:
+                raw_payload = json.loads(raw_payload)
+            except (TypeError, ValueError):
+                raise ValueError("council parent continuation payload invalid") from None
+        if not isinstance(raw_payload, Mapping):
+            raise ValueError("council parent continuation payload unavailable")
+        try:
+            actual_payload_digest = hashlib.sha256(json.dumps(
+                dict(raw_payload), sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ).encode("utf-8")).hexdigest()
+        except (TypeError, ValueError):
+            raise ValueError("council parent continuation payload invalid") from None
+        if (
+            not isinstance(expected_payload_digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected_payload_digest)
+            or actual_payload_digest != expected_payload_digest
+        ):
+            raise ValueError("council parent continuation payload digest mismatch")
+
+        object.__setattr__(self, "_council_resume_required", True)
+        object.__setattr__(self, "_council_resume_loaded", True)
+        object.__setattr__(self, "_council_resume_expected_request_id", request_id)
+        object.__setattr__(self, "_council_resume_base_checkpoint", self._resume_json_snapshot(checkpoint))
+        object.__setattr__(self, "_council_resume_parent_state", self._resume_json_snapshot(parent_state))
+        try:
+            self._validate_resume_checkpoint_payload(checkpoint)
+        except Exception:
+            object.__setattr__(self, "_council_resume_required", False)
+            object.__setattr__(self, "_council_resume_loaded", False)
+            object.__setattr__(self, "_council_resume_base_checkpoint", None)
+            object.__setattr__(self, "_council_resume_parent_state", None)
+            raise
+        if stage == "completed":
+            # A crash may occur after the terminal parent checkpoint but before
+            # the queue row is completed. Verify it, then let WorkerRunner finish
+            # the row without demanding another checkpoint.
+            object.__setattr__(self, "_council_resume_required", False)
+            object.__setattr__(self, "_council_resume_loaded", False)
+            object.__setattr__(self, "_council_resume_expected_request_id", None)
+            object.__setattr__(self, "_council_resume_base_checkpoint", None)
+            object.__setattr__(self, "_council_resume_parent_state", None)
+        return {
+            "checkpoint": self._resume_json_snapshot(checkpoint),
+            "parent_task_state": self._resume_json_snapshot(parent_state),
+            "council_resume": self._resume_json_snapshot(resume),
+            "continuation": self._resume_json_snapshot(continuation),
+        }
+
+    def checkpoint_council_parent_progress(
+        self, *, next_stage: str, history_append: Sequence[dict] = (),
+        decision_log_append: Sequence[dict] = (), artifact_refs_append: Sequence[str] = (),
+    ) -> bool:
+        """Persist parent-authored progress after consuming Council, preserving immutable context."""
+        if (
+            not isinstance(next_stage, str) or not next_stage.strip() or len(next_stage) > 128
+            or next_stage in {"council_resume_ready", "parent_resume_ready", "parent_resume_consumed"}
+        ):
+            raise ValueError("council parent progress stage invalid")
+        if not self._council_resume_required or not self._council_resume_loaded:
+            raise ValueError("council parent continuation must be loaded before progress checkpointing")
+        previous = self.load_latest_checkpoint()
+        if not isinstance(previous, dict):
+            raise ValueError("council parent progress checkpoint unavailable")
+        from .checkpoints import create_checkpoint, verify_checkpoint
+        verify_checkpoint(previous)
+        self._validate_resume_checkpoint_payload(previous)
+        state = self._resume_json_snapshot(previous.get("task_state", {}))
+        for field_name, additions in (
+            ("history", history_append), ("decision_log", decision_log_append),
+        ):
+            if isinstance(additions, (str, bytes)) or not isinstance(additions, (list, tuple)):
+                raise ValueError(f"{field_name}_append must be a list")
+            if additions:
+                existing = state.get(field_name)
+                if not isinstance(existing, list):
+                    raise ValueError(f"{field_name} is not available for append-only continuation")
+                appended = self._resume_json_snapshot({"items": list(additions)})["items"]
+                if any(not isinstance(item, dict) for item in appended):
+                    raise ValueError(f"{field_name}_append entries must be objects")
+                state[field_name] = [*existing, *appended]
+        if isinstance(artifact_refs_append, (str, bytes)) or not isinstance(
+            artifact_refs_append, (list, tuple)
+        ):
+            raise ValueError("artifact_refs_append must be a list")
+        appended_refs = list(artifact_refs_append)
+        if any(
+            not isinstance(ref, str) or not ref.strip() or len(ref) > 1024
+            for ref in appended_refs
+        ):
+            raise ValueError("artifact_refs_append contains an invalid reference")
+        artifacts = list(previous.get("artifact_refs", []))
+        if len(set(artifacts + appended_refs)) != len(artifacts + appended_refs):
+            raise ValueError("artifact_refs_append contains duplicates")
+        state["stage"] = next_stage
+        checkpoint = create_checkpoint(
+            task_id=str(self.task_id), sequence=previous["sequence"] + 1,
+            state="checkpointed", task_spec_version=previous["task_spec_version"],
+            task_state=state, budgets=previous.get("budgets", {}),
+            approvals=previous.get("approvals", {}),
+            artifact_refs=[*artifacts, *appended_refs],
+            previous_checkpoint_hash=previous["checkpoint_hash"],
+        )
+        return bool(self.save_checkpoint(checkpoint))
 
     def checkpoint_council_resume_consumed(self, continuation: dict) -> bool:
         """Persist the parent-authored next step without replacing its original context."""

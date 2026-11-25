@@ -154,6 +154,102 @@ class WorkerRunnerTests(unittest.TestCase):
             ["private://source/evidence-1", "private://council/result-1"],
         )
 
+    def test_council_parent_continuation_can_checkpoint_append_only_progress(self):
+        import hashlib
+        import json
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.worker import TaskContext
+
+        task = self.task()
+        payload_digest = hashlib.sha256(json.dumps(
+            task["payload"], sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        parent_state = {
+            "stage": "council_resume_ready",
+            "objective": "preserve the original engineering objective",
+            "context": {"project": "original-project"},
+            "decision_log": [{"id": "decision-1", "value": "retain"}],
+            "history": [{"event": "parent-created"}],
+            "expected_council_request_id": "request-resume-7",
+            "session_id": "session-resume-7",
+            "parent_task_payload_sha256": payload_digest,
+        }
+        resume = {
+            "resume_event_id": 7,
+            "request_id": "request-resume-7",
+            "session_id": "session-resume-7",
+            "result_task_id": 71,
+            "result_artifact_ref": "private://council/result-7",
+            "result_sha256": "a" * 64,
+            "execution_status": "completed",
+            "result": {"summary": "Untrusted Council analysis."},
+            "model_output_is_untrusted_data": True,
+        }
+        original = create_checkpoint(
+            task_id="7", sequence=1, state="running",
+            task_spec_version="engineering.v1", task_state=parent_state,
+            budgets={"tokens": 1000}, approvals={"repository_write": False},
+            artifact_refs=["private://source/evidence-1"],
+        )
+        consumed_state = {
+            **parent_state,
+            "stage": "parent_resume_consumed",
+            "parent_task_state": parent_state,
+            "continuation": {"next_stage": "collect_independent_evidence"},
+            "resume_kind": "council",
+            "resume_consumed": True,
+            "council_resume": resume,
+        }
+        consumed = create_checkpoint(
+            task_id="7", sequence=2, state="checkpointed",
+            task_spec_version="engineering.v1", task_state=consumed_state,
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"],
+            previous_checkpoint_hash=original["checkpoint_hash"],
+        )
+        store = FakeStore(task)
+        store.checkpoint = consumed
+        context = TaskContext(
+            store=store, task_id=7, worker_id="worker-a",
+            lease_seconds=300, task_payload=task["payload"],
+        )
+
+        loaded = context.load_council_parent_continuation()
+        self.assertEqual(loaded["parent_task_state"]["objective"], parent_state["objective"])
+        self.assertTrue(context.checkpoint_council_parent_progress(
+            next_stage="engineering_validation",
+            history_append=[{"event": "council-result-consumed"}],
+            decision_log_append=[{"id": "decision-2", "value": "validate"}],
+            artifact_refs_append=["private://engineering/validation-1"],
+        ))
+        latest = context.load_latest_checkpoint()
+        self.assertEqual(latest["task_state"]["stage"], "engineering_validation")
+        self.assertEqual(
+            latest["task_state"]["history"],
+            parent_state["history"] + [{"event": "council-result-consumed"}],
+        )
+        self.assertEqual(
+            latest["task_state"]["decision_log"],
+            parent_state["decision_log"] + [{"id": "decision-2", "value": "validate"}],
+        )
+        self.assertEqual(
+            latest["artifact_refs"],
+            original["artifact_refs"] + ["private://engineering/validation-1"],
+        )
+        self.assertEqual(latest["budgets"], original["budgets"])
+        self.assertEqual(latest["approvals"], original["approvals"])
+        self.assertTrue(context._resume_checkpoint_is_consumed(latest, kind="council"))
+        self.assertTrue(context.checkpoint_council_parent_progress(next_stage="completed"))
+
+        restarted_context = TaskContext(
+            store=store, task_id=7, worker_id="worker-b",
+            lease_seconds=300, task_payload=task["payload"],
+        )
+        terminal_progress = restarted_context.load_council_parent_continuation()
+        self.assertEqual(terminal_progress["checkpoint"]["task_state"]["stage"], "completed")
+        self.assertFalse(restarted_context._council_resume_required)
+
     def test_council_resume_requires_a_positive_durable_event_id(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
         from yj64_engineering_core.automation.worker import TaskContext

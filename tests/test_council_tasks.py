@@ -57,6 +57,50 @@ class FakeContext:
 
     def checkpoint_council_resume_consumed(self, continuation):
         self.resume_continuation = continuation
+        self.latest_checkpoint = {
+            "task_id": str(self.task_id),
+            "sequence": 2,
+            "checkpoint_hash": "consumed-checkpoint",
+            "task_state": {"stage": "parent_resume_consumed"},
+        }
+        return True
+
+    def load_council_parent_continuation(self):
+        checkpoint = self.latest_checkpoint or {
+            "task_id": str(self.task_id),
+            "sequence": 1,
+            "checkpoint_hash": "consumed-checkpoint",
+            "task_state": {"stage": "parent_resume_consumed"},
+        }
+        return {
+            "checkpoint": checkpoint,
+            "parent_task_state": {},
+            "council_resume": self.council_resume or {},
+            "continuation": self.resume_continuation or {"next_stage": "collect_independent_evidence"},
+        }
+
+    def checkpoint_council_parent_progress(
+        self, *, next_stage, history_append=(), decision_log_append=(), artifact_refs_append=(),
+    ):
+        previous = self.latest_checkpoint or {
+            "task_id": str(self.task_id), "sequence": 1,
+            "checkpoint_hash": "consumed-checkpoint",
+            "task_state": {"stage": "parent_resume_consumed"},
+        }
+        previous_append = getattr(self, "progress_append", {
+            "history": [], "decision_log": [], "artifact_refs": [],
+        })
+        self.progress_append = {
+            "history": previous_append["history"] + list(history_append),
+            "decision_log": previous_append["decision_log"] + list(decision_log_append),
+            "artifact_refs": previous_append["artifact_refs"] + list(artifact_refs_append),
+        }
+        self.latest_checkpoint = {
+            "task_id": str(self.task_id),
+            "sequence": previous["sequence"] + 1,
+            "checkpoint_hash": "progress-" + str(previous["sequence"] + 1),
+            "task_state": {"stage": next_stage},
+        }
         return True
 
     def save_checkpoint(self, checkpoint):
@@ -434,11 +478,26 @@ class CouncilTaskTests(unittest.TestCase):
             self.assertTrue(consumed)
             return TaskExecutionResult("completed")
 
+        def parent_cycle_handler(original_task, original_context, progress):
+            self.assertEqual(progress["checkpoint"]["task_state"]["stage"], "parent_resume_consumed")
+            self.assertTrue(original_context.checkpoint_council_parent_progress(
+                next_stage="engineering_validation",
+                history_append=[{"event": "council-result-consumed"}],
+                decision_log_append=[{"id": "decision-2", "value": "validate"}],
+                artifact_refs_append=["private://engineering/validation-2"],
+            ))
+            self.assertTrue(original_context.checkpoint_council_parent_progress(
+                next_stage="completed",
+                history_append=[{"event": "parent-cycle-completed"}],
+            ))
+            return TaskExecutionResult("completed")
+
         result = handle_council_request_in_parent_task(
             task,
             context,
             client_factory=lambda: FakeClient(),
             continuation_handler=continuation_handler,
+            parent_cycle_handler=parent_cycle_handler,
         )
         self.assertEqual(result, TaskExecutionResult("completed"))
         self.assertEqual(context.resume_load_count, 1)
@@ -450,6 +509,13 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertIn("arbitrary shell command", observed["summary"])
         self.assertEqual(observed["dispatch_status"], "screening_only")
         self.assertEqual(observed["policy_next_stage"], "collect_independent_evidence")
+        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
+        self.assertEqual(context.progress_append["history"], [
+            {"event": "council-result-consumed"},
+            {"event": "parent-cycle-completed"},
+        ])
+        self.assertEqual(context.progress_append["decision_log"], [{"id": "decision-2", "value": "validate"}])
+        self.assertEqual(context.progress_append["artifact_refs"], ["private://engineering/validation-2"])
         self.assertEqual(context.resume_continuation["operation"], "physics.axial_member")
         self.assertEqual(context.resume_continuation["decision_authority"], "advisory_only")
         self.assertFalse(context.resume_continuation["execution_allowed"])
@@ -689,14 +755,187 @@ class CouncilTaskTests(unittest.TestCase):
         )
         client = FakeClient()
 
+        continuation_handler = lambda *_: self.fail("consumed continuation must not run twice")
+        blocked = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+            continuation_handler=continuation_handler,
+        )
+        self.assertEqual(
+            blocked,
+            TaskExecutionResult("blocked", "council_parent_cycle_continuation_unconfigured"),
+        )
+        self.assertEqual(client.submit_calls, 0)
+
+        def parent_cycle_handler(original_task, original_context, progress):
+            self.assertEqual(progress["checkpoint"]["task_state"]["stage"], "parent_resume_consumed")
+            self.assertTrue(original_context.checkpoint_council_parent_progress(
+                next_stage="completed",
+                history_append=[{"event": "restart-resumed"}],
+            ))
+            return TaskExecutionResult("completed")
+
         result = handle_council_request_in_parent_task(
             task, context, client_factory=lambda: client,
-            continuation_handler=lambda *_: self.fail("consumed continuation must not run twice"),
+            continuation_handler=continuation_handler,
+            parent_cycle_handler=parent_cycle_handler,
         )
         self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
         self.assertEqual(client.submit_calls, 0)
         self.assertEqual(context.resume_load_count, 0)
         self.assertEqual(context.store.enqueued, [])
+
+    def test_parent_resume_does_not_complete_without_parent_cycle_handler(self):
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        context = FakeContext()
+        context.council_resume = self.council_resume(task=task)
+
+        result = handle_council_request_in_parent_task(
+            task, context,
+            continuation_handler=lambda _task, ctx, _resume: (
+                ctx.checkpoint_council_resume_consumed({"next_stage": "collect_independent_evidence"})
+                and TaskExecutionResult("completed")
+            ),
+        )
+        self.assertEqual(
+            result,
+            TaskExecutionResult("blocked", "council_parent_cycle_continuation_unconfigured"),
+        )
+
+    def test_parent_cycle_completion_requires_a_new_progress_checkpoint(self):
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        context = FakeContext()
+        context.council_resume = self.council_resume(task=task)
+
+        result = handle_council_request_in_parent_task(
+            task, context,
+            continuation_handler=lambda _task, ctx, _resume: (
+                ctx.checkpoint_council_resume_consumed({"next_stage": "collect_independent_evidence"})
+                and TaskExecutionResult("completed")
+            ),
+            parent_cycle_handler=lambda *_: TaskExecutionResult("completed"),
+        )
+        self.assertEqual(
+            result,
+            TaskExecutionResult("blocked", "council_parent_cycle_progress_not_checkpointed"),
+        )
+
+    def test_parent_cycle_cannot_mark_nonterminal_stage_completed(self):
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        context = FakeContext()
+        context.council_resume = self.council_resume(task=task)
+
+        result = handle_council_request_in_parent_task(
+            task, context,
+            continuation_handler=lambda _task, ctx, _resume: (
+                ctx.checkpoint_council_resume_consumed({"next_stage": "collect_independent_evidence"})
+                and TaskExecutionResult("completed")
+            ),
+            parent_cycle_handler=lambda _task, ctx, _progress: (
+                ctx.checkpoint_council_parent_progress(next_stage="engineering_validation")
+                and TaskExecutionResult("completed")
+            ),
+        )
+        self.assertEqual(
+            result,
+            TaskExecutionResult("blocked", "council_parent_cycle_terminal_stage_invalid"),
+        )
+
+    def test_worker_restart_resumes_from_append_only_parent_progress_without_replaying_executor(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        payload_digest = hashlib.sha256(json.dumps(
+            task["payload"], sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        original = self.parent_checkpoint(task)
+        parent_state = {
+            **original["task_state"],
+            "stage": "council_resume_ready",
+            "expected_council_request_id": "request-123",
+            "session_id": "session-123",
+            "parent_task_payload_sha256": payload_digest,
+        }
+        resume = {
+            "resume_event_id": 8,
+            "request_id": "request-123",
+            "session_id": "session-123",
+            "result_task_id": 44,
+            "result_artifact_ref": "private://council/result-123",
+            "result_sha256": "c" * 64,
+            "execution_status": "completed",
+            "result": {"summary": "Already consumed Council result."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        consumed_state = {
+            **parent_state,
+            "stage": "parent_resume_consumed",
+            "parent_task_state": parent_state,
+            "continuation": {"next_stage": "collect_independent_evidence"},
+            "resume_kind": "council",
+            "resume_consumed": True,
+            "council_resume": resume,
+        }
+        consumed = create_checkpoint(
+            task_id="42", sequence=2, state="checkpointed",
+            task_spec_version=original["task_spec_version"],
+            task_state=consumed_state,
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"],
+            previous_checkpoint_hash=original["checkpoint_hash"],
+        )
+        progressed_state = {
+            **consumed_state,
+            "stage": "engineering_validation",
+            "history": consumed_state["history"] + [{"event": "evidence-collected"}],
+            "decision_log": consumed_state["decision_log"] + [{"id": "decision-2", "value": "validate"}],
+        }
+        progressed = create_checkpoint(
+            task_id="42", sequence=3, state="checkpointed",
+            task_spec_version=original["task_spec_version"],
+            task_state=progressed_state,
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"] + ["private://engineering/evidence-2"],
+            previous_checkpoint_hash=consumed["checkpoint_hash"],
+        )
+        context = FakeContext()
+        context.latest_checkpoint = progressed
+        client = FakeClient()
+        cycle_calls = []
+
+        def parent_cycle_handler(original_task, original_context, progress):
+            cycle_calls.append(progress["checkpoint"]["task_state"]["stage"])
+            self.assertEqual(progress["checkpoint"]["task_state"]["history"][-1], {"event": "evidence-collected"})
+            self.assertTrue(original_context.checkpoint_council_parent_progress(next_stage="completed"))
+            return TaskExecutionResult("completed")
+
+        result = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+            continuation_handler=lambda *_: self.fail("executor must not be replayed"),
+            parent_cycle_handler=parent_cycle_handler,
+        )
+        self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(cycle_calls, ["engineering_validation"])
+        self.assertEqual(client.submit_calls, 0)
+        self.assertEqual(context.resume_load_count, 0)
+        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
 
     def test_worker_restart_rejects_consumed_checkpoint_for_changed_parent_payload(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
