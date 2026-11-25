@@ -825,6 +825,90 @@ class CouncilTaskTests(unittest.TestCase):
             TaskExecutionResult("blocked", "council_parent_cycle_progress_not_checkpointed"),
         )
 
+    def test_worker_restart_resumes_from_append_only_parent_progress_without_replaying_executor(self):
+        from yj64_engineering_core.automation.checkpoints import create_checkpoint
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        payload_digest = hashlib.sha256(json.dumps(
+            task["payload"], sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        original = self.parent_checkpoint(task)
+        parent_state = {
+            **original["task_state"],
+            "stage": "council_resume_ready",
+            "expected_council_request_id": "request-123",
+            "session_id": "session-123",
+            "parent_task_payload_sha256": payload_digest,
+        }
+        resume = {
+            "resume_event_id": 8,
+            "request_id": "request-123",
+            "session_id": "session-123",
+            "result_task_id": 44,
+            "result_artifact_ref": "private://council/result-123",
+            "result_sha256": "c" * 64,
+            "execution_status": "completed",
+            "result": {"summary": "Already consumed Council result."},
+            "terminal": None,
+            "model_output_is_untrusted_data": True,
+        }
+        consumed_state = {
+            **parent_state,
+            "stage": "parent_resume_consumed",
+            "parent_task_state": parent_state,
+            "continuation": {"next_stage": "collect_independent_evidence"},
+            "resume_kind": "council",
+            "resume_consumed": True,
+            "council_resume": resume,
+        }
+        consumed = create_checkpoint(
+            task_id="42", sequence=2, state="checkpointed",
+            task_spec_version=original["task_spec_version"],
+            task_state=consumed_state,
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"],
+            previous_checkpoint_hash=original["checkpoint_hash"],
+        )
+        progressed_state = {
+            **consumed_state,
+            "stage": "engineering_validation",
+            "history": consumed_state["history"] + [{"event": "evidence-collected"}],
+            "decision_log": consumed_state["decision_log"] + [{"id": "decision-2", "value": "validate"}],
+        }
+        progressed = create_checkpoint(
+            task_id="42", sequence=3, state="checkpointed",
+            task_spec_version=original["task_spec_version"],
+            task_state=progressed_state,
+            budgets=original["budgets"], approvals=original["approvals"],
+            artifact_refs=original["artifact_refs"] + ["private://engineering/evidence-2"],
+            previous_checkpoint_hash=consumed["checkpoint_hash"],
+        )
+        context = FakeContext()
+        context.latest_checkpoint = progressed
+        client = FakeClient()
+        cycle_calls = []
+
+        def parent_cycle_handler(original_task, original_context, progress):
+            cycle_calls.append(progress["checkpoint"]["task_state"]["stage"])
+            self.assertEqual(progress["checkpoint"]["task_state"]["history"][-1], {"event": "evidence-collected"})
+            self.assertTrue(original_context.checkpoint_council_parent_progress(next_stage="completed"))
+            return TaskExecutionResult("completed")
+
+        result = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+            continuation_handler=lambda *_: self.fail("executor must not be replayed"),
+            parent_cycle_handler=parent_cycle_handler,
+        )
+        self.assertEqual(result, TaskExecutionResult("completed"))
+        self.assertEqual(cycle_calls, ["engineering_validation"])
+        self.assertEqual(client.submit_calls, 0)
+        self.assertEqual(context.resume_load_count, 0)
+        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
+
     def test_worker_restart_rejects_consumed_checkpoint_for_changed_parent_payload(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
         from yj64_engineering_core.automation.council_tasks import (
