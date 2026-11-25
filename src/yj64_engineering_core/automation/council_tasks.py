@@ -309,10 +309,12 @@ def _run_parent_cycle_handler(
             or not isinstance(after_stage, str)
             or not after_stage.strip()
             or after_stage in {"parent_resume_consumed", "council_resume_ready", "parent_resume_ready"}
-            or (decision.outcome == "completed" and after_stage != "completed")
-            or (decision.outcome == "suspended" and after_stage == "completed")
         ):
             return TaskExecutionResult("blocked", "council_parent_cycle_progress_not_checkpointed")
+        if decision.outcome == "completed" and after_stage != "completed":
+            return TaskExecutionResult("blocked", "council_parent_cycle_terminal_stage_invalid")
+        if decision.outcome == "suspended" and after_stage == "completed":
+            return TaskExecutionResult("blocked", "council_parent_cycle_suspension_stage_invalid")
         validator = getattr(context, "_resume_checkpoint_is_consumed", None)
         if callable(validator) and validator(after, kind="council") is not True:
             return TaskExecutionResult("blocked", "council_parent_cycle_progress_checkpoint_invalid")
