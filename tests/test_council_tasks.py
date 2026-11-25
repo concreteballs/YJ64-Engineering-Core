@@ -745,6 +745,17 @@ class CouncilTaskTests(unittest.TestCase):
         )
         client = FakeClient()
 
+        continuation_handler = lambda *_: self.fail("consumed continuation must not run twice")
+        blocked = handle_council_request_in_parent_task(
+            task, context, client_factory=lambda: client,
+            continuation_handler=continuation_handler,
+        )
+        self.assertEqual(
+            blocked,
+            TaskExecutionResult("blocked", "council_parent_cycle_continuation_unconfigured"),
+        )
+        self.assertEqual(client.submit_calls, 0)
+
         def parent_cycle_handler(original_task, original_context, progress):
             self.assertEqual(progress["checkpoint"]["task_state"]["stage"], "parent_resume_consumed")
             self.assertTrue(original_context.checkpoint_council_parent_progress(
@@ -755,7 +766,7 @@ class CouncilTaskTests(unittest.TestCase):
 
         result = handle_council_request_in_parent_task(
             task, context, client_factory=lambda: client,
-            continuation_handler=lambda *_: self.fail("consumed continuation must not run twice"),
+            continuation_handler=continuation_handler,
             parent_cycle_handler=parent_cycle_handler,
         )
         self.assertEqual(result, TaskExecutionResult("completed"))
