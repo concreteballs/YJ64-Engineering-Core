@@ -510,7 +510,10 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertEqual(observed["dispatch_status"], "screening_only")
         self.assertEqual(observed["policy_next_stage"], "collect_independent_evidence")
         self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
-        self.assertEqual(context.progress_append["history"], [{"event": "council-result-consumed"}])
+        self.assertEqual(context.progress_append["history"], [
+            {"event": "council-result-consumed"},
+            {"event": "parent-cycle-completed"},
+        ])
         self.assertEqual(context.progress_append["decision_log"], [{"id": "decision-2", "value": "validate"}])
         self.assertEqual(context.progress_append["artifact_refs"], ["private://engineering/validation-2"])
         self.assertEqual(context.resume_continuation["operation"], "physics.axial_member")
