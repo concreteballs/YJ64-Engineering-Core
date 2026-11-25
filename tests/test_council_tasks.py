@@ -87,10 +87,13 @@ class FakeContext:
             "checkpoint_hash": "consumed-checkpoint",
             "task_state": {"stage": "parent_resume_consumed"},
         }
+        previous_append = getattr(self, "progress_append", {
+            "history": [], "decision_log": [], "artifact_refs": [],
+        })
         self.progress_append = {
-            "history": list(history_append),
-            "decision_log": list(decision_log_append),
-            "artifact_refs": list(artifact_refs_append),
+            "history": previous_append["history"] + list(history_append),
+            "decision_log": previous_append["decision_log"] + list(decision_log_append),
+            "artifact_refs": previous_append["artifact_refs"] + list(artifact_refs_append),
         }
         self.latest_checkpoint = {
             "task_id": str(self.task_id),
@@ -483,6 +486,10 @@ class CouncilTaskTests(unittest.TestCase):
                 decision_log_append=[{"id": "decision-2", "value": "validate"}],
                 artifact_refs_append=["private://engineering/validation-2"],
             ))
+            self.assertTrue(original_context.checkpoint_council_parent_progress(
+                next_stage="completed",
+                history_append=[{"event": "parent-cycle-completed"}],
+            ))
             return TaskExecutionResult("completed")
 
         result = handle_council_request_in_parent_task(
@@ -502,7 +509,7 @@ class CouncilTaskTests(unittest.TestCase):
         self.assertIn("arbitrary shell command", observed["summary"])
         self.assertEqual(observed["dispatch_status"], "screening_only")
         self.assertEqual(observed["policy_next_stage"], "collect_independent_evidence")
-        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "engineering_validation")
+        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
         self.assertEqual(context.progress_append["history"], [{"event": "council-result-consumed"}])
         self.assertEqual(context.progress_append["decision_log"], [{"id": "decision-2", "value": "validate"}])
         self.assertEqual(context.progress_append["artifact_refs"], ["private://engineering/validation-2"])
@@ -759,7 +766,7 @@ class CouncilTaskTests(unittest.TestCase):
         def parent_cycle_handler(original_task, original_context, progress):
             self.assertEqual(progress["checkpoint"]["task_state"]["stage"], "parent_resume_consumed")
             self.assertTrue(original_context.checkpoint_council_parent_progress(
-                next_stage="engineering_validation",
+                next_stage="completed",
                 history_append=[{"event": "restart-resumed"}],
             ))
             return TaskExecutionResult("completed")
