@@ -550,6 +550,15 @@ class TaskContext:
             object.__setattr__(self, "_council_resume_base_checkpoint", None)
             object.__setattr__(self, "_council_resume_parent_state", None)
             raise
+        if stage == "completed":
+            # A crash may occur after the terminal parent checkpoint but before
+            # the queue row is completed. Verify it, then let WorkerRunner finish
+            # the row without demanding another checkpoint.
+            object.__setattr__(self, "_council_resume_required", False)
+            object.__setattr__(self, "_council_resume_loaded", False)
+            object.__setattr__(self, "_council_resume_expected_request_id", None)
+            object.__setattr__(self, "_council_resume_base_checkpoint", None)
+            object.__setattr__(self, "_council_resume_parent_state", None)
         return {
             "checkpoint": self._resume_json_snapshot(checkpoint),
             "parent_task_state": self._resume_json_snapshot(parent_state),
