@@ -201,12 +201,18 @@ def _council_resume_already_consumed(task: dict, context: Any) -> bool:
     state = checkpoint.get("task_state")
     if not isinstance(state, dict):
         raise ValueError("consumed_council_checkpoint_state_invalid")
-    if state.get("stage") != "parent_resume_consumed":
-        return False
+    stage = state.get("stage")
     if state.get("resume_kind") == "child":
         return False
     if state.get("resume_kind") != "council" or state.get("resume_consumed") is not True:
-        raise ValueError("consumed_parent_checkpoint_contract_invalid")
+        if stage == "parent_resume_consumed":
+            raise ValueError("consumed_parent_checkpoint_contract_invalid")
+        return False
+    if (
+        not isinstance(stage, str) or not stage.strip() or len(stage) > 128
+        or stage in {"council_resume_ready", "parent_resume_ready"}
+    ):
+        raise ValueError("consumed_parent_checkpoint_stage_invalid")
 
     parent_state = state.get("parent_task_state")
     resume = state.get("council_resume")
@@ -258,6 +264,52 @@ def _council_resume_already_consumed(task: dict, context: Any) -> bool:
     ):
         raise ValueError("consumed_council_checkpoint_payload_mismatch")
     return True
+
+
+def _run_parent_cycle_handler(
+    task: dict, context: Any, progress: dict,
+    handler: Callable[[dict, Any, dict], TaskExecutionResult],
+) -> TaskExecutionResult:
+    """Continue the original parent cycle; completion requires a new progress checkpoint."""
+    if not isinstance(progress, dict) or not isinstance(progress.get("checkpoint"), dict):
+        return TaskExecutionResult("blocked", "council_parent_cycle_checkpoint_invalid")
+    before = progress["checkpoint"]
+    try:
+        decision = handler(task, context, progress)
+    except (TypeError, ValueError, KeyError):
+        return TaskExecutionResult("blocked", "council_parent_cycle_handler_invalid")
+    except Exception:
+        return TaskExecutionResult("retry", "council_parent_cycle_handler_failed", 90)
+    if not isinstance(decision, TaskExecutionResult):
+        return TaskExecutionResult("blocked", "council_parent_cycle_handler_invalid")
+
+    if decision.outcome in {"completed", "suspended"}:
+        try:
+            after = context.load_latest_checkpoint()
+        except Exception:
+            return TaskExecutionResult("retry", "council_parent_progress_checkpoint_unavailable", 90)
+        before_sequence = before.get("sequence")
+        after_sequence = after.get("sequence") if isinstance(after, dict) else None
+        before_hash = before.get("checkpoint_hash")
+        after_hash = after.get("checkpoint_hash") if isinstance(after, dict) else None
+        after_state = after.get("task_state") if isinstance(after, dict) else None
+        after_stage = after_state.get("stage") if isinstance(after_state, dict) else None
+        if (
+            not isinstance(before_sequence, int)
+            or not isinstance(after_sequence, int)
+            or after_sequence <= before_sequence
+            or not isinstance(before_hash, str)
+            or not isinstance(after_hash, str)
+            or after_hash == before_hash
+            or not isinstance(after_stage, str)
+            or not after_stage.strip()
+            or after_stage in {"parent_resume_consumed", "council_resume_ready", "parent_resume_ready"}
+        ):
+            return TaskExecutionResult("blocked", "council_parent_cycle_progress_not_checkpointed")
+        validator = getattr(context, "_resume_checkpoint_is_consumed", None)
+        if callable(validator) and validator(after, kind="council") is not True:
+            return TaskExecutionResult("blocked", "council_parent_cycle_progress_checkpoint_invalid")
+    return decision
 
 
 def _client(factory: Callable[[], CouncilGatewayClient] | None) -> CouncilGatewayClient:
@@ -317,6 +369,7 @@ def handle_council_request_in_parent_task(
     *,
     client_factory: Callable[[], CouncilGatewayClient] | None = None,
     continuation_handler: Callable[[dict, Any, dict], TaskExecutionResult] | None = None,
+    parent_cycle_handler: Callable[[dict, Any, dict], TaskExecutionResult] | None = None,
 ) -> TaskExecutionResult:
     """Submit/suspend or resume the same parent task through its registered continuation.
 
@@ -328,12 +381,22 @@ def handle_council_request_in_parent_task(
     """
     if continuation_handler is not None and not callable(continuation_handler):
         return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
+    if parent_cycle_handler is not None and not callable(parent_cycle_handler):
+        return TaskExecutionResult("blocked", "council_parent_cycle_handler_invalid")
     if not isinstance(task, dict) or task.get("task_id") != context.task_id:
         return TaskExecutionResult("blocked", "council_parent_task_identity_invalid")
 
     try:
         if _council_resume_already_consumed(task, context):
-            return TaskExecutionResult("completed")
+            if parent_cycle_handler is None:
+                return TaskExecutionResult("blocked", "council_parent_cycle_continuation_unconfigured")
+            loader = getattr(context, "load_council_parent_continuation", None)
+            if not callable(loader):
+                return TaskExecutionResult("blocked", "council_parent_cycle_loader_unavailable")
+            progress = loader()
+            if not isinstance(progress, dict):
+                return TaskExecutionResult("blocked", "council_parent_cycle_checkpoint_invalid")
+            return _run_parent_cycle_handler(task, context, progress, parent_cycle_handler)
     except (TypeError, ValueError, KeyError):
         return TaskExecutionResult("blocked", "council_resume_consumed_checkpoint_invalid")
     except Exception:
@@ -400,7 +463,22 @@ def handle_council_request_in_parent_task(
             return TaskExecutionResult("retry", "council_resume_continuation_failed", 90)
         if not isinstance(decision, TaskExecutionResult):
             return TaskExecutionResult("blocked", "council_resume_continuation_invalid")
-        return decision
+        if decision.outcome != "completed":
+            return decision
+        if parent_cycle_handler is None:
+            return TaskExecutionResult("blocked", "council_parent_cycle_continuation_unconfigured")
+        progress_loader = getattr(context, "load_council_parent_continuation", None)
+        if not callable(progress_loader):
+            return TaskExecutionResult("blocked", "council_parent_cycle_loader_unavailable")
+        try:
+            progress = progress_loader()
+        except (TypeError, ValueError, KeyError):
+            return TaskExecutionResult("blocked", "council_parent_cycle_checkpoint_invalid")
+        except Exception:
+            return TaskExecutionResult("retry", "council_parent_cycle_checkpoint_unavailable", 90)
+        if not isinstance(progress, dict):
+            return TaskExecutionResult("blocked", "council_parent_cycle_checkpoint_invalid")
+        return _run_parent_cycle_handler(task, context, progress, parent_cycle_handler)
 
     try:
         payload = _payload(task)
