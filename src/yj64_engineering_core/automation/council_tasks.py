@@ -274,6 +274,11 @@ def _run_parent_cycle_handler(
     if not isinstance(progress, dict) or not isinstance(progress.get("checkpoint"), dict):
         return TaskExecutionResult("blocked", "council_parent_cycle_checkpoint_invalid")
     before = progress["checkpoint"]
+    before_state = before.get("task_state")
+    if isinstance(before_state, dict) and before_state.get("stage") == "completed":
+        # The terminal checkpoint is durable; a prior worker may have crashed
+        # before complete_task(). Do not re-run the parent cycle.
+        return TaskExecutionResult("completed")
     try:
         decision = handler(task, context, progress)
     except (TypeError, ValueError, KeyError):
@@ -304,6 +309,8 @@ def _run_parent_cycle_handler(
             or not isinstance(after_stage, str)
             or not after_stage.strip()
             or after_stage in {"parent_resume_consumed", "council_resume_ready", "parent_resume_ready"}
+            or (decision.outcome == "completed" and after_stage != "completed")
+            or (decision.outcome == "suspended" and after_stage == "completed")
         ):
             return TaskExecutionResult("blocked", "council_parent_cycle_progress_not_checkpointed")
         validator = getattr(context, "_resume_checkpoint_is_consumed", None)
