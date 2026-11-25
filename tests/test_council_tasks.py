@@ -777,7 +777,7 @@ class CouncilTaskTests(unittest.TestCase):
             parent_cycle_handler=parent_cycle_handler,
         )
         self.assertEqual(result, TaskExecutionResult("completed"))
-        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "engineering_validation")
+        self.assertEqual(context.latest_checkpoint["task_state"]["stage"], "completed")
         self.assertEqual(client.submit_calls, 0)
         self.assertEqual(context.resume_load_count, 0)
         self.assertEqual(context.store.enqueued, [])
