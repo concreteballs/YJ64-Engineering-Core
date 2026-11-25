@@ -825,6 +825,31 @@ class CouncilTaskTests(unittest.TestCase):
             TaskExecutionResult("blocked", "council_parent_cycle_progress_not_checkpointed"),
         )
 
+    def test_parent_cycle_cannot_mark_nonterminal_stage_completed(self):
+        from yj64_engineering_core.automation.council_tasks import (
+            handle_council_request_in_parent_task,
+        )
+
+        task = self.submit_task()
+        context = FakeContext()
+        context.council_resume = self.council_resume(task=task)
+
+        result = handle_council_request_in_parent_task(
+            task, context,
+            continuation_handler=lambda _task, ctx, _resume: (
+                ctx.checkpoint_council_resume_consumed({"next_stage": "collect_independent_evidence"})
+                and TaskExecutionResult("completed")
+            ),
+            parent_cycle_handler=lambda _task, ctx, _progress: (
+                ctx.checkpoint_council_parent_progress(next_stage="engineering_validation")
+                and TaskExecutionResult("completed")
+            ),
+        )
+        self.assertEqual(
+            result,
+            TaskExecutionResult("blocked", "council_parent_cycle_terminal_stage_invalid"),
+        )
+
     def test_worker_restart_resumes_from_append_only_parent_progress_without_replaying_executor(self):
         from yj64_engineering_core.automation.checkpoints import create_checkpoint
         from yj64_engineering_core.automation.council_tasks import (
